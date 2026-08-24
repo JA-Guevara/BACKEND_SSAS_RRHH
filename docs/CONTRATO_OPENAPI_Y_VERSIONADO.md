@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-El contrato OpenAPI generado por FastAPI es el punto de sincronizacion entre el backend SSAH RRHH, el frontend web, el frontend movil y cualquier otro consumidor de la API.
+El contrato OpenAPI generado por FastAPI es el punto de sincronizacion entre el backend SSAS RRHH, el frontend web, el frontend movil y cualquier otro consumidor de la API.
 
 Cada equipo debe usar este contrato para conocer endpoints, metodos HTTP, esquemas de request, esquemas de response, codigos de estado y requisitos de autenticacion/autorizacion.
 

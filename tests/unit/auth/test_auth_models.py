@@ -1,16 +1,18 @@
 from sqlalchemy.orm import configure_mappers
-from ssah.auth.infrastructure.persistence.models.password_reset_token import (
+
+from ssas.auth.infrastructure.persistence.models.password_reset_token import (
     PasswordResetTokenModel,
 )
-from ssah.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
-from ssah.auth.infrastructure.persistence.models.user import UserModel
-from ssah.infrastructure.database.base import Base
-from ssah.roles.infrastructure.persistence.models.permission import PermissionModel
-from ssah.roles.infrastructure.persistence.models.role import RoleModel
-from ssah.roles.infrastructure.persistence.models.user_role import UserRoleModel
+from ssas.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
+from ssas.auth.infrastructure.persistence.models.user import UserModel
+from ssas.infrastructure.database.base import Base, import_all_models
+from ssas.roles.infrastructure.persistence.models.permission import PermissionModel
+from ssas.roles.infrastructure.persistence.models.role import RoleModel
+from ssas.roles.infrastructure.persistence.models.user_role import UserRoleModel
 
 
 def test_auth_models_share_the_same_metadata() -> None:
+    import_all_models()
     configure_mappers()
 
     assert UserModel.metadata is Base.metadata
@@ -23,22 +25,26 @@ def test_auth_models_share_the_same_metadata() -> None:
 
 def test_auth_tables_and_foreign_keys_are_ready_for_migrations() -> None:
     expected_tables = {
-        "users",
-        "refresh_tokens",
-        "password_reset_tokens",
-        "roles",
-        "permissions",
-        "role_permissions",
-        "user_roles",
+        "usuario",
+        "refresh_token",
+        "password_reset_token",
+        "rol",
+        "permiso",
+        "rol_permiso",
+        "usuario_rol",
     }
 
     assert expected_tables.issubset(Base.metadata.tables)
     assert (
-        next(iter(RefreshTokenModel.__table__.c.user_id.foreign_keys)).target_fullname == "users.id"
+        next(iter(RefreshTokenModel.__table__.c.usuario_id.foreign_keys)).target_fullname
+        == "usuario.id"
     )
     assert (
-        next(iter(PasswordResetTokenModel.__table__.c.user_id.foreign_keys)).target_fullname
-        == "users.id"
+        next(iter(PasswordResetTokenModel.__table__.c.usuario_id.foreign_keys)).target_fullname
+        == "usuario.id"
     )
-    assert next(iter(UserRoleModel.__table__.c.user_id.foreign_keys)).target_fullname == "users.id"
-    assert next(iter(UserRoleModel.__table__.c.role_id.foreign_keys)).target_fullname == "roles.id"
+    assert (
+        next(iter(UserRoleModel.__table__.c.usuario_id.foreign_keys)).target_fullname
+        == "usuario.id"
+    )
+    assert next(iter(UserRoleModel.__table__.c.rol_id.foreign_keys)).target_fullname == "rol.id"

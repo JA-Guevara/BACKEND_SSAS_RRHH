@@ -1,11 +1,12 @@
 from sqlalchemy import create_engine, text
 
-from ssah.config.settings import settings
-from ssah.core.security.hashing import hash_password
+from ssas.config.settings import settings
+from ssas.core.security.hashing import hash_password
 
 ADMIN_EMAIL = "admin@test.com"
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "password123"
+# Identificador ya persistido en desarrollo; cambiarlo crearia otra empresa demo.
 EMPRESA_SLUG = "ssah-demo"
 ROL_ADMIN_CODIGO = "ADMIN_EMPRESA"
 
@@ -59,8 +60,8 @@ def main() -> None:
             """,
             {
                 "nit": "0000000000",
-                "razon_social": "SSAH Demo S.R.L.",
-                "nombre_comercial": "SSAH Demo",
+                "razon_social": "SSAS Demo S.R.L.",
+                "nombre_comercial": "SSAS Demo",
                 "slug": EMPRESA_SLUG,
                 "email": "contacto@ssah-demo.test",
                 "telefono": "70000000",

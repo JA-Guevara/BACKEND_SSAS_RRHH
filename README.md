@@ -1,4 +1,4 @@
-# Backend SSAH RRHH
+# Backend SSAS RRHH
 
 API del **Sistema de Gestión de Recursos Humanos** — plataforma ERP modular comercializada como
 **SaaS multi-tenant**, con énfasis en Reclutamiento y Selección de Personal.
@@ -32,7 +32,7 @@ API del **Sistema de Gestión de Recursos Humanos** — plataforma ERP modular c
 
 ## 1. Estado del proyecto
 
-> **Sprint 0 — andamiaje.** El paquete Python ya vive en `src/ssah`, los routers se montan bajo
+> **Sprint 0 — andamiaje.** El paquete Python ya vive en `src/ssas`, los routers se montan bajo
 > `/api/v1` y la capa de persistencia queda preparada para validarse cuando PostgreSQL esté conectado.
 > Esta tabla se actualiza al cierre de cada sprint.
 
@@ -40,17 +40,17 @@ API del **Sistema de Gestión de Recursos Humanos** — plataforma ERP modular c
 |---|---|---|
 | Estructura de módulos y capas | ✅ Definida | Ver [§7](#7-estructura-del-proyecto) |
 | Contratos (puertos) de `auth` y `bitacora` | ✅ Definidos | `application/ports/` |
-| Casos de uso de `auth` | 🟡 Escritos, montados en HTTP | Falta validarlos contra PostgreSQL real |
-| Conexión a PostgreSQL | ❌ Pendiente | Engine, sesión y `Base` existentes; falta validarlos contra PostgreSQL real |
-| Repositorios reales | ❌ Pendiente | El de `bitacora` es un stub |
-| Migraciones (Alembic) | 🟡 Inicializado | No aplicar hasta conectar PostgreSQL y revisar modelos |
-| Autenticación JWT funcional | 🟡 Preparada | PyJWT + Argon2id; falta flujo real con persistencia |
-| Multi-tenant | ❌ Pendiente | Decisión de estrategia abierta |
-| RBAC (roles y permisos) | ❌ Pendiente | CU-05 |
-| Pruebas | ❌ Pendiente | 0 pruebas |
+| Casos de uso de `auth` | ✅ Implementados | Login por empresa, refresh, logout, perfil y recuperación |
+| Conexión a PostgreSQL | ✅ Validada | SQLAlchemy async + Psycopg contra Supabase |
+| Repositorios reales | ✅ Implementados | Auth, usuarios, roles, permisos, empresa y bitácora |
+| Migraciones (Alembic) | ✅ Aplicadas | Base remota en `20260824_0002` |
+| Autenticación JWT funcional | ✅ Implementada | PyJWT + Argon2id y refresh con rotación |
+| Multi-tenant | 🟡 Base implementada | Aislamiento por `empresa_id`; falta aprovisionamiento y superadmin |
+| RBAC (roles y permisos) | ✅ Implementado | Permisos globales y roles por empresa |
+| Pruebas | 🟡 En crecimiento | 10 unitarias y conexión real validada |
 
-**Disponible sin base de datos:** `GET /` y `GET /health`. Los routers funcionales se montan bajo
-`/api/v1`, pero los endpoints que usan repositorios requieren PostgreSQL configurado.
+`GET /` y `GET /health` funcionan sin consultar la base. Los endpoints de negocio se montan bajo
+`/api/v1` y requieren PostgreSQL configurado.
 
 ---
 
@@ -93,7 +93,7 @@ git --version
 
 ```bash
 git clone <url-del-repositorio>
-cd backend_ssah_rrhh
+cd backend_ssas_rrhh
 
 # 1. Entorno virtual
 python -m venv .venv
@@ -110,7 +110,7 @@ cp .env.example .env            # Linux / macOS
 # editar .env con los valores locales
 ```
 
-> El paquete importable del backend es `ssah` y vive dentro de `src/`. Trabajar desde la raíz del
+> El paquete importable del backend es `ssas` y vive dentro de `src/`. Trabajar desde la raíz del
 > repositorio mantiene consistente la carga de `.env`, Alembic y los comandos de desarrollo.
 
 ---
@@ -120,7 +120,7 @@ cp .env.example .env            # Linux / macOS
 Desde la **raíz del repositorio**, con el entorno virtual activo:
 
 ```bash
-uvicorn ssah.main:app --reload
+uvicorn ssas.main:app --reload
 ```
 
 | Recurso | URL |
@@ -130,7 +130,7 @@ uvicorn ssah.main:app --reload
 | Documentación alternativa (ReDoc) | http://localhost:8000/redoc |
 | Esquema OpenAPI | http://localhost:8000/openapi.json |
 
-> El módulo es `ssah.main:app` — **no** `src.app.main:app`. La carpeta `src/app/` no existe: el
+> El módulo es `ssas.main:app` — **no** `src.app.main:app`. La carpeta `src/app/` no existe: el
 > documento de arquitectura (§6) decidió explícitamente no usarla.
 
 ---
@@ -147,7 +147,11 @@ Se declaran en `.env` (nunca versionado) y se documentan sin valores reales en `
 | `APP_ALGORITHM` | Algoritmo de firma | `HS256` |
 | `APP_ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del access token | `15` |
 | `APP_REFRESH_TOKEN_EXPIRE_DAYS` | Vigencia del refresh token | `7` |
-| `DATABASE_URL` | Cadena de conexión a PostgreSQL | `postgresql+psycopg://usuario:clave@localhost:5432/ssah_rrhh` |
+| `DATABASE_URL` | Cadena de conexión a PostgreSQL | `postgresql+psycopg://usuario:clave@localhost:5432/ssas_rrhh` |
+| `DB_ECHO` | Mostrar SQL ejecutado | `false` |
+| `DB_POOL_SIZE` | Conexiones permanentes del pool | `5` |
+| `DB_MAX_OVERFLOW` | Conexiones adicionales permitidas | `10` |
+| `DB_POOL_RECYCLE_SECONDS` | Reciclado preventivo de conexiones | `1800` |
 
 **Reglas de manejo de secretos:**
 
@@ -163,28 +167,24 @@ Se declaran en `.env` (nunca versionado) y se documentan sin valores reales en `
 
 - Para el despliegue, la clave se inyecta como variable del entorno del servidor, no desde un archivo.
 
-> ⚠️ **Hoy estas variables no se leen.** Ver [§15](#15-problemas-conocidos).
+Las variables se cargan mediante `pydantic-settings`; `APP_SECRET_KEY` es obligatoria.
 
 ---
 
 ## 7. Estructura del proyecto
 
 ```
-backend_ssah_rrhh/
+backend_ssas_rrhh/
 ├── src/
-│   ├── main.py                 Punto de entrada: FastAPI, routers, middleware, handlers
-│   ├── config/
-│   │   └── settings.py         Configuración centralizada (lee .env)
-│   ├── shared/                 Tipos y excepciones compartidos entre módulos (pequeño)
-│   │
-│   ├── auth/                   ── Módulo de autenticación ──
-│   │   ├── domain/             Entidades, value objects y excepciones de negocio
-│   │   ├── application/        Casos de uso, DTOs y puertos
-│   │   ├── ports/outgoing/     Contratos hacia dependencias externas
-│   │   └── infrastructure/     HTTP · persistencia · seguridad
-│   │
-│   └── bitacora/               ── Módulo de auditoría ──
-│       └── (misma disposición interna)
+│   └── ssas/                    Paquete Python principal
+│       ├── main.py              Punto de entrada: FastAPI, routers y middleware
+│       ├── config/              Configuración centralizada
+│       ├── infrastructure/      Base de datos y servicios transversales
+│       ├── auth/                Autenticación y sesiones
+│       ├── usuarios/            Administración de usuarios
+│       ├── roles/               Roles y permisos
+│       ├── empresas/            Empresa y parámetros legales
+│       └── bitacora/            Auditoría del sistema
 │
 ├── migrations/versions/        Migraciones Alembic
 ├── tests/{unit,integration,e2e}/
@@ -309,9 +309,6 @@ Historias:  HU-02
 `Base.metadata.create_all()`: sin migración versionada, el resto del equipo no puede reproducir el cambio.
 
 ```bash
-# Inicializar Alembic en modo asíncrono (una sola vez, pendiente)
-alembic init -t async migrations
-
 # Generar una migración a partir de los modelos
 alembic revision --autogenerate -m "crear tabla usuarios"
 
@@ -324,13 +321,21 @@ alembic downgrade -1
 # Ver el estado actual
 alembic current
 alembic history
+
+# Comprobar que ORM y base no tienen diferencias pendientes
+alembic check
 ```
+
+Revisiones aplicadas en Supabase:
+
+- `20260820_0001`: esquema inicial multiempresa.
+- `20260824_0002`: bitácora funcional, unicidad case-insensitive y datos base.
 
 **Reglas:**
 
 - Todos los modelos ORM heredan de una **única `Base` declarativa** compartida. Si cada módulo define
   la suya, Alembic solo detecta una y las claves foráneas entre módulos dejan de ser posibles.
-- Toda tabla de negocio lleva `tenant_id` desde su primera migración. Agregarlo después obliga a
+- Toda tabla de negocio multiempresa lleva `empresa_id` desde su primera migración. Agregarlo después obliga a
   reescribir el esquema completo.
 - Toda migración autogenerada se **revisa a mano** antes de commitear: Alembic no siempre acierta con
   renombres, índices ni tipos.
@@ -364,24 +369,25 @@ Los resultados alimentan la sección *2.3 Pruebas* de la plantilla de sprint del
 
 **Disponible hoy:**
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/` | Mensaje de estado del servicio |
-
-**Planificados** (los routers existen, falta montarlos y conectarlos):
-
-| Método | Ruta | Caso de uso | CU |
+| Método | Ruta | Descripción | CU |
 |---|---|---|---|
-| `POST` | `/api/v1/auth/register` | Registrar usuario | CU-04 |
+| `GET` | `/` | Mensaje de estado del servicio | — |
+| `GET` | `/health` | Estado del servicio | — |
 | `POST` | `/api/v1/auth/login` | Autenticar usuario | CU-03 |
 | `POST` | `/api/v1/auth/refresh` | Renovar el par de tokens | CU-03 |
 | `POST` | `/api/v1/auth/logout` | Cerrar sesión y revocar el refresh | CU-03 |
 | `GET` | `/api/v1/auth/me` | Datos del usuario autenticado | CU-03 |
+| `POST` | `/api/v1/auth/password/forgot` | Solicitar recuperación | CU-03 |
+| `POST` | `/api/v1/auth/password/reset` | Restablecer contraseña | CU-03 |
+| `POST` | `/api/v1/usuarios` | Crear usuario dentro de la empresa | CU-04 |
+| `GET/POST` | `/api/v1/roles` | Consultar y crear roles | CU-05 |
+| `PATCH/DELETE` | `/api/v1/roles/{id}` | Actualizar o eliminar un rol | CU-05 |
+| `PUT` | `/api/v1/roles/{id}/permissions` | Asignar permisos | CU-05 |
 | `GET` | `/api/v1/bitacora` | Listar eventos de auditoría (con filtros) | CU-06 |
 | `GET` | `/api/v1/bitacora/{id}` | Consultar un evento | CU-06 |
 
-Eventos que registra la bitácora: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`, `USER_CREATED`,
-`USER_UPDATED`, `ROLE_ASSIGNED`.
+Eventos mapeados inicialmente: login exitoso/fallido, logout, recuperación de contraseña y cambios
+de roles/permisos. Cada evento conserva `empresa_id`, actor, módulo, acción, nivel, IP y user-agent.
 
 > La bitácora contiene información sensible: sus endpoints requieren permiso explícito, no basta
 > con estar autenticado.
@@ -425,22 +431,14 @@ participación distribuida, que se anexa a la documentación del sprint.
 
 ## 15. Problemas conocidos
 
-Auditoría completa en **[`ANALISIS_Y_PROPUESTA_BACKEND.md`](./ANALISIS_Y_PROPUESTA_BACKEND.md)**.
-Los tres siguientes bloquean el desarrollo y están confirmados ejecutando el código:
+Pendientes antes de ampliar los módulos de negocio:
 
-| # | Problema | Efecto | Corrección |
-|---|---|---|---|
-| 1 | `settings.py` usa `env_prefix="APP_"` sobre campos que ya empiezan con `app_` | **Ninguna variable de `.env` se lee.** Los JWT se firman con la clave de ejemplo y la app apunta a `localhost/app_db` | Quitar `env_prefix` y volver `APP_SECRET_KEY` obligatoria (sin valor por defecto) |
-| 2 | `passlib` 1.7.4 (sin publicar desde 2020) con `bcrypt` 5.x lanza `ValueError` al hashear | **Registro y login son inejecutables** | Migrar a `pwdlib[argon2]` y `PyJWT`, que son las librerías que recomienda hoy la documentación oficial de FastAPI |
-| 3 | *src-layout* ya migrado a paquete real | El backend ahora se importa como `ssah.*` desde `src/ssah`; queda pendiente reinstalar dependencias en el entorno local | Paquete declarado en `pyproject.toml` |
-
-**Decisiones pendientes de cerrar** antes de escribir el primer endpoint real:
-
-1. Nombre definitivo del paquete Python (`src/ssah/`)
-2. Async de punta a punta en puertos y casos de uso — mantener esta regla en los próximos repositorios
-3. Criterio DTO vs. Schema — hoy están duplicados y ambos usan Pydantic
-4. **Estrategia multi-tenant** — va en la primera migración o no va
-5. Ubicación de la capa transversal (engine, sesión, `Base`, middleware de tenant, composición de dependencias)
+1. Crear el aprovisionamiento transaccional de empresa, suscripción, roles base y primer administrador.
+2. Definir la identidad y endpoints exclusivos del superadministrador de plataforma.
+3. Conectar un proveedor de correo para recuperación de contraseña.
+4. Añadir rate limiting y política de bloqueo por intentos fallidos.
+5. Completar pruebas E2E con al menos dos empresas para demostrar aislamiento.
+6. Rotar cualquier secreto que haya aparecido en registros locales.
 
 ---
 

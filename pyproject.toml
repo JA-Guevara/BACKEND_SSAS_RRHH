@@ -1,7 +1,7 @@
 [project]
-name = "backend-ssah-rrhh"
+name = "backend-ssas-rrhh"
 version = "0.1.0"
-description = "Backend para SSAH RRHH"
+description = "Backend para SSAS RRHH"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

@@ -1,0 +1,218 @@
+from uuid import uuid4
+
+from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from ssas.auth.infrastructure.persistence.models.user import UserModel
+from ssas.roles.infrastructure.persistence.models.role import RoleModel
+from ssas.roles.infrastructure.persistence.models.user_role import usuario_rol_table
+from ssas.usuarios.domain.entities.usuario import Usuario
+from ssas.usuarios.domain.exceptions import UsuarioNotFoundError
+from ssas.usuarios.ports.outgoing.usuario_repository import UsuarioRepository
+
+ADMIN_ROLE_CODE = "ADMIN_EMPRESA"
+ADMIN_ROLE_NAME = "Administrador de Empresa"
+
+
+class SqlAlchemyUsuarioRepository(UsuarioRepository):
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_id(self, user_id: str, empresa_id: str) -> Usuario | None:
+        result = await self.session.execute(
+            self._base_query().where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
+    async def get_by_email(self, email: str, empresa_id: str) -> Usuario | None:
+        result = await self.session.execute(
+            self._base_query().where(
+                UserModel.empresa_id == empresa_id,
+                func.lower(UserModel.email) == email.strip().lower(),
+            )
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
+    async def get_by_username(self, username: str, empresa_id: str) -> Usuario | None:
+        result = await self.session.execute(
+            self._base_query().where(
+                UserModel.empresa_id == empresa_id,
+                func.lower(UserModel.username) == username.strip().lower(),
+            )
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
+    async def create_usuario(
+        self,
+        empresa_id: str,
+        nombre: str,
+        apellido: str,
+        email: str,
+        username: str,
+        password_hash: str,
+        telefono: str | None,
+        role_ids: list[str],
+    ) -> Usuario:
+        user_id = str(uuid4())
+        self.session.add(
+            UserModel(
+                id=user_id,
+                empresa_id=empresa_id,
+                name=nombre,
+                apellido=apellido,
+                email=email,
+                username=username,
+                hashed_password=password_hash,
+                telefono=telefono,
+                is_active=True,
+                email_verified=False,
+                debe_cambiar_password=False,
+            )
+        )
+        await self.session.flush()
+        await self.assign_roles(user_id, role_ids)
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado después de crearlo")
+        return usuario
+
+    async def update_usuario(
+        self,
+        user_id: str,
+        empresa_id: str,
+        values: dict,
+        role_ids: list[str] | None = None,
+    ) -> Usuario:
+        db_values = self._to_db_values(values)
+        if db_values:
+            await self.session.execute(
+                update(UserModel)
+                .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+                .values(**db_values)
+            )
+        if role_ids is not None:
+            await self.assign_roles(user_id, role_ids)
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
+    async def activate_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(is_active=True)
+        )
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
+    async def deactivate_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(is_active=False)
+        )
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
+    async def role_ids_belong_to_empresa(self, role_ids: list[str], empresa_id: str) -> bool:
+        unique_role_ids = set(role_ids)
+        if not unique_role_ids:
+            return False
+        result = await self.session.execute(
+            select(func.count(RoleModel.id)).where(
+                RoleModel.id.in_(unique_role_ids),
+                RoleModel.empresa_id == empresa_id,
+                RoleModel.is_active.is_(True),
+            )
+        )
+        return result.scalar_one() == len(unique_role_ids)
+
+    async def count_active_admins(self, empresa_id: str) -> int:
+        result = await self.session.execute(
+            select(func.count(func.distinct(UserModel.id)))
+            .select_from(UserModel)
+            .join(usuario_rol_table, usuario_rol_table.c.usuario_id == UserModel.id)
+            .join(RoleModel, RoleModel.id == usuario_rol_table.c.rol_id)
+            .where(
+                UserModel.empresa_id == empresa_id,
+                UserModel.is_active.is_(True),
+                RoleModel.empresa_id == empresa_id,
+                RoleModel.is_active.is_(True),
+                self._admin_role_filter(),
+            )
+        )
+        return result.scalar_one()
+
+    async def user_has_admin_role(self, user_id: str, empresa_id: str) -> bool:
+        result = await self.session.execute(
+            select(func.count(RoleModel.id))
+            .select_from(UserModel)
+            .join(usuario_rol_table, usuario_rol_table.c.usuario_id == UserModel.id)
+            .join(RoleModel, RoleModel.id == usuario_rol_table.c.rol_id)
+            .where(
+                UserModel.id == user_id,
+                UserModel.empresa_id == empresa_id,
+                RoleModel.empresa_id == empresa_id,
+                RoleModel.is_active.is_(True),
+                self._admin_role_filter(),
+            )
+        )
+        return result.scalar_one() > 0
+
+    async def assign_roles(self, user_id: str, role_ids: list[str]) -> None:
+        await self.session.execute(
+            delete(usuario_rol_table).where(usuario_rol_table.c.usuario_id == user_id)
+        )
+        if role_ids:
+            await self.session.execute(
+                insert(usuario_rol_table),
+                [{"usuario_id": user_id, "rol_id": role_id} for role_id in set(role_ids)],
+            )
+        await self.session.flush()
+
+    @staticmethod
+    def _base_query():
+        return select(UserModel).options(selectinload(UserModel.roles))
+
+    @staticmethod
+    def _admin_role_filter():
+        return (RoleModel.codigo == ADMIN_ROLE_CODE) | (RoleModel.name == ADMIN_ROLE_NAME)
+
+    @staticmethod
+    def _to_db_values(values: dict) -> dict:
+        mapping = {
+            "nombre": "name",
+            "apellido": "apellido",
+            "email": "email",
+            "username": "username",
+            "telefono": "telefono",
+        }
+        return {mapping[key]: value for key, value in values.items() if key in mapping}
+
+    @staticmethod
+    def _to_entity(model: UserModel) -> Usuario:
+        return Usuario(
+            id=model.id,
+            empresa_id=model.empresa_id,
+            nombre=model.name,
+            apellido=model.apellido,
+            email=model.email,
+            username=model.username,
+            telefono=model.telefono,
+            is_active=model.is_active,
+            roles=[role.name for role in model.roles if role.is_active],
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )

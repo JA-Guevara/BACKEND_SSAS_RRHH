@@ -1,9 +1,16 @@
 # Análisis del backend y propuesta de estructura
 
-**Proyecto:** SSAH RRHH — Plataforma SaaS de Gestión de Recursos Humanos · Grupo N.° 12
+**Proyecto:** SSAS RRHH — Plataforma SaaS de Gestión de Recursos Humanos · Grupo N.° 12
 **Materia:** Sistemas de Información 2 (INF 412-SA) · 2-2026
-**Repositorio analizado:** `D:\Uagrm\2 - 2026\Sistemas de Informacion II\backend_ssah_rrhh`
+**Repositorio analizado:** `D:\Uagrm\2 - 2026\Sistemas de Informacion II\backend_ssas_rrhh`
 **Fecha del análisis:** 18/08/2026
+
+> **Estado actualizado al 24/08/2026:** este documento conserva el diagnóstico histórico del
+> estado inicial. Desde entonces se implementaron la conexión asincrónica a PostgreSQL/Supabase,
+> Alembic, Auth, RBAC, bitácora persistente y aislamiento por `empresa_id`. Las migraciones 0001 y
+> 0002 están aplicadas, las pruebas vigentes pasan y `alembic check` no detecta diferencias. Para
+> conocer el estado operativo actual, consultar el `README.md` y
+> `docs/RESUMEN_ADAPTACION_ORM_SPRINT0.txt`.
 
 > Este documento distingue **hechos verificados** (reproducidos en sandbox o leídos del código),
 > **juicios de diseño** (opinión fundamentada) y **recomendaciones**. Los hallazgos citan archivo y línea.
@@ -51,7 +58,7 @@ Las cinco son baratas hoy y caras en el Sprint 3.
 ### 1.1 Lo que existe en disco
 
 ```
-backend_ssah_rrhh/
+backend_ssas_rrhh/
 ├── ARQUITECTURA_BACKEND_FASTAPI.md   34 KB · 50 secciones · el documento de diseño
 ├── pyproject.toml · README.md · .env · .env.example · .gitignore
 ├── migrations/versions/              ← VACÍA (sin alembic.ini, sin env.py)
@@ -208,7 +215,7 @@ Python los trata como **dos módulos distintos**. Un objeto global como `setting
 declarativa de SQLAlchemy— puede terminar instanciado dos veces con estado independiente. Es la clase
 de fallo que aparece recién en integración y cuesta horas de diagnóstico.
 
-**Corrección (§4.1):** dar al paquete un nombre real — `src/ssah/` — y declararlo en `pyproject.toml`.
+**Corrección (§4.1):** dar al paquete un nombre real — `src/ssas/` — y declararlo en `pyproject.toml`.
 
 ---
 
@@ -267,7 +274,7 @@ Esto es lo que más pesa en la nota, y no es código: es diseño ausente.
 Mantiene las decisiones que ya tomaron (Vertical Slicing, Screaming Architecture, Hexagonal,
 Repository, Alembic, JWT) y corrige lo que falta. Los cambios son **cinco**, no un rediseño.
 
-### 4.1 Cambio 1 — Nombre real de paquete: `src/ssah/`
+### 4.1 Cambio 1 — Nombre real de paquete: `src/ssas/`
 
 Resuelve §2.3. El *src-layout* necesita un paquete importable dentro de `src/`.
 
@@ -282,8 +289,8 @@ asyncio_mode = "auto"
 ```
 
 Los imports pasan de `from src.config.settings import settings` a
-`from ssah.config.settings import settings`, y el arranque a `uvicorn ssah.main:app`.
-La decisión §6 del documento (*no usar `src/app/`*) se mantiene: `ssah` no es `app`, es el nombre del sistema.
+`from ssas.config.settings import settings`, y el arranque a `uvicorn ssas.main:app`.
+La decisión §6 del documento (*no usar `src/app/`*) se mantiene: `ssas` no es `app`, es el nombre del sistema.
 
 > **Alternativa de menor fricción**, si no quieren tocar los imports: dejar `src/` como está, quitar
 > `pip install -e .` del README, agregar `pythonpath = ["."]` a la configuración de pytest y arrancar
@@ -295,7 +302,7 @@ El documento de arquitectura nunca dice dónde viven el engine, la sesión, la `
 tenant ni la composición de dependencias. Por eso hoy no existen. Esta es la adición más importante:
 
 ```
-src/ssah/core/
+src/ssas/core/
 ├── db/
 │   ├── base.py            # DeclarativeBase ÚNICA + convención de nombres de constraints
 │   ├── session.py         # async engine + async_sessionmaker + get_session()
@@ -322,7 +329,7 @@ documento —pequeño, solo tipos y excepciones de negocio compartidos— y no s
 Cada módulo declara en su `__init__.py` a qué paquete y a qué casos de uso responde. Esto cierra F8
 y da la matriz de trazabilidad RF → CU → HU → código que ningún grupo anterior tuvo.
 
-| Paquete UML | Módulos en `src/ssah/` | CU cubiertos |
+| Paquete UML | Módulos en `src/ssas/` | CU cubiertos |
 |---|---|---|
 | **PA-01** Seguridad y Administración | `tenants` · `auth` · `usuarios` · `roles` · `bitacora` | CU-01 … CU-06 |
 | **PA-02** Reclutamiento | `vacantes` · `postulaciones` · `portal_empleo` | CU-07 … CU-11 |
@@ -352,7 +359,7 @@ Pydantic del router basta y el DTO es la sobrearquitectura que §44 prohíbe. Cu
 es un `@dataclass(frozen=True)` **sin Pydantic** — así se cumple §9 de verdad.
 
 ```
-src/ssah/auth/
+src/ssas/auth/
 ├── __init__.py                     # Paquete: PA-01 · CU: CU-03, CU-04
 ├── domain/
 │   ├── entities/user.py            # dataclass puro, sin Pydantic ni SQLAlchemy
@@ -409,7 +416,7 @@ cuatro archivos del repositorio.
 ### 4.6 Árbol resultante
 
 ```
-backend_ssah_rrhh/
+backend_ssas_rrhh/
 ├── pyproject.toml · README.md · .env.example · .gitignore
 ├── docker-compose.yml            # postgres + api (opcional pero recomendado, cierra F7)
 ├── alembic.ini
@@ -421,7 +428,7 @@ backend_ssah_rrhh/
 │   ├── unit/                     # casos de uso con puertos falsos
 │   ├── integration/              # repositorios contra PostgreSQL real
 │   └── e2e/                      # POST /api/v1/auth/login de punta a punta
-└── src/ssah/
+└── src/ssas/
     ├── main.py                   # FastAPI + CORS + handlers + router /api/v1
     ├── config/settings.py
     ├── core/                     # db · security · tenancy · errors · api   ← §4.2
@@ -441,7 +448,7 @@ backend_ssah_rrhh/
 
 | # | Decisión | Recomendación | Por qué ahora |
 |---|---|---|---|
-| 1 | Nombre del paquete Python | `src/ssah/` + `packages.find` | Después son 34+ archivos de imports a tocar |
+| 1 | Nombre del paquete Python | `src/ssas/` + `packages.find` | Después son 34+ archivos de imports a tocar |
 | 2 | Sync o async de punta a punta | **Async** (ya elegiste SQLAlchemy 2.0 async) | Los puertos definen la firma; cambiarla después toca los 35 casos de uso |
 | 3 | DTO vs Schema | DTO **solo** con más de un adaptador; dataclass, no Pydantic | Es la diferencia entre 35 y 70 clases nuevas |
 | 4 | Estrategia multi-tenant | `tenant_id` + RLS de PostgreSQL | Va en la primera migración o no va |
@@ -495,7 +502,7 @@ El trabajo pendiente es de implementación y de cinco decisiones, no de rediseñ
 
 ### Fuentes
 
-- `backend_ssah_rrhh/` — código y `ARQUITECTURA_BACKEND_FASTAPI.md` (34 archivos analizados)
+- `backend_ssas_rrhh/` — código y `ARQUITECTURA_BACKEND_FASTAPI.md` (34 archivos analizados)
 - `Sistemas de Informacion 2/CONTEXTO_MAESTRO_SI2.md` — patrones de fallo, evaluación y calendario
 - `Diagramas_UML_Grupo12/PA-01…PA-07.puml` — paquetes y casos de uso del Grupo 12
 - Documentación oficial de FastAPI — [Security: OAuth2 with JWT](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/) (`PyJWT`, `pwdlib[argon2]`)

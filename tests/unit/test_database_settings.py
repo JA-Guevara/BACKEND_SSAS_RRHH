@@ -1,6 +1,6 @@
 def test_database_url_uses_async_psycopg_driver() -> None:
     """Comprueba la configuración que la aplicación usará realmente."""
-    from ssah.config.settings import settings
+    from ssas.config.settings import settings
 
     assert settings.database_url.startswith("postgresql+psycopg://")
 
@@ -10,8 +10,9 @@ def test_standard_postgresql_url_is_adapted(monkeypatch) -> None:
         "DATABASE_URL",
         "postgresql://test_user:test_password@localhost:5432/test_db",
     )
+    monkeypatch.setenv("APP_SECRET_KEY", "test-secret-key")
 
-    from ssah.config.settings import Settings
+    from ssas.config.settings import Settings
 
     configured_settings = Settings(_env_file=None)
 

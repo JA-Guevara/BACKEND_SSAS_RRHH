@@ -6,8 +6,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from ssah.config.settings import settings
-from ssah.infrastructure.database.base import Base, import_all_models
+from ssas.config.settings import settings
+from ssas.infrastructure.database.base import Base, import_all_models
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

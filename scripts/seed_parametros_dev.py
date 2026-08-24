@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text
 
-from ssah.config.settings import settings
+from ssas.config.settings import settings
 
 PARAMETER_PERMISSIONS = [
     ("parametros:ver", "configuracion", "parametros", "ver", "Permite consultar parámetros de empresa"),
