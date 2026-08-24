@@ -11,8 +11,8 @@ dependencies = [
   "alembic>=1.13.0",
   "pydantic[email]>=2.7.0",
   "pydantic-settings>=2.4.0",
-  "python-jose[cryptography]>=3.4.0",
-  "bcrypt>=5.0.0",
+  "PyJWT>=2.8.0",
+  "pwdlib[argon2]>=0.2.0",
   "python-dotenv>=1.0.1",
   "psycopg[binary]>=3.1.19",
 ]
@@ -39,3 +39,6 @@ src = ["src"]
 
 [tool.ruff.lint]
 ignore = ["B008"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

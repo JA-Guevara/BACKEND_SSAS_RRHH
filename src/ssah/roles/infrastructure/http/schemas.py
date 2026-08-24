@@ -1,0 +1,36 @@
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class CreateRoleRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=255)
+
+
+class UpdateRoleRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=255)
+    is_active: bool | None = None
+
+
+class AssignPermissionsRequest(BaseModel):
+    permission_ids: list[str] = Field(min_length=1)
+
+
+class PermissionSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    resource: str
+    action: str
+    description: str | None = None
+
+
+class RoleSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: str | None = None
+    is_active: bool
+    permissions: list[PermissionSchema] = Field(default_factory=list)

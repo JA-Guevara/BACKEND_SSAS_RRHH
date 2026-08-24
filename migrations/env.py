@@ -4,20 +4,20 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from src.auth.infrastructure.persistence.models.password_reset_token import (  # noqa: F401
+from ssah.auth.infrastructure.persistence.models.password_reset_token import (  # noqa: F401
     PasswordResetTokenModel,
 )
-from src.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel  # noqa: F401
-from src.auth.infrastructure.persistence.models.user import UserModel  # noqa: F401
-from src.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel  # noqa: F401
-from src.config.settings import settings
-from src.infrastructure.database.base import Base
-from src.roles.infrastructure.persistence.models.permission import PermissionModel  # noqa: F401
-from src.roles.infrastructure.persistence.models.role import RoleModel  # noqa: F401
-from src.roles.infrastructure.persistence.models.role_permission import (  # noqa: F401
+from ssah.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel  # noqa: F401
+from ssah.auth.infrastructure.persistence.models.user import UserModel  # noqa: F401
+from ssah.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel  # noqa: F401
+from ssah.config.settings import settings
+from ssah.infrastructure.database.base import Base
+from ssah.roles.infrastructure.persistence.models.permission import PermissionModel  # noqa: F401
+from ssah.roles.infrastructure.persistence.models.role import RoleModel  # noqa: F401
+from ssah.roles.infrastructure.persistence.models.role_permission import (  # noqa: F401
     RolePermissionModel,
 )
-from src.roles.infrastructure.persistence.models.user_role import UserRoleModel  # noqa: F401
+from ssah.roles.infrastructure.persistence.models.user_role import UserRoleModel  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

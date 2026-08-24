@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 @pytest.mark.asyncio
 async def test_database_connection_executes_select_one() -> None:
     """Comprueba una conexión real usando DATABASE_URL del archivo .env."""
-    from src.infrastructure.database.session import engine
+    from ssah.infrastructure.database.session import engine
 
     try:
         async with engine.connect() as connection:

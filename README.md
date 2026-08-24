@@ -32,25 +32,25 @@ API del **Sistema de Gestión de Recursos Humanos** — plataforma ERP modular c
 
 ## 1. Estado del proyecto
 
-> **Sprint 0 — andamiaje.** El árbol de carpetas y los contratos (puertos, entidades, casos de uso)
-> están definidos. La capa de persistencia todavía no está conectada. Esta tabla se actualiza al
-> cierre de cada sprint.
+> **Sprint 0 — andamiaje.** El paquete Python ya vive en `src/ssah`, los routers se montan bajo
+> `/api/v1` y la capa de persistencia queda preparada para validarse cuando PostgreSQL esté conectado.
+> Esta tabla se actualiza al cierre de cada sprint.
 
 | Componente | Estado | Nota |
 |---|---|---|
 | Estructura de módulos y capas | ✅ Definida | Ver [§7](#7-estructura-del-proyecto) |
 | Contratos (puertos) de `auth` y `bitacora` | ✅ Definidos | `application/ports/` |
-| Casos de uso de `auth` | 🟡 Escritos, sin conectar | Falta composición de dependencias |
-| Conexión a PostgreSQL | ❌ Pendiente | Sin engine, sesión ni `Base` compartida |
+| Casos de uso de `auth` | 🟡 Escritos, montados en HTTP | Falta validarlos contra PostgreSQL real |
+| Conexión a PostgreSQL | ❌ Pendiente | Engine, sesión y `Base` existentes; falta validarlos contra PostgreSQL real |
 | Repositorios reales | ❌ Pendiente | El de `bitacora` es un stub |
-| Migraciones (Alembic) | ❌ Sin inicializar | `migrations/` está vacía |
-| Autenticación JWT funcional | ❌ Pendiente | Ver [§15](#15-problemas-conocidos) |
+| Migraciones (Alembic) | 🟡 Inicializado | No aplicar hasta conectar PostgreSQL y revisar modelos |
+| Autenticación JWT funcional | 🟡 Preparada | PyJWT + Argon2id; falta flujo real con persistencia |
 | Multi-tenant | ❌ Pendiente | Decisión de estrategia abierta |
 | RBAC (roles y permisos) | ❌ Pendiente | CU-05 |
 | Pruebas | ❌ Pendiente | 0 pruebas |
 
-**Hoy solo responde `GET /`.** Los routers de `auth` y `bitacora` existen pero no están montados
-en `main.py`.
+**Disponible sin base de datos:** `GET /` y `GET /health`. Los routers funcionales se montan bajo
+`/api/v1`, pero los endpoints que usan repositorios requieren PostgreSQL configurado.
 
 ---
 
@@ -58,7 +58,7 @@ en `main.py`.
 
 | Capa | Tecnología | Decisión |
 |---|---|---|
-| Lenguaje | Python 3.11+ | Adoptado |
+| Lenguaje | Python 3.12 | Adoptado |
 | Framework web | FastAPI | Adoptado |
 | ORM | SQLAlchemy 2.0 (modo **async**) | Adoptado |
 | Migraciones | Alembic | Adoptado |
@@ -75,14 +75,14 @@ en `main.py`.
 
 ## 3. Requisitos previos
 
-- **Python 3.11 o superior** — `python --version`
+- **Python 3.12** — `python --version`
 - **PostgreSQL 15 o superior** en ejecución, con una base creada para el proyecto
 - **Git**
 
 Verificación rápida:
 
 ```bash
-python --version     # >= 3.11
+python --version     # 3.12
 psql --version       # >= 15
 git --version
 ```
@@ -110,12 +110,8 @@ cp .env.example .env            # Linux / macOS
 # editar .env con los valores locales
 ```
 
-> ⚠️ **Trabajar siempre desde la raíz del repositorio.** Con la disposición actual (*src-layout* sin
-> un paquete nombrado dentro de `src/`), `pip install -e .` coloca `src/` en el path, de modo que el
-> mismo archivo queda importable con **dos nombres distintos** — `src.config.settings` y
-> `config.settings` — y Python lo carga como dos módulos separados. Eso puede duplicar objetos
-> globales como `settings`. Además, `from src....` falla si se ejecuta desde otro directorio.
-> Se corrige renombrando el paquete a `src/ssah/`; detalle en `ANALISIS_Y_PROPUESTA_BACKEND.md`.
+> El paquete importable del backend es `ssah` y vive dentro de `src/`. Trabajar desde la raíz del
+> repositorio mantiene consistente la carga de `.env`, Alembic y los comandos de desarrollo.
 
 ---
 
@@ -124,7 +120,7 @@ cp .env.example .env            # Linux / macOS
 Desde la **raíz del repositorio**, con el entorno virtual activo:
 
 ```bash
-uvicorn src.main:app --reload
+uvicorn ssah.main:app --reload
 ```
 
 | Recurso | URL |
@@ -134,7 +130,7 @@ uvicorn src.main:app --reload
 | Documentación alternativa (ReDoc) | http://localhost:8000/redoc |
 | Esquema OpenAPI | http://localhost:8000/openapi.json |
 
-> El módulo es `src.main:app` — **no** `src.app.main:app`. La carpeta `src/app/` no existe: el
+> El módulo es `ssah.main:app` — **no** `src.app.main:app`. La carpeta `src/app/` no existe: el
 > documento de arquitectura (§6) decidió explícitamente no usarla.
 
 ---
@@ -436,12 +432,12 @@ Los tres siguientes bloquean el desarrollo y están confirmados ejecutando el c�
 |---|---|---|---|
 | 1 | `settings.py` usa `env_prefix="APP_"` sobre campos que ya empiezan con `app_` | **Ninguna variable de `.env` se lee.** Los JWT se firman con la clave de ejemplo y la app apunta a `localhost/app_db` | Quitar `env_prefix` y volver `APP_SECRET_KEY` obligatoria (sin valor por defecto) |
 | 2 | `passlib` 1.7.4 (sin publicar desde 2020) con `bcrypt` 5.x lanza `ValueError` al hashear | **Registro y login son inejecutables** | Migrar a `pwdlib[argon2]` y `PyJWT`, que son las librerías que recomienda hoy la documentación oficial de FastAPI |
-| 3 | *src-layout* sin paquete nombrado dentro de `src/` | El mismo módulo queda importable como `src.config.settings` **y** `config.settings`: Python lo carga dos veces y puede duplicar el singleton `settings`. Fuera de la raíz, `from src....` falla | Renombrar el paquete a `src/ssah/` y declararlo en `pyproject.toml` |
+| 3 | *src-layout* ya migrado a paquete real | El backend ahora se importa como `ssah.*` desde `src/ssah`; queda pendiente reinstalar dependencias en el entorno local | Paquete declarado en `pyproject.toml` |
 
 **Decisiones pendientes de cerrar** antes de escribir el primer endpoint real:
 
 1. Nombre definitivo del paquete Python (`src/ssah/`)
-2. Async de punta a punta en puertos y casos de uso — hoy los routers son `async` y los casos de uso no
+2. Async de punta a punta en puertos y casos de uso — mantener esta regla en los próximos repositorios
 3. Criterio DTO vs. Schema — hoy están duplicados y ambos usan Pydantic
 4. **Estrategia multi-tenant** — va en la primera migración o no va
 5. Ubicación de la capa transversal (engine, sesión, `Base`, middleware de tenant, composición de dependencias)
