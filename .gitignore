@@ -10,7 +10,6 @@ __pycache__/
 .venv/
 venv/
 .env
-.venv/
 
 # IDE
 .vscode/
@@ -18,6 +17,8 @@ venv/
 
 # Test / coverage
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 

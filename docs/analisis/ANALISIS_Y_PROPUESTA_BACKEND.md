@@ -9,8 +9,9 @@
 > estado inicial. Desde entonces se implementaron la conexión asincrónica a PostgreSQL/Supabase,
 > Alembic, Auth, RBAC, bitácora persistente y aislamiento por `empresa_id`. Las migraciones 0001 y
 > 0002 están aplicadas, las pruebas vigentes pasan y `alembic check` no detecta diferencias. Para
-> conocer el estado operativo actual, consultar el `README.md` y
-> `docs/RESUMEN_ADAPTACION_ORM_SPRINT0.txt`.
+> conocer el estado operativo actual, consultar la
+> [guía de desarrollo](../guias/GUIA_DESARROLLO.md) y el
+> [resumen del Sprint 0](../sprints/SPRINT_0_ADAPTACION_ORM.md).
 
 > Este documento distingue **hechos verificados** (reproducidos en sandbox o leídos del código),
 > **juicios de diseño** (opinión fundamentada) y **recomendaciones**. Los hallazgos citan archivo y línea.

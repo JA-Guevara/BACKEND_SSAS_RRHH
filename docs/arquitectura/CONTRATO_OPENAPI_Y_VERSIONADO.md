@@ -121,7 +121,7 @@ curl.exe http://127.0.0.1:8000/openapi.json -o docs/openapi-v1.json
 
 Se debe versionar este documento:
 
-docs/CONTRATO_OPENAPI_Y_VERSIONADO.md
+docs/arquitectura/CONTRATO_OPENAPI_Y_VERSIONADO.md
 
 Opcionalmente se puede exportar y versionar:
 
