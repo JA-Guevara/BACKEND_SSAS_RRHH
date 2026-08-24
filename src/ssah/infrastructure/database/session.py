@@ -1,7 +1,11 @@
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from ssah.config.settings import settings
+from ssah.infrastructure.database.base import import_all_models
+
+import_all_models()
 
 engine = create_async_engine(settings.database_url, echo=settings.app_debug, future=True)
 

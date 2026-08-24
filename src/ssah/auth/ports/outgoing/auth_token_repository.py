@@ -9,6 +9,7 @@ class AuthTokenRepository(ABC):
     async def save_refresh_token(
         self,
         user_id: str,
+        empresa_id: str,
         token_id: str,
         token_hash: str,
         expires_at: datetime,
@@ -31,6 +32,7 @@ class AuthTokenRepository(ABC):
     async def save_password_reset_token(
         self,
         user_id: str,
+        empresa_id: str,
         token_id: str,
         token_hash: str,
         expires_at: datetime,

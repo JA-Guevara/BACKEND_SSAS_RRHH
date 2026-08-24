@@ -1,4 +1,5 @@
-from ssah.auth.domain.exceptions import InactiveUserError, InvalidCredentialsError
+from ssah.auth.domain.exceptions import InvalidCredentialsError
+from ssah.config.settings import settings
 
 
 class LoginUser:
@@ -8,17 +9,34 @@ class LoginUser:
         self.token_service = token_service
         self.token_repository = token_repository
 
-    async def execute(self, email: str, password: str) -> dict[str, str]:
-        user = await self.user_repository.get_by_email(email.strip().lower())
+    async def execute(
+        self,
+        password: str,
+        email: str | None = None,
+        username: str | None = None,
+    ) -> dict[str, object]:
+        login = (email or username or "").strip()
+        if not login:
+            raise InvalidCredentialsError("Credenciales inválidas")
+
+        user = await self.user_repository.get_by_login(login)
         if not user or not self.password_hasher.verify(password, user.hashed_password):
             raise InvalidCredentialsError("Credenciales inválidas")
-        if not user.is_active:
-            raise InactiveUserError("El usuario está inactivo")
+        if not user.is_active or not user.empresa_is_active or not user.empresa_id or not user.roles:
+            raise InvalidCredentialsError("Credenciales inválidas")
 
-        access_token = self.token_service.create_access_token(str(user.id))
-        refresh_token, token_id, expires_at = self.token_service.create_refresh_token(str(user.id))
+        access_token = self.token_service.create_access_token(
+            subject=str(user.id),
+            empresa_id=user.empresa_id,
+            roles=user.roles,
+        )
+        refresh_token, token_id, expires_at = self.token_service.create_refresh_token(
+            subject=str(user.id),
+            empresa_id=user.empresa_id,
+        )
         await self.token_repository.save_refresh_token(
             user_id=user.id,
+            empresa_id=user.empresa_id,
             token_id=token_id,
             token_hash=self.token_service.fingerprint(refresh_token),
             expires_at=expires_at,
@@ -27,4 +45,5 @@ class LoginUser:
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
+            "expires_in": settings.app_access_token_expire_minutes * 60,
         }

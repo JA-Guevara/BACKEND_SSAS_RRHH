@@ -12,3 +12,7 @@ class PermissionNotFoundError(RoleError):
 
 class DuplicateRoleError(RoleError):
     pass
+
+
+class PermissionDeniedError(RoleError):
+    pass

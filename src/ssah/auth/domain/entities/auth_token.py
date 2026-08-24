@@ -6,6 +6,7 @@ from datetime import datetime
 class StoredToken:
     id: str
     user_id: str
+    empresa_id: str
     token_hash: str
     expires_at: datetime
     revoked_at: datetime | None = None

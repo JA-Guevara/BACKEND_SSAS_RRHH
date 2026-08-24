@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -8,6 +8,10 @@ class User:
     name: str
     email: str
     hashed_password: str
+    empresa_id: str | None = None
+    username: str | None = None
+    roles: list[str] = field(default_factory=list)
+    empresa_is_active: bool = True
     is_active: bool = True
     email_verified: bool = False
     created_at: datetime | None = None

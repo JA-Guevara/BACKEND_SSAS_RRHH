@@ -1,0 +1,273 @@
+RESUMEN DE ADAPTACION ORM - SPRINT 0
+SSAH RRHH
+
+Objetivo
+========
+Se adapto el backend al diseno de base de datos del Sprint 0, usando empresa como tenant principal del sistema SaaS multiempresa.
+
+No se conecto PostgreSQL.
+No se ejecuto Alembic.
+No se aplicaron migraciones.
+No se borraron datos.
+
+Cambios Principales
+===================
+
+1. Nuevo modulo empresas
+------------------------
+Se creo el modulo:
+
+src/ssah/empresas/
+
+Dentro se agregaron modelos ORM para:
+
+- empresa
+- plan_suscripcion
+- suscripcion
+- parametro_legal
+- parametro_valor
+
+Estos modelos representan la base multiempresa, la suscripcion SaaS y los parametros legales por empresa.
+
+2. Empresa como tenant
+----------------------
+Se decidio usar empresa como entidad tenant principal, en vez de crear una tabla tenants.
+
+Esto significa que el aislamiento multiempresa se maneja con:
+
+empresa_id
+
+Las tablas que ahora tienen empresa_id son:
+
+- usuario
+- rol
+- refresh_token
+- password_reset_token
+- bitacora
+- parametro_valor
+
+3. Permisos globales
+--------------------
+Se dejo permiso como tabla global del sistema, sin empresa_id.
+
+Razon:
+Los permisos son capacidades tecnicas del sistema completo, por ejemplo:
+
+- usuarios:crear
+- usuarios:editar
+- roles:gestionar
+- bitacora:ver
+- vacantes:gestionar
+- candidatos:gestionar
+- aprobaciones:gestionar
+
+Luego cada empresa puede tener sus propios roles y asignarles esos permisos globales.
+
+4. Roles por empresa
+--------------------
+La tabla rol ahora pertenece a empresa mediante empresa_id.
+
+Esto permite que cada empresa tenga sus propios roles, por ejemplo:
+
+Empresa A:
+- Administrador de Empresa
+- Reclutador
+- Jefe de Area
+
+Empresa B:
+- Administrador de Empresa
+- Analista RRHH
+
+5. Renombrado de tablas al diseno del Sprint 0
+----------------------------------------------
+Los modelos ORM dejaron de apuntar a nombres en ingles y fueron alineados al diagrama/base en espanol.
+
+Antes -> Ahora
+
+users -> usuario
+roles -> rol
+permissions -> permiso
+user_roles -> usuario_rol
+role_permissions -> rol_permiso
+audit_logs -> bitacora
+refresh_tokens -> refresh_token
+password_reset_tokens -> password_reset_token
+
+6. Modelos existentes modificados
+---------------------------------
+Se actualizaron estos modelos ORM:
+
+- src/ssah/auth/infrastructure/persistence/models/user.py
+- src/ssah/auth/infrastructure/persistence/models/refresh_token.py
+- src/ssah/auth/infrastructure/persistence/models/password_reset_token.py
+- src/ssah/roles/infrastructure/persistence/models/role.py
+- src/ssah/roles/infrastructure/persistence/models/permission.py
+- src/ssah/roles/infrastructure/persistence/models/role_permission.py
+- src/ssah/roles/infrastructure/persistence/models/user_role.py
+- src/ssah/bitacora/infrastructure/persistence/models/audit_log.py
+
+7. Modelos nuevos creados
+-------------------------
+Se agregaron estos modelos:
+
+- src/ssah/empresas/infrastructure/persistence/models/empresa.py
+- src/ssah/empresas/infrastructure/persistence/models/plan_suscripcion.py
+- src/ssah/empresas/infrastructure/persistence/models/suscripcion.py
+- src/ssah/empresas/infrastructure/persistence/models/parametro_legal.py
+- src/ssah/empresas/infrastructure/persistence/models/parametro_valor.py
+
+8. Base unica
+-------------
+Todos los modelos siguen heredando de la Base unica existente:
+
+ssah.infrastructure.database.base.Base
+
+Esto es importante para que Alembic pueda detectar todas las tablas desde un solo metadata.
+
+9. Migracion inicial preparada
+------------------------------
+Se actualizo la migracion:
+
+migrations/versions/20260820_0001_initial_schema.py
+
+Ahora la migracion prepara el esquema base con estas tablas:
+
+- empresa
+- plan_suscripcion
+- suscripcion
+- usuario
+- rol
+- permiso
+- usuario_rol
+- rol_permiso
+- parametro_legal
+- parametro_valor
+- refresh_token
+- password_reset_token
+- bitacora
+
+La migracion tambien prepara:
+
+- extension pgcrypto
+- funcion set_updated_at
+- triggers updated_at
+- indices principales
+- constraints de unicidad
+- constraints de fechas
+- datos base del sistema
+
+10. Datos base incluidos en la migracion
+----------------------------------------
+La migracion incluye datos base para:
+
+- Plan Inicial
+- permisos globales
+- parametros legales base de Bolivia
+
+Permisos globales incluidos:
+
+- usuarios:crear
+- usuarios:editar
+- roles:gestionar
+- bitacora:ver
+- vacantes:gestionar
+- candidatos:gestionar
+- aprobaciones:gestionar
+
+Parametros legales base incluidos:
+
+- AFP_APORTE_LABORAL
+- APORTE_SOLIDARIO
+- RC_IVA
+
+11. Datos de demo no incluidos
+------------------------------
+No se agregaron Empresa A ni Empresa B dentro de la migracion.
+
+Razon:
+Empresa A y Empresa B son datos de prueba/demo. Es mejor crearlas despues mediante:
+
+- endpoint de aprovisionamiento de empresa
+- seed especifico de desarrollo
+- script aparte de datos demo
+
+No conviene meter clientes ficticios en una migracion estructural.
+
+12. Alembic actualizado
+-----------------------
+Se actualizo:
+
+migrations/env.py
+
+Ahora Alembic importa los nuevos modelos para que la metadata conozca:
+
+- empresa
+- plan_suscripcion
+- suscripcion
+- parametro_legal
+- parametro_valor
+- usuario
+- rol
+- permiso
+- usuario_rol
+- rol_permiso
+- refresh_token
+- password_reset_token
+- bitacora
+
+13. Verificacion realizada
+--------------------------
+Se hizo una verificacion estatica de sintaxis Python.
+
+Resultado:
+
+OK
+
+No se ejecuto conexion a PostgreSQL.
+No se ejecuto alembic upgrade head.
+
+Estado Actual
+=============
+
+Quedo preparado:
+
+- Modelo multiempresa con empresa como tenant
+- Modelos ORM alineados al diagrama Sprint 0
+- Permisos globales
+- Roles por empresa
+- Bitacora por empresa
+- Parametros legales por empresa y vigencia
+- Migracion Alembic inicial lista para revisar
+
+Queda pendiente:
+
+1. Adaptar la logica de register/login para usar empresa_id.
+2. Adaptar repositorios para filtrar por empresa_id.
+3. Crear endpoint de aprovisionamiento de empresa.
+4. Crear usuario administrador inicial por empresa.
+5. Crear roles base por empresa al aprovisionar.
+6. Conectar PostgreSQL/Supabase.
+7. Revisar SQL de migracion.
+8. Ejecutar alembic upgrade head cuando la conexion este lista.
+9. Probar register/login reales.
+10. Probar aislamiento entre empresas.
+
+Comandos para revisar despues
+=============================
+
+Para ver el SQL que Alembic generaria sin aplicarlo:
+
+alembic upgrade head --sql
+
+Para aplicar la migracion cuando PostgreSQL ya este conectado:
+
+alembic upgrade head
+
+Advertencia
+===========
+No ejecutar alembic upgrade head hasta que:
+
+- DATABASE_URL este confirmado.
+- La base PostgreSQL/Supabase este lista.
+- La migracion haya sido revisada.
+- La logica de usuario/register/login contemple empresa_id.

@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from ssah.auth.domain.entities.auth_token import StoredToken
 from ssah.auth.infrastructure.persistence.models.password_reset_token import PasswordResetTokenModel
 from ssah.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
@@ -13,11 +14,17 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         self.session = session
 
     async def save_refresh_token(
-        self, user_id: str, token_id: str, token_hash: str, expires_at: datetime
+        self,
+        user_id: str,
+        empresa_id: str,
+        token_id: str,
+        token_hash: str,
+        expires_at: datetime,
     ) -> None:
         self.session.add(
             RefreshTokenModel(
                 id=token_id,
+                empresa_id=empresa_id,
                 user_id=user_id,
                 token_hash=token_hash,
                 expires_at=expires_at,
@@ -55,11 +62,17 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         await self.session.flush()
 
     async def save_password_reset_token(
-        self, user_id: str, token_id: str, token_hash: str, expires_at: datetime
+        self,
+        user_id: str,
+        empresa_id: str,
+        token_id: str,
+        token_hash: str,
+        expires_at: datetime,
     ) -> None:
         self.session.add(
             PasswordResetTokenModel(
                 id=token_id,
+                empresa_id=empresa_id,
                 user_id=user_id,
                 token_hash=token_hash,
                 expires_at=expires_at,
@@ -104,6 +117,7 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         return StoredToken(
             id=model.id,
             user_id=model.user_id,
+            empresa_id=model.empresa_id,
             token_hash=model.token_hash,
             expires_at=model.expires_at,
             revoked_at=model.revoked_at,
@@ -114,6 +128,7 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         return StoredToken(
             id=model.id,
             user_id=model.user_id,
+            empresa_id=model.empresa_id,
             token_hash=model.token_hash,
             expires_at=model.expires_at,
             revoked_at=model.used_at,

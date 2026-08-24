@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from ssah.auth.application.use_cases.get_current_user import GetCurrentUser
 from ssah.auth.application.use_cases.login_user import LoginUser
 from ssah.auth.application.use_cases.logout_user import LogoutUser
@@ -36,14 +36,14 @@ from ssah.auth.infrastructure.persistence.repositories.user_repository import (
     SqlAlchemyUserRepository,
 )
 from ssah.auth.infrastructure.security.jwt_service import JWTService
-from ssah.auth.infrastructure.security.password_hasher import BcryptPasswordHasher
+from ssah.auth.infrastructure.security.password_hasher import Argon2PasswordHasher
 from ssah.config.settings import settings
+from ssah.core.security.dependencies import CurrentUser, require_permission
 from ssah.infrastructure.database.session import get_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-bearer_scheme = HTTPBearer(auto_error=False)
 token_service = JWTService()
-password_hasher = BcryptPasswordHasher()
+password_hasher = Argon2PasswordHasher()
 
 
 def _raise_http_auth_error(exc: AuthError) -> None:
@@ -69,21 +69,6 @@ def _user_repository(session: AsyncSession) -> SqlAlchemyUserRepository:
 
 def _token_repository(session: AsyncSession) -> SqlAlchemyAuthTokenRepository:
     return SqlAlchemyAuthTokenRepository(session)
-
-
-def get_access_token_subject(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> str:
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="Autenticación requerida")
-    try:
-        payload = token_service.decode_token(credentials.credentials, expected_type="access")
-    except AuthError as exc:
-        _raise_http_auth_error(exc)
-    subject = payload.get("sub")
-    if not isinstance(subject, str):
-        raise HTTPException(status_code=401, detail="Token inválido")
-    return subject
 
 
 @router.get("/health")
@@ -149,11 +134,11 @@ async def logout_user(
 
 @router.get("/me", response_model=UserSchema)
 async def current_user(
-    user_id: str = Depends(get_access_token_subject),
+    current_user: CurrentUser = Depends(require_permission("usuarios:crear")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await GetCurrentUser(_user_repository(session)).execute(user_id)
+        return await GetCurrentUser(_user_repository(session)).execute(current_user.id)
     except AuthError as exc:
         _raise_http_auth_error(exc)
 

@@ -4,14 +4,19 @@ from datetime import datetime
 
 class TokenService(ABC):
     @abstractmethod
-    def create_access_token(self, subject: str, tenant_id: str | None = None) -> str:
+    def create_access_token(
+        self,
+        subject: str,
+        empresa_id: str,
+        roles: list[str] | None = None,
+    ) -> str:
         raise NotImplementedError
 
     @abstractmethod
     def create_refresh_token(
         self,
         subject: str,
-        tenant_id: str | None = None,
+        empresa_id: str,
     ) -> tuple[str, str, datetime]:
         raise NotImplementedError
 

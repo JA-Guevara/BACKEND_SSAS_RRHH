@@ -1,0 +1,17 @@
+from dataclasses import dataclass, field
+from datetime import datetime
+
+
+@dataclass
+class Usuario:
+    id: str
+    empresa_id: str
+    nombre: str
+    apellido: str
+    email: str
+    username: str
+    telefono: str | None = None
+    is_active: bool = True
+    roles: list[str] = field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

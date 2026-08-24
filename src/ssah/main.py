@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 
 from ssah.core.api.router import api_router
+from ssah.core.tenancy.middleware import EmpresaContextMiddleware
 
 app = FastAPI(title="SSAH RRHH API")
+app.add_middleware(EmpresaContextMiddleware)
 app.include_router(api_router, prefix="/api/v1")
 
 
