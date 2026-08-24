@@ -1,13 +1,13 @@
 from sqlalchemy.orm import configure_mappers
-from src.auth.infrastructure.persistence.models.password_reset_token import (
+from ssah.auth.infrastructure.persistence.models.password_reset_token import (
     PasswordResetTokenModel,
 )
-from src.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
-from src.auth.infrastructure.persistence.models.user import UserModel
-from src.infrastructure.database.base import Base
-from src.roles.infrastructure.persistence.models.permission import PermissionModel
-from src.roles.infrastructure.persistence.models.role import RoleModel
-from src.roles.infrastructure.persistence.models.user_role import UserRoleModel
+from ssah.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
+from ssah.auth.infrastructure.persistence.models.user import UserModel
+from ssah.infrastructure.database.base import Base
+from ssah.roles.infrastructure.persistence.models.permission import PermissionModel
+from ssah.roles.infrastructure.persistence.models.role import RoleModel
+from ssah.roles.infrastructure.persistence.models.user_role import UserRoleModel
 
 
 def test_auth_models_share_the_same_metadata() -> None:

@@ -2,13 +2,13 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 
 import pytest
-from src.auth.application.use_cases.login_user import LoginUser
-from src.auth.application.use_cases.register_user import RegisterUser
-from src.auth.application.use_cases.request_password_reset import RequestPasswordReset
-from src.auth.application.use_cases.reset_password import ResetPassword
-from src.auth.domain.entities.auth_token import StoredToken
-from src.auth.domain.entities.user import User
-from src.auth.domain.exceptions import InvalidCredentialsError, UserAlreadyExistsError
+from ssah.auth.application.use_cases.login_user import LoginUser
+from ssah.auth.application.use_cases.register_user import RegisterUser
+from ssah.auth.application.use_cases.request_password_reset import RequestPasswordReset
+from ssah.auth.application.use_cases.reset_password import ResetPassword
+from ssah.auth.domain.entities.auth_token import StoredToken
+from ssah.auth.domain.entities.user import User
+from ssah.auth.domain.exceptions import InvalidCredentialsError, UserAlreadyExistsError
 
 
 class FakeUserRepository:

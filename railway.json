@@ -4,7 +4,7 @@
     "builder": "RAILPACK"
   },
   "deploy": {
-    "startCommand": "python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}",
+    "startCommand": "python -m uvicorn ssah.main:app --host 0.0.0.0 --port ${PORT:-8000}",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",

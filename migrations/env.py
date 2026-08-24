@@ -1,23 +1,13 @@
+import sys
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from src.auth.infrastructure.persistence.models.password_reset_token import (  # noqa: F401
-    PasswordResetTokenModel,
-)
-from src.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel  # noqa: F401
-from src.auth.infrastructure.persistence.models.user import UserModel  # noqa: F401
-from src.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel  # noqa: F401
-from src.config.settings import settings
-from src.infrastructure.database.base import Base
-from src.roles.infrastructure.persistence.models.permission import PermissionModel  # noqa: F401
-from src.roles.infrastructure.persistence.models.role import RoleModel  # noqa: F401
-from src.roles.infrastructure.persistence.models.role_permission import (  # noqa: F401
-    RolePermissionModel,
-)
-from src.roles.infrastructure.persistence.models.user_role import UserRoleModel  # noqa: F401
+
+from ssah.config.settings import settings
+from ssah.infrastructure.database.base import Base, import_all_models
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
@@ -25,6 +15,7 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+import_all_models()
 target_metadata = Base.metadata
 
 
@@ -62,6 +53,8 @@ def do_run_migrations(connection: Connection) -> None:
 def run_migrations_online() -> None:
     import asyncio
 
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(run_async_migrations())
 
 
