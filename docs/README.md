@@ -29,3 +29,7 @@ Este directorio concentra la información técnica, decisiones, análisis y evid
 - La raíz conserva únicamente archivos operativos y un `README.md` de entrada.
 - Los documentos nuevos deben ubicarse en la categoría correspondiente dentro de `docs/`.
 - Los archivos generados, cachés, entornos virtuales y secretos no se versionan.
+
+## Licencia
+
+El código del proyecto se distribuye bajo la [licencia MIT](../LICENSE).
