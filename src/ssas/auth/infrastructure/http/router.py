@@ -53,13 +53,14 @@ from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository 
     SqlAlchemyAuditLogRepository,
 )
 from ssas.config.settings import settings
+from ssas.core.api.openapi import AUTHENTICATED_RESPONSES, TAG_AUTH
 from ssas.core.security.dependencies import CurrentUser
 from ssas.core.security.dependencies import get_current_user as get_authenticated_user
 from ssas.infrastructure.database.session import AsyncSessionLocal, get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=[TAG_AUTH])
 token_service = JWTService()
 password_hasher = Argon2PasswordHasher()
 email_service = AuthEmailService(SMTPEmailSender(), settings.app_frontend_url)
@@ -128,12 +129,27 @@ async def _record_failed_login(user, request: Request) -> None:
         logger.exception("No se pudo registrar un intento fallido de inicio de sesión")
 
 
-@router.get("/health")
+@router.get("/health", include_in_schema=False)
 async def auth_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.post("/login", response_model=TokenPairSchema)
+@router.post(
+    "/login",
+    response_model=TokenPairSchema,
+    summary="Iniciar sesión",
+    description=(
+        "Autentica mediante correo o nombre de usuario. Omite `empresa_slug` para una "
+        "cuenta de plataforma; envíalo para buscar la cuenta dentro de una empresa. "
+        "Los intentos fallidos se registran y pueden bloquear temporalmente la cuenta."
+    ),
+    responses={
+        401: {"description": "Credenciales inválidas o cuenta inactiva."},
+        403: {"description": "El correo aún no fue verificado."},
+        423: {"description": "Cuenta bloqueada temporalmente por intentos fallidos."},
+        503: {"description": "No se pudo acceder a una dependencia del servicio."},
+    },
+)
 async def login_user(
     request: LoginSchema,
     http_request: Request,
@@ -164,7 +180,16 @@ async def login_user(
     return result
 
 
-@router.post("/refresh", response_model=TokenPairSchema)
+@router.post(
+    "/refresh",
+    response_model=TokenPairSchema,
+    summary="Renovar sesión",
+    description=(
+        "Intercambia un refresh token activo por un nuevo par de tokens y revoca el "
+        "refresh token anterior."
+    ),
+    responses={401: {"description": "Refresh token inválido, vencido o revocado."}},
+)
 async def refresh_token(
     request: RefreshTokenSchema,
     session: AsyncSession = Depends(get_session),
@@ -179,7 +204,13 @@ async def refresh_token(
         _raise_http_auth_error(exc)
 
 
-@router.post("/logout", response_model=MessageSchema)
+@router.post(
+    "/logout",
+    response_model=MessageSchema,
+    summary="Cerrar sesión",
+    description="Revoca el refresh token enviado. Requiere un access token válido.",
+    responses=AUTHENTICATED_RESPONSES,
+)
 async def logout_user(
     request: RefreshTokenSchema,
     http_request: Request,
@@ -202,7 +233,16 @@ async def logout_user(
         _raise_http_auth_error(exc)
 
 
-@router.get("/me", response_model=UserSchema)
+@router.get(
+    "/me",
+    response_model=UserSchema,
+    summary="Consultar mi perfil",
+    description=(
+        "Devuelve la identidad autenticada, su empresa cuando corresponda, roles y estado "
+        "de seguridad."
+    ),
+    responses=AUTHENTICATED_RESPONSES,
+)
 async def current_user(
     current_user: CurrentUser = Depends(get_authenticated_user),
     session: AsyncSession = Depends(get_session),
@@ -216,7 +256,16 @@ async def current_user(
         _raise_http_auth_error(exc)
 
 
-@router.post("/password/forgot", response_model=ForgotPasswordResponseSchema)
+@router.post(
+    "/password/forgot",
+    response_model=ForgotPasswordResponseSchema,
+    summary="Solicitar recuperación de contraseña",
+    description=(
+        "Solicita un enlace de recuperación sin revelar si la cuenta existe. Omite "
+        "`empresa_slug` para cuentas de plataforma."
+    ),
+    responses={503: {"description": "El servicio de correo no está disponible."}},
+)
 async def forgot_password(
     request: ForgotPasswordSchema,
     http_request: Request,
@@ -250,7 +299,19 @@ async def forgot_password(
     }
 
 
-@router.post("/password/change", response_model=MessageSchema)
+@router.post(
+    "/password/change",
+    response_model=MessageSchema,
+    summary="Cambiar mi contraseña",
+    description=(
+        "Valida la contraseña actual, aplica la política de seguridad, actualiza la clave "
+        "y revoca las sesiones existentes."
+    ),
+    responses={
+        **AUTHENTICATED_RESPONSES,
+        422: {"description": "La contraseña actual o la nueva contraseña no son válidas."},
+    },
+)
 async def change_password(
     request: ChangePasswordSchema,
     http_request: Request,
@@ -276,7 +337,16 @@ async def change_password(
         _raise_http_auth_error(exc)
 
 
-@router.post("/email/verification/resend", response_model=MessageSchema)
+@router.post(
+    "/email/verification/resend",
+    response_model=MessageSchema,
+    summary="Reenviar verificación de correo",
+    description=(
+        "Genera un nuevo enlace cuando la cuenta existe y su correo continúa pendiente de "
+        "verificación."
+    ),
+    responses={503: {"description": "El servicio de correo no está disponible."}},
+)
 async def resend_email_verification(
     request: ResendVerificationSchema,
     session: AsyncSession = Depends(get_session),
@@ -296,7 +366,13 @@ async def resend_email_verification(
     return {"message": "Si la cuenta existe y está pendiente, se envió la verificación"}
 
 
-@router.post("/email/verify", response_model=MessageSchema)
+@router.post(
+    "/email/verify",
+    response_model=MessageSchema,
+    summary="Verificar correo electrónico",
+    description="Confirma el correo mediante un token de verificación vigente y de un solo uso.",
+    responses={401: {"description": "Token inválido, vencido o utilizado previamente."}},
+)
 async def verify_email(
     request: VerifyEmailSchema,
     http_request: Request,
@@ -320,7 +396,19 @@ async def verify_email(
         _raise_http_auth_error(exc)
 
 
-@router.post("/password/reset", response_model=MessageSchema)
+@router.post(
+    "/password/reset",
+    response_model=MessageSchema,
+    summary="Restablecer contraseña",
+    description=(
+        "Establece una contraseña nueva mediante el token de recuperación y revoca las "
+        "sesiones anteriores."
+    ),
+    responses={
+        401: {"description": "Token inválido, vencido o utilizado previamente."},
+        422: {"description": "La contraseña nueva no cumple la política de seguridad."},
+    },
+)
 async def reset_password(
     request: ResetPasswordSchema,
     http_request: Request,

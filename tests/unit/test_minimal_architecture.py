@@ -44,6 +44,41 @@ def test_login_examples_are_valid_request_bodies() -> None:
     assert all("password" in example for example in examples)
 
 
+def test_openapi_is_grouped_and_describes_every_business_operation() -> None:
+    schema = app.openapi()
+    expected_tags = {
+        "Autenticación",
+        "Usuarios",
+        "Empresas",
+        "Roles y permisos",
+        "Bitácora",
+    }
+
+    assert {tag["name"] for tag in schema["tags"]} == expected_tags
+    assert "/" not in schema["paths"]
+    assert "/health" not in schema["paths"]
+    assert "/api/v1/auth/health" not in schema["paths"]
+
+    for operations in schema["paths"].values():
+        for method, operation in operations.items():
+            if method not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            assert operation.get("summary")
+            assert operation.get("description")
+            assert set(operation.get("tags", [])) <= expected_tags
+
+
+def test_openapi_explains_multitenant_scope_and_login_lock() -> None:
+    schema = app.openapi()
+    login_responses = schema["paths"]["/api/v1/auth/login"]["post"]["responses"]
+    assert "423" in login_responses
+
+    user_parameters = schema["paths"]["/api/v1/usuarios"]["get"]["parameters"]
+    empresa_parameter = next(item for item in user_parameters if item["name"] == "empresa_id")
+    assert "plataforma" in empresa_parameter["description"].lower()
+    assert "propia empresa" in empresa_parameter["description"].lower()
+
+
 def test_platform_admin_can_select_target_scope() -> None:
     current = CurrentUser(id="admin", empresa_id=None, roles=["SUPER_ADMIN"])
     assert _target_empresa(current, None) is None

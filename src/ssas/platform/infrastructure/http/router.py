@@ -8,6 +8,7 @@ from ssas.auth.application.services.auth_email_service import AuthEmailService
 from ssas.auth.domain.exceptions import EmailDeliveryError
 from ssas.auth.infrastructure.email.smtp_sender import SMTPEmailSender
 from ssas.config.settings import settings
+from ssas.core.api.openapi import AUTHENTICATED_RESPONSES, TAG_COMPANIES
 from ssas.core.security.dependencies import CurrentUser, require_empresa_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.platform.application.services import empresa_payload, page_payload
@@ -33,7 +34,7 @@ from ssas.platform.infrastructure.persistence.repositories.platform_repository i
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/empresas", tags=["empresas"])
+router = APIRouter(prefix="/empresas", tags=[TAG_COMPANIES], responses=AUTHENTICATED_RESPONSES)
 email_service = AuthEmailService(SMTPEmailSender(), settings.app_frontend_url)
 
 
@@ -87,10 +88,21 @@ def _raise_platform(exc: PlatformError) -> None:
     raise HTTPException(status_code=code, detail=str(exc)) from exc
 
 
-@router.get("", response_model=EmpresaPageResponse)
+@router.get(
+    "",
+    response_model=EmpresaPageResponse,
+    summary="Listar empresas",
+    description=(
+        "Lista empresas con búsqueda, estado y paginación. Operación exclusiva de plataforma; "
+        "requiere `platform:empresas:ver`."
+    ),
+    responses={409: {"description": "La empresa o su administrador ya existe."}},
+)
 async def list_empresas(
-    search: str | None = Query(default=None, max_length=150),
-    activo: bool | None = None,
+    search: str | None = Query(
+        default=None, max_length=150, description="Busca por razón social, nombre, NIT o slug."
+    ),
+    activo: bool | None = Query(default=None, description="Filtra por estado activo."),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     _: CurrentPlatformAdmin = Depends(require_platform_permission("platform:empresas:ver")),
@@ -100,7 +112,17 @@ async def list_empresas(
     return page_payload([empresa_payload(item) for item in items], total, page, per_page)
 
 
-@router.post("", response_model=ProvisionEmpresaResponse, status_code=201)
+@router.post(
+    "",
+    response_model=ProvisionEmpresaResponse,
+    status_code=201,
+    summary="Aprovisionar empresa",
+    description=(
+        "Crea la empresa, su administrador inicial y la información de acceso necesaria. "
+        "Operación exclusiva de plataforma; requiere `platform:empresas:crear`."
+    ),
+    responses={404: {"description": "Empresa no encontrada."}},
+)
 async def provision_empresa(
     body: ProvisionEmpresaRequest,
     request: Request,
@@ -140,7 +162,20 @@ async def provision_empresa(
         ) from exc
 
 
-@router.get("/{empresa_id}", response_model=EmpresaResponse)
+@router.get(
+    "/{empresa_id}",
+    response_model=EmpresaResponse,
+    summary="Consultar empresa",
+    description=(
+        "Plataforma puede consultar cualquier empresa. Un administrador empresarial solo "
+        "puede consultar la empresa incluida en su token. Permisos: `empresa:ver` o "
+        "`platform:empresas:ver`."
+    ),
+    responses={
+        404: {"description": "Empresa no encontrada."},
+        409: {"description": "El NIT o el slug ya está siendo utilizado."},
+    },
+)
 async def get_empresa(
     empresa_id: str,
     _: CurrentUser = Depends(require_empresa_permission("empresa:ver", "platform:empresas:ver")),
@@ -152,7 +187,16 @@ async def get_empresa(
     return empresa_payload(empresa)
 
 
-@router.patch("/{empresa_id}", response_model=EmpresaResponse)
+@router.patch(
+    "/{empresa_id}",
+    response_model=EmpresaResponse,
+    summary="Actualizar empresa",
+    description=(
+        "Actualiza únicamente los campos enviados. El NIT y el slug deben continuar siendo "
+        "únicos. Permisos: `empresa:editar` o `platform:empresas:editar`."
+    ),
+    responses={404: {"description": "Empresa no encontrada."}},
+)
 async def update_empresa(
     empresa_id: str,
     body: EmpresaUpdateRequest,
@@ -214,7 +258,16 @@ async def _set_empresa_status(
     return empresa_payload(empresa)
 
 
-@router.patch("/{empresa_id}/activar", response_model=EmpresaResponse)
+@router.patch(
+    "/{empresa_id}/activar",
+    response_model=EmpresaResponse,
+    summary="Activar empresa",
+    description=(
+        "Habilita nuevamente la empresa. Operación exclusiva de plataforma; requiere "
+        "`platform:empresas:suspender`."
+    ),
+    responses={404: {"description": "Empresa no encontrada."}},
+)
 async def activate_empresa(
     empresa_id: str,
     request: Request,
@@ -226,7 +279,15 @@ async def activate_empresa(
     return await _set_empresa_status(empresa_id, True, request, current, session)
 
 
-@router.patch("/{empresa_id}/suspender", response_model=EmpresaResponse)
+@router.patch(
+    "/{empresa_id}/suspender",
+    response_model=EmpresaResponse,
+    summary="Suspender empresa",
+    description=(
+        "Suspende el acceso empresarial sin eliminar sus datos. Operación exclusiva de "
+        "plataforma; requiere `platform:empresas:suspender`."
+    ),
+)
 async def suspend_empresa(
     empresa_id: str,
     request: Request,

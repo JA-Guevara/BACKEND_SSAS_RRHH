@@ -11,10 +11,15 @@ from ssas.bitacora.infrastructure.http.schemas import AuditLogPageSchema, AuditL
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
 )
+from ssas.core.api.openapi import (
+    AUTHENTICATED_RESPONSES,
+    EMPRESA_SCOPE_DESCRIPTION,
+    TAG_AUDIT,
+)
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 
-router = APIRouter(prefix="/bitacora", tags=["bitacora"])
+router = APIRouter(prefix="/bitacora", tags=[TAG_AUDIT], responses=AUTHENTICATED_RESPONSES)
 
 
 def _target_empresa(current_user: CurrentUser, requested: str | None) -> str | None:
@@ -25,14 +30,28 @@ def _target_empresa(current_user: CurrentUser, requested: str | None) -> str | N
     return current_user.empresa_id
 
 
-@router.get("", response_model=AuditLogPageSchema)
+@router.get(
+    "",
+    response_model=AuditLogPageSchema,
+    summary="Consultar eventos de bitácora",
+    description=(
+        "Lista eventos inmutables con filtros por actor, módulo, acción y fechas. Un usuario "
+        "empresarial solo consulta su empresa; plataforma puede seleccionar una empresa. "
+        "Permisos: `bitacora:ver` o `platform:bitacora:ver`."
+    ),
+    responses={404: {"description": "Evento no encontrado dentro del alcance."}},
+)
 async def list_audit_logs(
-    empresa_id: str | None = None,
-    user_id: str | None = None,
-    module: str | None = None,
-    action: str | None = None,
-    start_date: datetime | None = None,
-    end_date: datetime | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
+    user_id: str | None = Query(
+        default=None, description="Filtra por usuario que originó el evento."
+    ),
+    module: str | None = Query(default=None, description="Filtra por módulo funcional."),
+    action: str | None = Query(default=None, description="Filtra por código de acción."),
+    start_date: datetime | None = Query(
+        default=None, description="Fecha y hora inicial, inclusiva."
+    ),
+    end_date: datetime | None = Query(default=None, description="Fecha y hora final, inclusiva."),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
     current_user: CurrentUser = Depends(
@@ -53,10 +72,18 @@ async def list_audit_logs(
     return await ListAuditLogs(SqlAlchemyAuditLogRepository(session)).execute(filters)
 
 
-@router.get("/{audit_log_id}", response_model=AuditLogSchema)
+@router.get(
+    "/{audit_log_id}",
+    response_model=AuditLogSchema,
+    summary="Consultar detalle de un evento",
+    description=(
+        "Obtiene un evento específico con su contexto, datos anteriores y datos nuevos, "
+        "respetando el alcance de empresa."
+    ),
+)
 async def get_audit_log(
     audit_log_id: str,
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("bitacora:ver", "platform:bitacora:ver")
     ),

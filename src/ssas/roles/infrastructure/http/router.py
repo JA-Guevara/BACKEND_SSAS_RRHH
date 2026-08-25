@@ -1,10 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.bitacora.application.events.role_events import RoleEvents
 from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
+)
+from ssas.core.api.openapi import (
+    AUTHENTICATED_RESPONSES,
+    EMPRESA_SCOPE_DESCRIPTION,
+    TAG_ROLES,
 )
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
@@ -32,7 +37,7 @@ from ssas.roles.infrastructure.persistence.repositories.role_repository import (
     SqlAlchemyRoleRepository,
 )
 
-router = APIRouter(prefix="/roles", tags=["roles"])
+router = APIRouter(prefix="/roles", tags=[TAG_ROLES], responses=AUTHENTICATED_RESPONSES)
 
 
 def _repository(session: AsyncSession, empresa_id: str | None) -> SqlAlchemyRoleRepository:
@@ -61,9 +66,18 @@ def _events(session: AsyncSession) -> RoleEvents:
     return RoleEvents(RegisterAuditEvent(repository))
 
 
-@router.get("", response_model=list[RoleSchema])
+@router.get(
+    "",
+    response_model=list[RoleSchema],
+    summary="Listar roles",
+    description=(
+        "Lista los roles disponibles en el alcance seleccionado. Permiso: "
+        "`roles:gestionar` para empresa o `platform:usuarios:gestionar` para plataforma."
+    ),
+    responses={409: {"description": "Ya existe un rol con el mismo código en el alcance."}},
+)
 async def list_roles(
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
     ),
@@ -74,11 +88,20 @@ async def list_roles(
     ).execute()
 
 
-@router.post("", response_model=RoleSchema, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=RoleSchema,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear rol",
+    description=(
+        "Crea un rol dentro del alcance seleccionado. Los códigos de rol deben ser únicos "
+        "en ese alcance."
+    ),
+)
 async def create_role(
     request: CreateRoleRequest,
     http_request: Request,
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
     ),
@@ -100,10 +123,16 @@ async def create_role(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.get("/{role_id}", response_model=RoleSchema)
+@router.get(
+    "/{role_id}",
+    response_model=RoleSchema,
+    summary="Consultar rol",
+    description="Obtiene el rol y los permisos que tiene asignados dentro del alcance autorizado.",
+    responses={404: {"description": "Rol no encontrado dentro del alcance."}},
+)
 async def get_role(
     role_id: str,
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
     ),
@@ -117,12 +146,21 @@ async def get_role(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.patch("/{role_id}", response_model=RoleSchema)
+@router.patch(
+    "/{role_id}",
+    response_model=RoleSchema,
+    summary="Actualizar rol",
+    description="Actualiza los campos enviados sin modificar los permisos que ya tiene asignados.",
+    responses={
+        404: {"description": "Rol no encontrado dentro del alcance."},
+        409: {"description": "Ya existe un rol con el mismo código en el alcance."},
+    },
+)
 async def update_role(
     role_id: str,
     request: UpdateRoleRequest,
     http_request: Request,
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
     ),
@@ -145,11 +183,17 @@ async def update_role(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar rol",
+    description="Elimina un rol del alcance autorizado cuando no está protegido por reglas del sistema.",
+    responses={404: {"description": "Rol no encontrado dentro del alcance."}},
+)
 async def delete_role(
     role_id: str,
     http_request: Request,
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
     ),
@@ -167,12 +211,21 @@ async def delete_role(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.put("/{role_id}/permissions", response_model=RoleSchema)
+@router.put(
+    "/{role_id}/permissions",
+    response_model=RoleSchema,
+    summary="Reemplazar permisos del rol",
+    description=(
+        "Reemplaza el conjunto completo de permisos del rol. Los permisos deben existir y "
+        "ser válidos para el alcance."
+    ),
+    responses={404: {"description": "El rol o alguno de los permisos no existe."}},
+)
 async def assign_permissions(
     role_id: str,
     request: AssignPermissionsRequest,
     http_request: Request,
-    empresa_id: str | None = None,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
     ),
