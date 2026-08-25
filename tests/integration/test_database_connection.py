@@ -1,6 +1,8 @@
 import os
 
 import pytest
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -43,6 +45,27 @@ async def test_minimal_schema_is_applied() -> None:
             )
         assert revision == "20260825_0001"
         assert all(tables.one())
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_schema_matches_orm_metadata() -> None:
+    """Detecta diferencias reales antes de aceptar una revisión como aplicada."""
+    from ssas.infrastructure.database.base import Base, import_all_models
+    from ssas.infrastructure.database.session import engine
+
+    import_all_models()
+
+    def collect_differences(sync_connection):
+        context = MigrationContext.configure(sync_connection)
+        return compare_metadata(context, Base.metadata)
+
+    try:
+        async with engine.connect() as connection:
+            differences = await connection.run_sync(collect_differences)
+
+        assert not differences, f"Diferencias entre PostgreSQL y el ORM: {differences!r}"
     finally:
         await engine.dispose()
 
