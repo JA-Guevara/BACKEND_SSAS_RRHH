@@ -27,6 +27,7 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
 
 PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
     "/docs/",
+    "/api/v1/platform/",
 )
 
 

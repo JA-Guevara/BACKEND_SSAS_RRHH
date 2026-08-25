@@ -43,7 +43,7 @@ API del **Sistema de Gestión de Recursos Humanos** — plataforma ERP modular c
 | Casos de uso de `auth` | ✅ Implementados | Login, bloqueo, correo, refresh, logout y contraseñas |
 | Conexión a PostgreSQL | ✅ Validada | SQLAlchemy async + Psycopg contra Supabase |
 | Repositorios reales | ✅ Implementados | Auth, usuarios, roles, permisos, empresa y bitácora |
-| Migraciones (Alembic) | ✅ Aplicadas | Base remota en `20260824_0003` |
+| Migraciones (Alembic) | ✅ Aplicadas | Base remota en `20260825_0004` |
 | Autenticación JWT funcional | ✅ Implementada | PyJWT + Argon2id y refresh con rotación |
 | Multi-tenant | 🟡 Base implementada | Aislamiento por `empresa_id`; falta aprovisionamiento y superadmin |
 | RBAC (roles y permisos) | ✅ Implementado | Permisos globales y roles por empresa |
@@ -330,6 +330,7 @@ Revisiones aplicadas en Supabase:
 - `20260820_0001`: esquema inicial multiempresa.
 - `20260824_0002`: bitácora funcional, unicidad case-insensitive y datos base.
 - `20260824_0003`: bloqueo de cuentas, verificación de correo y gestión completa de usuarios.
+- `20260825_0004`: administración global, superadministradores y bitácora de plataforma.
 
 **Reglas:**
 

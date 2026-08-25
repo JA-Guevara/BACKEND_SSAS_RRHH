@@ -21,3 +21,23 @@ async def test_database_connection_executes_select_one() -> None:
         )
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_schema_is_applied() -> None:
+    from ssas.infrastructure.database.session import engine
+
+    try:
+        async with engine.connect() as connection:
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+            tables = await connection.execute(
+                text(
+                    "SELECT to_regclass('public.administrador_plataforma'), "
+                    "to_regclass('public.platform_refresh_token'), "
+                    "to_regclass('public.bitacora_plataforma')"
+                )
+            )
+        assert revision == "20260825_0004"
+        assert all(tables.one())
+    finally:
+        await engine.dispose()

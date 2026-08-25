@@ -18,6 +18,9 @@ def import_all_models() -> None:
     import ssas.empresas.infrastructure.persistence.models.parametro_valor
     import ssas.empresas.infrastructure.persistence.models.plan_suscripcion
     import ssas.empresas.infrastructure.persistence.models.suscripcion
+    import ssas.platform.infrastructure.persistence.models.platform_admin
+    import ssas.platform.infrastructure.persistence.models.platform_audit_log
+    import ssas.platform.infrastructure.persistence.models.platform_refresh_token
     import ssas.roles.infrastructure.persistence.models.permission
     import ssas.roles.infrastructure.persistence.models.role
     import ssas.roles.infrastructure.persistence.models.role_permission

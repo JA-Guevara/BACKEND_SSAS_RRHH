@@ -8,6 +8,8 @@ Este directorio concentra la información técnica, decisiones, análisis y evid
   endpoints, Git y estado actual.
 - [Autenticación y usuarios](guias/AUTH_Y_USUARIOS.md): contraseñas, bloqueo, correo,
   recuperación, verificación y administración de cuentas.
+- [Administración global](guias/PLATFORM_ADMINISTRACION.md): superadministradores,
+  aprovisionamiento, empresas, planes, suscripciones y separación por alcance.
 
 ## Arquitectura y contratos
 

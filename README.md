@@ -9,11 +9,12 @@ roles y permisos, parámetros empresariales y bitácora de auditoría sobre una 
 |---|---|
 | FastAPI y OpenAPI | Operativo |
 | PostgreSQL/Supabase | Conectado |
-| Alembic | Revisión `20260824_0003` aplicada |
+| Alembic | Revisión `20260825_0004` aplicada |
 | Auth, bloqueo, verificación y recuperación | Implementado; requiere SMTP |
 | Usuarios, roles y permisos | Implementado |
 | Bitácora persistente | Implementado |
 | Aislamiento multiempresa | Basado en `empresa_id` |
+| Administración global SSAS | Plataforma, empresas, planes y suscripciones implementados |
 
 ## Tecnologías principales
 
@@ -61,6 +62,7 @@ La información detallada se mantiene organizada dentro de [`docs/`](docs/README
 
 - [Guía de desarrollo](docs/guias/GUIA_DESARROLLO.md)
 - [Autenticación y gestión de usuarios](docs/guias/AUTH_Y_USUARIOS.md)
+- [Administración global de SSAS](docs/guias/PLATFORM_ADMINISTRACION.md)
 - [Arquitectura del backend](docs/arquitectura/ARQUITECTURA_BACKEND_FASTAPI.md)
 - [Contrato OpenAPI y versionado](docs/arquitectura/CONTRATO_OPENAPI_Y_VERSIONADO.md)
 - [Análisis técnico](docs/analisis/ANALISIS_Y_PROPUESTA_BACKEND.md)

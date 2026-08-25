@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class ParametroEmpresaResponse(BaseModel):
@@ -28,3 +28,12 @@ class ActualizarParametroEmpresaRequest(BaseModel):
         if self.vigente_hasta is not None and self.vigente_hasta < self.vigente_desde:
             raise ValueError("vigente_hasta debe ser mayor o igual a vigente_desde")
         return self
+
+
+class MiEmpresaUpdateRequest(BaseModel):
+    nombre_comercial: str | None = Field(default=None, min_length=2, max_length=200)
+    email: EmailStr | None = None
+    telefono: str | None = Field(default=None, max_length=40)
+    direccion: str | None = None
+    ciudad: str | None = Field(default=None, max_length=100)
+    logo_url: str | None = None

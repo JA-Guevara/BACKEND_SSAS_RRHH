@@ -1,4 +1,4 @@
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     app_max_login_attempts: int = Field(default=5, ge=1, le=20)
     app_login_lock_minutes: int = Field(default=15, ge=1, le=1440)
     app_frontend_url: str = "http://localhost:3000"
+    app_cors_origins: str = "http://localhost:3000"
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_username: str | None = None
@@ -27,6 +28,13 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=10, ge=0)
     db_pool_recycle_seconds: int = Field(default=1800, ge=30)
 
+    @field_validator("app_secret_key")
+    @classmethod
+    def validate_secret_key(cls, value: str, info: ValidationInfo) -> str:
+        if info.data.get("app_env") == "production" and len(value) < 32:
+            raise ValueError("APP_SECRET_KEY debe tener al menos 32 caracteres en producción")
+        return value
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, value: str) -> str:
@@ -39,6 +47,10 @@ class Settings(BaseSettings):
         raise ValueError(
             "DATABASE_URL debe ser una conexión PostgreSQL y no la URL HTTPS del proyecto"
         )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip().rstrip("/") for origin in self.app_cors_origins.split(",") if origin.strip()]
 
     model_config = SettingsConfigDict(
         env_file=".env",
