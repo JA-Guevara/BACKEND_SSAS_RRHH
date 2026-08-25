@@ -20,16 +20,13 @@ class LoginSchema(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "summary": "Administrador de plataforma (sin empresa)",
-                    "value": {"email": "admin@ssas.bo", "password": "TuClaveSegura.2026"},
+                    "email": "admin@ssas.bo",
+                    "password": "TuClaveSegura.2026",
                 },
                 {
-                    "summary": "Usuario de una empresa",
-                    "value": {
-                        "empresa_slug": "conecta",
-                        "email": "ana@conecta.bo",
-                        "password": "TuClaveSegura.2026",
-                    },
+                    "empresa_slug": "conecta",
+                    "email": "ana@conecta.bo",
+                    "password": "TuClaveSegura.2026",
                 },
             ]
         }

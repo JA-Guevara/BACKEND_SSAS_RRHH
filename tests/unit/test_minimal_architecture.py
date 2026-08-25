@@ -35,6 +35,15 @@ def test_openapi_does_not_expose_deferred_modules() -> None:
     assert not any(path.startswith("/api/v1/platform") for path in paths)
 
 
+def test_login_examples_are_valid_request_bodies() -> None:
+    login_schema = app.openapi()["components"]["schemas"]["LoginSchema"]
+    examples = login_schema["examples"]
+
+    assert examples
+    assert all("summary" not in example and "value" not in example for example in examples)
+    assert all("password" in example for example in examples)
+
+
 def test_platform_admin_can_select_target_scope() -> None:
     current = CurrentUser(id="admin", empresa_id=None, roles=["SUPER_ADMIN"])
     assert _target_empresa(current, None) is None
