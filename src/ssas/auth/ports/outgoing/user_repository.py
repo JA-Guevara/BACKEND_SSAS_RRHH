@@ -22,6 +22,20 @@ class UserRepository(ABC):
 
     @abstractmethod
     async def update_password(
-        self, user_id: str, empresa_id: str, hashed_password: str
+        self, user_id: str, empresa_id: str, hashed_password: str, must_change: bool = False
     ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def record_failed_login(
+        self, user_id: str, empresa_id: str, max_attempts: int, lock_minutes: int
+    ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def record_successful_login(self, user_id: str, empresa_id: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def mark_email_verified(self, user_id: str, empresa_id: str) -> None:
         raise NotImplementedError

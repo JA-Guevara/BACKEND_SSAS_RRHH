@@ -3,14 +3,21 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.auth.application.services.auth_email_service import AuthEmailService
+from ssas.auth.application.use_cases.change_password import ChangePassword
 from ssas.auth.application.use_cases.get_current_user import GetCurrentUser
 from ssas.auth.application.use_cases.login_user import LoginUser
 from ssas.auth.application.use_cases.logout_user import LogoutUser
 from ssas.auth.application.use_cases.refresh_token import RefreshToken
+from ssas.auth.application.use_cases.request_email_verification import RequestEmailVerification
 from ssas.auth.application.use_cases.request_password_reset import RequestPasswordReset
 from ssas.auth.application.use_cases.reset_password import ResetPassword
+from ssas.auth.application.use_cases.verify_email import VerifyEmail
 from ssas.auth.domain.exceptions import (
+    AccountLockedError,
     AuthError,
+    EmailDeliveryError,
+    EmailNotVerifiedError,
     InactiveUserError,
     InvalidCredentialsError,
     InvalidPasswordError,
@@ -18,15 +25,19 @@ from ssas.auth.domain.exceptions import (
     TokenExpiredError,
     UserNotFoundError,
 )
+from ssas.auth.infrastructure.email.smtp_sender import SMTPEmailSender
 from ssas.auth.infrastructure.http.schemas import (
+    ChangePasswordSchema,
     ForgotPasswordResponseSchema,
     ForgotPasswordSchema,
     LoginSchema,
     MessageSchema,
     RefreshTokenSchema,
+    ResendVerificationSchema,
     ResetPasswordSchema,
     TokenPairSchema,
     UserSchema,
+    VerifyEmailSchema,
 )
 from ssas.auth.infrastructure.persistence.repositories.auth_token_repository import (
     SqlAlchemyAuthTokenRepository,
@@ -51,6 +62,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 token_service = JWTService()
 password_hasher = Argon2PasswordHasher()
+email_service = AuthEmailService(SMTPEmailSender(), settings.app_frontend_url)
 
 
 def _raise_http_auth_error(exc: AuthError) -> None:
@@ -58,6 +70,12 @@ def _raise_http_auth_error(exc: AuthError) -> None:
         code = status.HTTP_404_NOT_FOUND
     elif isinstance(exc, InvalidPasswordError):
         code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    elif isinstance(exc, AccountLockedError):
+        code = status.HTTP_423_LOCKED
+    elif isinstance(exc, EmailNotVerifiedError):
+        code = status.HTTP_403_FORBIDDEN
+    elif isinstance(exc, EmailDeliveryError):
+        code = status.HTTP_503_SERVICE_UNAVAILABLE
     elif isinstance(
         exc,
         (InvalidCredentialsError, InvalidTokenError, TokenExpiredError, InactiveUserError),
@@ -93,6 +111,12 @@ async def _record_failed_login(user, request: Request) -> None:
         return
     try:
         async with AsyncSessionLocal() as audit_session:
+            await _user_repository(audit_session).record_failed_login(
+                user.id,
+                user.empresa_id,
+                settings.app_max_login_attempts,
+                settings.app_login_lock_minutes,
+            )
             await _events(audit_session).login_failed(
                 empresa_id=user.empresa_id,
                 user_id=user.id,
@@ -126,7 +150,8 @@ async def login_user(
         ).execute(**request.model_dump())
     except AuthError as exc:
         user = await repository.get_by_login(login, request.empresa_slug)
-        await _record_failed_login(user, http_request)
+        if isinstance(exc, InvalidCredentialsError):
+            await _record_failed_login(user, http_request)
         _raise_http_auth_error(exc)
     payload = token_service.decode_token(result["access_token"], expected_type="access")
     await _events(session).login_success(
@@ -206,6 +231,10 @@ async def forgot_password(
     if raw_token:
         user = await repository.get_by_login(str(request.email), request.empresa_slug)
         if user and user.empresa_id:
+            try:
+                await email_service.send_password_reset(user.email, raw_token)
+            except EmailDeliveryError:
+                logger.exception("No se pudo enviar el correo de recuperación")
             await _events(session).password_reset_requested(
                 empresa_id=user.empresa_id,
                 user_id=user.id,
@@ -213,11 +242,81 @@ async def forgot_password(
                 **_request_context(http_request),
             )
     return {
-        "message": "Si el correo existe, se generó un enlace de recuperación",
+        "message": "Si el correo existe, se envió un enlace de recuperación",
         "reset_token": raw_token
         if settings.app_env == "development" and settings.app_debug
         else None,
     }
+
+
+@router.post("/password/change", response_model=MessageSchema)
+async def change_password(
+    request: ChangePasswordSchema,
+    http_request: Request,
+    current_user: CurrentUser = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        await ChangePassword(
+            _user_repository(session), _token_repository(session), password_hasher
+        ).execute(
+            current_user.id,
+            current_user.empresa_id,
+            request.current_password,
+            request.new_password,
+        )
+        await _events(session).password_changed(
+            empresa_id=current_user.empresa_id,
+            user_id=current_user.id,
+            **_request_context(http_request),
+        )
+        return {"message": "Contraseña actualizada; vuelve a iniciar sesión"}
+    except AuthError as exc:
+        _raise_http_auth_error(exc)
+
+
+@router.post("/email/verification/resend", response_model=MessageSchema)
+async def resend_email_verification(
+    request: ResendVerificationSchema,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await RequestEmailVerification(
+        _user_repository(session),
+        _token_repository(session),
+        token_service,
+        settings.app_email_verification_expire_minutes,
+    ).execute(str(request.email), request.empresa_slug)
+    if result:
+        email, raw_token = result
+        try:
+            await email_service.send_email_verification(email, raw_token)
+        except EmailDeliveryError:
+            logger.exception("No se pudo enviar el correo de verificación")
+    return {"message": "Si la cuenta existe y está pendiente, se envió la verificación"}
+
+
+@router.post("/email/verify", response_model=MessageSchema)
+async def verify_email(
+    request: VerifyEmailSchema,
+    http_request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        stored_token = await _token_repository(session).get_active_email_verification_token(
+            token_service.fingerprint(request.token)
+        )
+        await VerifyEmail(
+            _user_repository(session), _token_repository(session), token_service
+        ).execute(request.token)
+        if stored_token:
+            await _events(session).email_verified(
+                empresa_id=stored_token.empresa_id,
+                user_id=stored_token.user_id,
+                **_request_context(http_request),
+            )
+        return {"message": "Correo verificado correctamente"}
+    except AuthError as exc:
+        _raise_http_auth_error(exc)
 
 
 @router.post("/password/reset", response_model=MessageSchema)

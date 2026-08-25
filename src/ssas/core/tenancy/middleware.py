@@ -20,6 +20,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/refresh",
         "/api/v1/auth/password/forgot",
         "/api/v1/auth/password/reset",
+        "/api/v1/auth/email/verification/resend",
+        "/api/v1/auth/email/verify",
     }
 )
 

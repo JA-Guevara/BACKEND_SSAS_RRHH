@@ -17,9 +17,17 @@ class JWTService(TokenService):
         subject: str,
         empresa_id: str,
         roles: list[str] | None = None,
+        must_change_password: bool = False,
     ) -> str:
         expires_delta = timedelta(minutes=settings.app_access_token_expire_minutes)
-        return self._create_token(subject, empresa_id, "access", expires_delta, roles=roles)
+        return self._create_token(
+            subject,
+            empresa_id,
+            "access",
+            expires_delta,
+            roles=roles,
+            must_change_password=must_change_password,
+        )
 
     def create_refresh_token(
         self,
@@ -58,6 +66,7 @@ class JWTService(TokenService):
         token_type: str,
         expires_delta: timedelta,
         roles: list[str] | None = None,
+        must_change_password: bool = False,
     ) -> str:
         return self._encode(
             subject=subject,
@@ -66,6 +75,7 @@ class JWTService(TokenService):
             token_id=str(uuid4()),
             expires_at=datetime.now(UTC) + expires_delta,
             roles=roles,
+            must_change_password=must_change_password,
         )
 
     def _encode(
@@ -76,6 +86,7 @@ class JWTService(TokenService):
         token_id: str,
         expires_at: datetime,
         roles: list[str] | None = None,
+        must_change_password: bool = False,
     ) -> str:
         now = datetime.now(UTC)
         payload: dict[str, object] = {
@@ -88,4 +99,5 @@ class JWTService(TokenService):
         }
         if roles is not None:
             payload["roles"] = roles
+        payload["must_change_password"] = must_change_password
         return jwt.encode(payload, settings.app_secret_key, algorithm=settings.app_algorithm)

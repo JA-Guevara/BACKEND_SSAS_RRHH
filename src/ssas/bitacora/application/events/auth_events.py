@@ -47,3 +47,19 @@ class AuthEvents:
             description="Recuperación de contraseña solicitada",
             **context,
         )
+
+    async def password_changed(self, **context):
+        return await self.recorder.execute(
+            module=AuditModule.AUTH,
+            action=AuditAction.UPDATE,
+            description="Contraseña cambiada por el usuario",
+            **context,
+        )
+
+    async def email_verified(self, **context):
+        return await self.recorder.execute(
+            module=AuditModule.AUTH,
+            action=AuditAction.UPDATE,
+            description="Correo electrónico verificado",
+            **context,
+        )

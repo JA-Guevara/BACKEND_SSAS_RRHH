@@ -1,4 +1,5 @@
 from ssas.auth.domain.exceptions import InvalidTokenError
+from ssas.auth.domain.password_policy import validate_password
 
 
 class ResetPassword:
@@ -15,11 +16,16 @@ class ResetPassword:
         if not stored_token:
             raise InvalidTokenError("El token de recuperación es inválido o expiró")
 
+        user = await self.user_repository.get_by_id(stored_token.user_id, stored_token.empresa_id)
+        if not user:
+            raise InvalidTokenError("El token de recuperación es inválido o expiró")
+        validate_password(new_password, user.username, user.email)
         hashed_password = self.password_hasher.hash(new_password)
         await self.user_repository.update_password(
             stored_token.user_id,
             stored_token.empresa_id,
             hashed_password,
+            False,
         )
         await self.token_repository.consume_password_reset_token(stored_token.id)
         await self.token_repository.revoke_all_refresh_tokens(

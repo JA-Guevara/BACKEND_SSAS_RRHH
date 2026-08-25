@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from hmac import compare_digest
 
 from ssas.auth.domain.exceptions import InvalidTokenError
@@ -33,6 +34,8 @@ class RefreshToken:
             or not user.empresa_is_active
             or user.empresa_id != empresa_id
             or not user.roles
+            or not user.email_verified
+            or (user.locked_until is not None and user.locked_until > datetime.now(UTC))
         ):
             raise InvalidTokenError("El usuario del token no está disponible")
 
@@ -54,6 +57,7 @@ class RefreshToken:
                 subject=user_id,
                 empresa_id=empresa_id,
                 roles=user.roles,
+                must_change_password=user.must_change_password,
             ),
             "refresh_token": new_refresh,
             "token_type": "bearer",

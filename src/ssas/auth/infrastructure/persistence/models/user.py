@@ -1,7 +1,18 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +36,11 @@ class UserModel(Base):
         UniqueConstraint("empresa_id", "username", name="uq_usuario_empresa_username"),
         Index("idx_usuario_empresa_id", "empresa_id"),
         Index("idx_usuario_email", "email"),
+        Index("idx_usuario_bloqueado_hasta", "bloqueado_hasta"),
+        CheckConstraint(
+            "intentos_fallidos >= 0",
+            name="ck_usuario_intentos_fallidos_no_negativo",
+        ),
     )
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid())
@@ -37,6 +53,9 @@ class UserModel(Base):
     telefono: Mapped[str | None] = mapped_column(String(40), nullable=True)
     ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    intentos_fallidos: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ultimo_intento_fallido: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column("activo", Boolean, nullable=False, server_default="true")
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

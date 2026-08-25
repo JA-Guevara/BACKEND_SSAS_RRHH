@@ -24,6 +24,7 @@ class CurrentUser:
     id: str
     empresa_id: str
     roles: list[str] = field(default_factory=list)
+    must_change_password: bool = False
 
 
 async def get_current_user(
@@ -46,6 +47,7 @@ async def get_current_user(
     user_id = payload.get("sub")
     empresa_id = payload.get("tid")
     roles = payload.get("roles", [])
+    must_change_password = payload.get("must_change_password", False)
     current_empresa_id = require_empresa_context()
 
     if not isinstance(user_id, str) or not user_id.strip():
@@ -63,7 +65,12 @@ async def get_current_user(
     if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
 
-    return CurrentUser(id=user_id, empresa_id=empresa_id, roles=roles)
+    return CurrentUser(
+        id=user_id,
+        empresa_id=empresa_id,
+        roles=roles,
+        must_change_password=bool(must_change_password),
+    )
 
 
 def require_permission(required_permission: str) -> Callable:
@@ -71,6 +78,11 @@ def require_permission(required_permission: str) -> Callable:
         current_user: CurrentUser = Depends(get_current_user),
         session: AsyncSession = Depends(get_session),
     ) -> CurrentUser:
+        if current_user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Debes cambiar tu contraseña antes de continuar",
+            )
         empresa_id = require_empresa_context()
         try:
             await CheckPermission(SqlAlchemyAuthorizationRepository(session)).execute(

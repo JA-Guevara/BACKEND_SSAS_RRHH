@@ -20,3 +20,7 @@ class InvalidRoleForEmpresaError(UsuarioError):
 
 class LastAdminCannotBeDisabledError(UsuarioError):
     pass
+
+
+class UsuarioPasswordError(UsuarioError):
+    pass

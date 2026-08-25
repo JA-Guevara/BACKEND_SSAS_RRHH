@@ -1,4 +1,6 @@
-from sqlalchemy import func, select, update
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,12 +64,59 @@ class SqlAlchemyUserRepository(UserRepository):
         return self._to_entity(model) if model else None
 
     async def update_password(
-        self, user_id: str, empresa_id: str, hashed_password: str
+        self, user_id: str, empresa_id: str, hashed_password: str, must_change: bool = False
     ) -> None:
         await self.session.execute(
             update(UserModel)
             .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
-            .values(hashed_password=hashed_password)
+            .values(hashed_password=hashed_password, debe_cambiar_password=must_change)
+        )
+        await self.session.flush()
+
+    async def record_failed_login(
+        self, user_id: str, empresa_id: str, max_attempts: int, lock_minutes: int
+    ) -> None:
+        now = datetime.now(UTC)
+        next_attempts = case(
+            (
+                UserModel.bloqueado_hasta.is_not(None)
+                & (UserModel.bloqueado_hasta <= now),
+                1,
+            ),
+            else_=UserModel.intentos_fallidos + 1,
+        )
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(
+                intentos_fallidos=next_attempts,
+                ultimo_intento_fallido=now,
+                bloqueado_hasta=case(
+                    (next_attempts >= max_attempts, now + timedelta(minutes=lock_minutes)),
+                    else_=UserModel.bloqueado_hasta,
+                ),
+            )
+        )
+        await self.session.flush()
+
+    async def record_successful_login(self, user_id: str, empresa_id: str) -> None:
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(
+                intentos_fallidos=0,
+                bloqueado_hasta=None,
+                ultimo_intento_fallido=None,
+                ultimo_acceso=datetime.now(UTC),
+            )
+        )
+        await self.session.flush()
+
+    async def mark_email_verified(self, user_id: str, empresa_id: str) -> None:
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(email_verified=True)
         )
         await self.session.flush()
 
@@ -92,6 +141,9 @@ class SqlAlchemyUserRepository(UserRepository):
             empresa_is_active=bool(model.empresa and model.empresa.activo),
             is_active=model.is_active,
             email_verified=model.email_verified,
+            must_change_password=model.debe_cambiar_password,
+            failed_login_attempts=model.intentos_fallidos,
+            locked_until=model.bloqueado_hasta,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

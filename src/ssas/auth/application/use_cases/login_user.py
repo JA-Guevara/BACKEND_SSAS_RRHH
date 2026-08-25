@@ -1,4 +1,10 @@
-from ssas.auth.domain.exceptions import InvalidCredentialsError
+from datetime import UTC, datetime
+
+from ssas.auth.domain.exceptions import (
+    AccountLockedError,
+    EmailNotVerifiedError,
+    InvalidCredentialsError,
+)
 from ssas.config.settings import settings
 
 
@@ -21,15 +27,24 @@ class LoginUser:
             raise InvalidCredentialsError("Credenciales inválidas")
 
         user = await self.user_repository.get_by_login(login, empresa_slug)
-        if not user or not self.password_hasher.verify(password, user.hashed_password):
+        if not user:
+            raise InvalidCredentialsError("Credenciales inválidas")
+        if user.locked_until and user.locked_until > datetime.now(UTC):
+            raise AccountLockedError("La cuenta está bloqueada temporalmente")
+        if not self.password_hasher.verify(password, user.hashed_password):
             raise InvalidCredentialsError("Credenciales inválidas")
         if not user.is_active or not user.empresa_is_active or not user.empresa_id or not user.roles:
             raise InvalidCredentialsError("Credenciales inválidas")
+        if not user.email_verified:
+            raise EmailNotVerifiedError("Debes verificar tu correo antes de iniciar sesión")
+
+        await self.user_repository.record_successful_login(user.id, user.empresa_id)
 
         access_token = self.token_service.create_access_token(
             subject=str(user.id),
             empresa_id=user.empresa_id,
             roles=user.roles,
+            must_change_password=user.must_change_password,
         )
         refresh_token, token_id, expires_at = self.token_service.create_refresh_token(
             subject=str(user.id),
@@ -47,4 +62,5 @@ class LoginUser:
             "refresh_token": refresh_token,
             "token_type": "bearer",
             "expires_in": settings.app_access_token_expire_minutes * 60,
+            "must_change_password": user.must_change_password,
         }

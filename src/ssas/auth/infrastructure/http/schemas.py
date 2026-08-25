@@ -21,6 +21,7 @@ class TokenPairSchema(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int | None = None
+    must_change_password: bool = False
 
 
 class RefreshTokenSchema(BaseModel):
@@ -39,7 +40,21 @@ class ForgotPasswordResponseSchema(BaseModel):
 
 class ResetPasswordSchema(BaseModel):
     token: str = Field(min_length=1)
-    new_password: str = Field(min_length=8, max_length=72)
+    new_password: str = Field(min_length=12, max_length=72)
+
+
+class ChangePasswordSchema(BaseModel):
+    current_password: str = Field(min_length=1, max_length=72)
+    new_password: str = Field(min_length=12, max_length=72)
+
+
+class VerifyEmailSchema(BaseModel):
+    token: str = Field(min_length=1)
+
+
+class ResendVerificationSchema(BaseModel):
+    email: EmailStr
+    empresa_slug: str = Field(min_length=2, max_length=120, pattern=r"^[a-zA-Z0-9-]+$")
 
 
 class MessageSchema(BaseModel):
@@ -57,5 +72,6 @@ class UserSchema(BaseModel):
     roles: list[str] = Field(default_factory=list)
     is_active: bool
     email_verified: bool
+    must_change_password: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None

@@ -1,3 +1,4 @@
+from ssas.auth.domain.password_policy import validate_password
 from ssas.auth.ports.outgoing.password_hasher import PasswordHasher
 from ssas.usuarios.domain.entities.usuario import Usuario
 from ssas.usuarios.domain.exceptions import (
@@ -34,6 +35,7 @@ class CrearUsuario:
             raise UsuarioAlreadyExistsError("Ya existe un usuario con ese username en la empresa")
         if not await self.usuario_repository.role_ids_belong_to_empresa(role_ids, empresa_id):
             raise InvalidRoleForEmpresaError("Uno o más roles no pertenecen a la empresa")
+        validate_password(password, normalized_username, normalized_email)
 
         return await self.usuario_repository.create_usuario(
             empresa_id=empresa_id,

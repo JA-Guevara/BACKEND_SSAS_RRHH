@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +18,17 @@ ADMIN_ROLE_NAME = "Administrador de Empresa"
 class SqlAlchemyUsuarioRepository(UsuarioRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def list_usuarios(self, empresa_id: str, search: str | None, is_active: bool | None, page: int, per_page: int) -> tuple[list[Usuario], int]:
+        conditions = [UserModel.empresa_id == empresa_id]
+        if is_active is not None:
+            conditions.append(UserModel.is_active.is_(is_active))
+        if search:
+            term = f"%{search.strip().lower()}%"
+            conditions.append(or_(func.lower(UserModel.name).like(term), func.lower(UserModel.apellido).like(term), func.lower(UserModel.email).like(term), func.lower(UserModel.username).like(term)))
+        total = (await self.session.execute(select(func.count(UserModel.id)).where(*conditions))).scalar_one()
+        result = await self.session.execute(self._base_query().where(*conditions).order_by(UserModel.name, UserModel.apellido).offset((page - 1) * per_page).limit(per_page))
+        return [self._to_entity(model) for model in result.scalars().unique().all()], total
 
     async def get_by_id(self, user_id: str, empresa_id: str) -> Usuario | None:
         result = await self.session.execute(
@@ -70,7 +81,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
                 telefono=telefono,
                 is_active=True,
                 email_verified=False,
-                debe_cambiar_password=False,
+                debe_cambiar_password=True,
             )
         )
         await self.session.flush()
@@ -182,6 +193,22 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             )
         await self.session.flush()
 
+    async def set_password(self, user_id: str, empresa_id: str, password_hash: str, must_change: bool) -> Usuario:
+        await self.session.execute(update(UserModel).where(UserModel.id == user_id, UserModel.empresa_id == empresa_id).values(hashed_password=password_hash, debe_cambiar_password=must_change))
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
+    async def unlock_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+        await self.session.execute(update(UserModel).where(UserModel.id == user_id, UserModel.empresa_id == empresa_id).values(intentos_fallidos=0, bloqueado_hasta=None, ultimo_intento_fallido=None))
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
     @staticmethod
     def _base_query():
         return select(UserModel).options(selectinload(UserModel.roles))
@@ -212,6 +239,10 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             username=model.username,
             telefono=model.telefono,
             is_active=model.is_active,
+            email_verified=model.email_verified,
+            must_change_password=model.debe_cambiar_password,
+            failed_login_attempts=model.intentos_fallidos,
+            locked_until=model.bloqueado_hasta,
             roles=[role.name for role in model.roles if role.is_active],
             created_at=model.created_at,
             updated_at=model.updated_at,

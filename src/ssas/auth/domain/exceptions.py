@@ -28,3 +28,15 @@ class UserNotFoundError(AuthError):
 
 class InvalidPasswordError(AuthError):
     pass
+
+
+class AccountLockedError(AuthError):
+    pass
+
+
+class EmailNotVerifiedError(AuthError):
+    pass
+
+
+class EmailDeliveryError(AuthError):
+    pass

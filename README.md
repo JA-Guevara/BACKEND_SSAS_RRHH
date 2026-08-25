@@ -9,8 +9,8 @@ roles y permisos, parámetros empresariales y bitácora de auditoría sobre una 
 |---|---|
 | FastAPI y OpenAPI | Operativo |
 | PostgreSQL/Supabase | Conectado |
-| Alembic | Revisión `20260824_0002` aplicada |
-| Auth y recuperación de contraseña | Implementado |
+| Alembic | Revisión `20260824_0003` aplicada |
+| Auth, bloqueo, verificación y recuperación | Implementado; requiere SMTP |
 | Usuarios, roles y permisos | Implementado |
 | Bitácora persistente | Implementado |
 | Aislamiento multiempresa | Basado en `empresa_id` |
@@ -60,6 +60,7 @@ python -m alembic check
 La información detallada se mantiene organizada dentro de [`docs/`](docs/README.md):
 
 - [Guía de desarrollo](docs/guias/GUIA_DESARROLLO.md)
+- [Autenticación y gestión de usuarios](docs/guias/AUTH_Y_USUARIOS.md)
 - [Arquitectura del backend](docs/arquitectura/ARQUITECTURA_BACKEND_FASTAPI.md)
 - [Contrato OpenAPI y versionado](docs/arquitectura/CONTRATO_OPENAPI_Y_VERSIONADO.md)
 - [Análisis técnico](docs/analisis/ANALISIS_Y_PROPUESTA_BACKEND.md)

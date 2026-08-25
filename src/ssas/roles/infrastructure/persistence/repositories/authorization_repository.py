@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.auth.infrastructure.persistence.models.user import UserModel
@@ -29,6 +31,8 @@ class SqlAlchemyAuthorizationRepository(AuthorizationRepository):
                 EmpresaModel.id == empresa_id,
                 EmpresaModel.activo.is_(True),
                 UserModel.is_active.is_(True),
+                UserModel.email_verified.is_(True),
+                or_(UserModel.bloqueado_hasta.is_(None), UserModel.bloqueado_hasta <= datetime.now(UTC)),
                 RoleModel.is_active.is_(True),
                 RoleModel.empresa_id == empresa_id,
             )

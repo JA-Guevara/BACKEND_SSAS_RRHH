@@ -10,6 +10,17 @@ class Settings(BaseSettings):
     app_access_token_expire_minutes: int = 15
     app_refresh_token_expire_days: int = 7
     app_password_reset_expire_minutes: int = 30
+    app_email_verification_expire_minutes: int = 1440
+    app_max_login_attempts: int = Field(default=5, ge=1, le=20)
+    app_login_lock_minutes: int = Field(default=15, ge=1, le=1440)
+    app_frontend_url: str = "http://localhost:3000"
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_from_name: str = "SSAS RRHH"
+    smtp_use_tls: bool = True
     database_url: str = "postgresql+psycopg://user:password@localhost:5432/app_db"
     db_echo: bool = False
     db_pool_size: int = Field(default=5, ge=1)

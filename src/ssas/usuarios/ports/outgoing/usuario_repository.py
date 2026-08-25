@@ -5,6 +5,9 @@ from ssas.usuarios.domain.entities.usuario import Usuario
 
 class UsuarioRepository(ABC):
     @abstractmethod
+    async def list_usuarios(self, empresa_id: str, search: str | None, is_active: bool | None, page: int, per_page: int) -> tuple[list[Usuario], int]:
+        raise NotImplementedError
+    @abstractmethod
     async def get_by_id(self, user_id: str, empresa_id: str) -> Usuario | None:
         raise NotImplementedError
 
@@ -62,4 +65,12 @@ class UsuarioRepository(ABC):
 
     @abstractmethod
     async def assign_roles(self, user_id: str, role_ids: list[str]) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_password(self, user_id: str, empresa_id: str, password_hash: str, must_change: bool) -> Usuario:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def unlock_usuario(self, user_id: str, empresa_id: str) -> Usuario:
         raise NotImplementedError

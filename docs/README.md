@@ -6,6 +6,8 @@ Este directorio concentra la información técnica, decisiones, análisis y evid
 
 - [Guía de desarrollo](guias/GUIA_DESARROLLO.md): instalación, ejecución, variables, pruebas,
   endpoints, Git y estado actual.
+- [Autenticación y usuarios](guias/AUTH_Y_USUARIOS.md): contraseñas, bloqueo, correo,
+  recuperación, verificación y administración de cuentas.
 
 ## Arquitectura y contratos
 

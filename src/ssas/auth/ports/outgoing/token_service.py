@@ -9,6 +9,7 @@ class TokenService(ABC):
         subject: str,
         empresa_id: str,
         roles: list[str] | None = None,
+        must_change_password: bool = False,
     ) -> str:
         raise NotImplementedError
 

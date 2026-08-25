@@ -3,12 +3,19 @@ from hashlib import sha256
 
 import pytest
 
+from ssas.auth.application.use_cases.change_password import ChangePassword
 from ssas.auth.application.use_cases.login_user import LoginUser
+from ssas.auth.application.use_cases.request_email_verification import RequestEmailVerification
 from ssas.auth.application.use_cases.request_password_reset import RequestPasswordReset
 from ssas.auth.application.use_cases.reset_password import ResetPassword
+from ssas.auth.application.use_cases.verify_email import VerifyEmail
 from ssas.auth.domain.entities.auth_token import StoredToken
 from ssas.auth.domain.entities.user import User
-from ssas.auth.domain.exceptions import InvalidCredentialsError
+from ssas.auth.domain.exceptions import (
+    AccountLockedError,
+    EmailNotVerifiedError,
+    InvalidCredentialsError,
+)
 
 EMPRESA_ID = "empresa-id"
 EMPRESA_SLUG = "empresa-a"
@@ -55,11 +62,26 @@ class FakeUserRepository:
         return user if user and user.empresa_id == empresa_id else None
 
     async def update_password(
-        self, user_id: str, empresa_id: str, hashed_password: str
+        self, user_id: str, empresa_id: str, hashed_password: str, must_change: bool = False
     ) -> None:
         user = await self.get_by_id(user_id, empresa_id)
         assert user is not None
         user.hashed_password = hashed_password
+
+    async def record_successful_login(self, user_id: str, empresa_id: str) -> None:
+        user = await self.get_by_id(user_id, empresa_id)
+        assert user is not None
+        user.failed_login_attempts = 0
+
+    async def record_failed_login(self, user_id, empresa_id, max_attempts, lock_minutes) -> None:
+        user = await self.get_by_id(user_id, empresa_id)
+        assert user is not None
+        user.failed_login_attempts += 1
+
+    async def mark_email_verified(self, user_id: str, empresa_id: str) -> None:
+        user = await self.get_by_id(user_id, empresa_id)
+        assert user is not None
+        user.email_verified = True
 
 
 class FakePasswordHasher:
@@ -72,7 +94,8 @@ class FakePasswordHasher:
 
 class FakeTokenService:
     def create_access_token(
-        self, subject: str, empresa_id: str, roles: list[str] | None = None
+        self, subject: str, empresa_id: str, roles: list[str] | None = None,
+        must_change_password: bool = False,
     ) -> str:
         return f"access:{empresa_id}:{subject}"
 
@@ -133,6 +156,18 @@ class FakeTokenRepository:
     async def revoke_all_refresh_tokens(self, user_id, empresa_id) -> None:
         self.revoked_users.append((user_id, empresa_id))
 
+    async def save_email_verification_token(self, user_id, empresa_id, token_id, token_hash, expires_at) -> None:
+        self.reset_tokens[token_hash] = StoredToken(id=token_id, user_id=user_id, empresa_id=empresa_id, token_hash=token_hash, expires_at=expires_at)
+
+    async def get_active_email_verification_token(self, token_hash):
+        return self.reset_tokens.get(token_hash)
+
+    async def consume_email_verification_token(self, token_id) -> None:
+        await self.consume_password_reset_token(token_id)
+
+    async def revoke_email_verification_tokens(self, user_id, empresa_id) -> None:
+        await self.revoke_password_reset_tokens(user_id, empresa_id)
+
 
 def make_user() -> User:
     return User(
@@ -143,6 +178,7 @@ def make_user() -> User:
         hashed_password="hashed:secret123",
         empresa_id=EMPRESA_ID,
         roles=["Administrador de Empresa"],
+        email_verified=True,
     )
 
 
@@ -201,9 +237,55 @@ async def test_password_reset_is_scoped_to_company_and_revokes_sessions() -> Non
 
     assert raw_token is not None
     await ResetPassword(users, tokens, token_service, FakePasswordHasher()).execute(
-        raw_token, "new-secret"
+        raw_token, "Nueva-Segura#2026"
     )
 
-    assert user.hashed_password == "hashed:new-secret"
+    assert user.hashed_password == "hashed:Nueva-Segura#2026"
     assert tokens.reset_tokens == {}
     assert tokens.revoked_users == [(user.id, EMPRESA_ID)]
+
+
+@pytest.mark.asyncio
+async def test_login_rejects_temporarily_locked_account() -> None:
+    user = make_user()
+    user.locked_until = datetime.now(UTC) + timedelta(minutes=10)
+    with pytest.raises(AccountLockedError):
+        await LoginUser(FakeUserRepository([user]), FakePasswordHasher(), FakeTokenService(), FakeTokenRepository()).execute(
+            password="secret123", email=user.email, empresa_slug=EMPRESA_SLUG
+        )
+
+
+@pytest.mark.asyncio
+async def test_login_requires_verified_email() -> None:
+    user = make_user()
+    user.email_verified = False
+    with pytest.raises(EmailNotVerifiedError):
+        await LoginUser(FakeUserRepository([user]), FakePasswordHasher(), FakeTokenService(), FakeTokenRepository()).execute(
+            password="secret123", email=user.email, empresa_slug=EMPRESA_SLUG
+        )
+
+
+@pytest.mark.asyncio
+async def test_email_verification_token_marks_user_as_verified() -> None:
+    user = make_user()
+    user.email_verified = False
+    users = FakeUserRepository([user])
+    tokens = FakeTokenRepository()
+    token_service = FakeTokenService()
+    result = await RequestEmailVerification(users, tokens, token_service, 30).execute(user.email, EMPRESA_SLUG)
+    assert result is not None
+    _, raw_token = result
+    await VerifyEmail(users, tokens, token_service).execute(raw_token)
+    assert user.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_authenticated_password_change_revokes_sessions() -> None:
+    user = make_user()
+    users = FakeUserRepository([user])
+    tokens = FakeTokenRepository()
+    await ChangePassword(users, tokens, FakePasswordHasher()).execute(
+        user.id, user.empresa_id, "secret123", "Clave-Nueva#2026"
+    )
+    assert user.hashed_password == "hashed:Clave-Nueva#2026"
+    assert tokens.revoked_users == [(user.id, user.empresa_id)]

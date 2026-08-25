@@ -40,14 +40,14 @@ API del **Sistema de Gestión de Recursos Humanos** — plataforma ERP modular c
 |---|---|---|
 | Estructura de módulos y capas | ✅ Definida | Ver [§7](#7-estructura-del-proyecto) |
 | Contratos (puertos) de `auth` y `bitacora` | ✅ Definidos | `application/ports/` |
-| Casos de uso de `auth` | ✅ Implementados | Login por empresa, refresh, logout, perfil y recuperación |
+| Casos de uso de `auth` | ✅ Implementados | Login, bloqueo, correo, refresh, logout y contraseñas |
 | Conexión a PostgreSQL | ✅ Validada | SQLAlchemy async + Psycopg contra Supabase |
 | Repositorios reales | ✅ Implementados | Auth, usuarios, roles, permisos, empresa y bitácora |
-| Migraciones (Alembic) | ✅ Aplicadas | Base remota en `20260824_0002` |
+| Migraciones (Alembic) | ✅ Aplicadas | Base remota en `20260824_0003` |
 | Autenticación JWT funcional | ✅ Implementada | PyJWT + Argon2id y refresh con rotación |
 | Multi-tenant | 🟡 Base implementada | Aislamiento por `empresa_id`; falta aprovisionamiento y superadmin |
 | RBAC (roles y permisos) | ✅ Implementado | Permisos globales y roles por empresa |
-| Pruebas | 🟡 En crecimiento | 10 unitarias y conexión real validada |
+| Pruebas | 🟡 En crecimiento | 22 unitarias y conexión real validada |
 
 `GET /` y `GET /health` funcionan sin consultar la base. Los endpoints de negocio se montan bajo
 `/api/v1` y requieren PostgreSQL configurado.
@@ -329,6 +329,7 @@ Revisiones aplicadas en Supabase:
 
 - `20260820_0001`: esquema inicial multiempresa.
 - `20260824_0002`: bitácora funcional, unicidad case-insensitive y datos base.
+- `20260824_0003`: bloqueo de cuentas, verificación de correo y gestión completa de usuarios.
 
 **Reglas:**
 
@@ -378,7 +379,17 @@ Los resultados alimentan la sección *2.3 Pruebas* de la plantilla de sprint del
 | `GET` | `/api/v1/auth/me` | Datos del usuario autenticado | CU-03 |
 | `POST` | `/api/v1/auth/password/forgot` | Solicitar recuperación | CU-03 |
 | `POST` | `/api/v1/auth/password/reset` | Restablecer contraseña | CU-03 |
+| `POST` | `/api/v1/auth/password/change` | Cambiar la contraseña propia | CU-03 |
+| `POST` | `/api/v1/auth/email/verification/resend` | Reenviar verificación | CU-03 |
+| `POST` | `/api/v1/auth/email/verify` | Verificar correo | CU-03 |
+| `GET` | `/api/v1/usuarios` | Listar usuarios de la empresa | CU-04 |
+| `GET` | `/api/v1/usuarios/{id}` | Consultar usuario de la empresa | CU-04 |
 | `POST` | `/api/v1/usuarios` | Crear usuario dentro de la empresa | CU-04 |
+| `PATCH` | `/api/v1/usuarios/{id}` | Actualizar usuario | CU-04 |
+| `PATCH` | `/api/v1/usuarios/{id}/activar` | Activar usuario | CU-04 |
+| `PATCH` | `/api/v1/usuarios/{id}/desactivar` | Desactivar usuario | CU-04 |
+| `PATCH` | `/api/v1/usuarios/{id}/desbloquear` | Desbloquear usuario | CU-04 |
+| `PUT` | `/api/v1/usuarios/{id}/password` | Asignar contraseña temporal | CU-04 |
 | `GET/POST` | `/api/v1/roles` | Consultar y crear roles | CU-05 |
 | `PATCH/DELETE` | `/api/v1/roles/{id}` | Actualizar o eliminar un rol | CU-05 |
 | `PUT` | `/api/v1/roles/{id}/permissions` | Asignar permisos | CU-05 |
@@ -434,8 +445,8 @@ Pendientes antes de ampliar los módulos de negocio:
 
 1. Crear el aprovisionamiento transaccional de empresa, suscripción, roles base y primer administrador.
 2. Definir la identidad y endpoints exclusivos del superadministrador de plataforma.
-3. Conectar un proveedor de correo para recuperación de contraseña.
-4. Añadir rate limiting y política de bloqueo por intentos fallidos.
+3. Configurar credenciales SMTP reales en Railway y las rutas correspondientes del frontend.
+4. Añadir rate limiting por IP en el proxy o infraestructura de despliegue.
 5. Completar pruebas E2E con al menos dos empresas para demostrar aislamiento.
 6. Rotar cualquier secreto que haya aparecido en registros locales.
 
