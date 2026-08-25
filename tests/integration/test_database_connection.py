@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -24,7 +26,7 @@ async def test_database_connection_executes_select_one() -> None:
 
 
 @pytest.mark.asyncio
-async def test_platform_schema_is_applied() -> None:
+async def test_minimal_schema_is_applied() -> None:
     from ssas.infrastructure.database.session import engine
 
     try:
@@ -32,12 +34,20 @@ async def test_platform_schema_is_applied() -> None:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
             tables = await connection.execute(
                 text(
-                    "SELECT to_regclass('public.administrador_plataforma'), "
-                    "to_regclass('public.platform_refresh_token'), "
-                    "to_regclass('public.bitacora_plataforma')"
+                    "SELECT to_regclass('public.empresa'), "
+                    "to_regclass('public.usuario'), "
+                    "to_regclass('public.rol'), "
+                    "to_regclass('public.permiso'), "
+                    "to_regclass('public.bitacora')"
                 )
             )
-        assert revision == "20260825_0004"
+        assert revision == "20260825_0001"
         assert all(tables.one())
     finally:
         await engine.dispose()
+
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_DATABASE_TESTS") != "1",
+    reason="Pruebas de base real: ejecutar con RUN_DATABASE_TESTS=1",
+)

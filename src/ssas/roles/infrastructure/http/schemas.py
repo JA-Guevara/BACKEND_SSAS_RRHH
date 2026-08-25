@@ -31,7 +31,7 @@ class RoleSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    empresa_id: str
+    empresa_id: str | None
     name: str
     codigo: str
     description: str | None = None

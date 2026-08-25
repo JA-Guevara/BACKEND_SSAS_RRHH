@@ -16,7 +16,7 @@ class CrearUsuario:
 
     async def execute(
         self,
-        empresa_id: str,
+        empresa_id: str | None,
         nombre: str,
         apellido: str,
         email: str,
@@ -30,11 +30,11 @@ class CrearUsuario:
         if not role_ids:
             raise UsuarioWithoutRoleError("El usuario debe tener al menos un rol asignado")
         if await self.usuario_repository.get_by_email(normalized_email, empresa_id):
-            raise UsuarioAlreadyExistsError("Ya existe un usuario con ese email en la empresa")
+            raise UsuarioAlreadyExistsError("Ya existe un usuario con ese email en este ámbito")
         if await self.usuario_repository.get_by_username(normalized_username, empresa_id):
-            raise UsuarioAlreadyExistsError("Ya existe un usuario con ese username en la empresa")
+            raise UsuarioAlreadyExistsError("Ya existe un usuario con ese username en este ámbito")
         if not await self.usuario_repository.role_ids_belong_to_empresa(role_ids, empresa_id):
-            raise InvalidRoleForEmpresaError("Uno o más roles no pertenecen a la empresa")
+            raise InvalidRoleForEmpresaError("Uno o más roles no pertenecen al ámbito indicado")
         validate_password(password, normalized_username, normalized_email)
 
         return await self.usuario_repository.create_usuario(

@@ -52,7 +52,9 @@ class AuthTokenRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def save_email_verification_token(self, user_id: str, empresa_id: str, token_id: str, token_hash: str, expires_at: datetime) -> None:
+    async def save_email_verification_token(
+        self, user_id: str, empresa_id: str, token_id: str, token_hash: str, expires_at: datetime
+    ) -> None:
         raise NotImplementedError
 
     @abstractmethod

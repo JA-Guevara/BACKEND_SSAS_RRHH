@@ -30,10 +30,8 @@ app = FastAPI(
         {"name": "auth", "description": "Autenticacion y sesion"},
         {"name": "usuarios", "description": "Gestion de usuarios por empresa"},
         {"name": "roles", "description": "Roles y permisos"},
-        {"name": "empresa", "description": "Configuracion de empresa"},
+        {"name": "empresas", "description": "Gestión y aislamiento de empresas"},
         {"name": "bitacora", "description": "Auditoria del sistema"},
-        {"name": "mi-empresa", "description": "Gestión de la empresa autenticada"},
-        {"name": "platform", "description": "Administración global de SSAS"},
     ],
 )
 app.add_middleware(EmpresaContextMiddleware)

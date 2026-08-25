@@ -4,8 +4,46 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class LoginSchema(BaseModel):
-    empresa_slug: str = Field(min_length=2, max_length=120, pattern=r"^[a-zA-Z0-9-]+$")
-    email: EmailStr | None = None
+    """Credenciales de acceso.
+
+    ``empresa_slug`` decide DÓNDE se busca la cuenta:
+
+        ausente  -> entre los administradores de la plataforma (empresa_id IS NULL)
+        presente -> dentro de esa empresa
+
+    Enviarlo con un valor inventado hace que no se encuentre la cuenta y la respuesta
+    sea 401, aunque el correo y la contraseña sean correctos. En Swagger hay que
+    BORRAR la línea, no dejar el valor de ejemplo.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "summary": "Administrador de plataforma (sin empresa)",
+                    "value": {"email": "admin@ssas.bo", "password": "TuClaveSegura.2026"},
+                },
+                {
+                    "summary": "Usuario de una empresa",
+                    "value": {
+                        "empresa_slug": "conecta",
+                        "email": "ana@conecta.bo",
+                        "password": "TuClaveSegura.2026",
+                    },
+                },
+            ]
+        }
+    )
+
+    # Ausente = administrador de la plataforma (no pertenece a ninguna empresa).
+    empresa_slug: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=120,
+        pattern=r"^[a-zA-Z0-9-]+$",
+        description="Slug de la empresa. Omitir para administradores de plataforma.",
+    )
+    email: EmailStr | None = Field(default=None, description="Correo. Alternativa: username.")
     username: str | None = Field(default=None, min_length=1, max_length=80)
     password: str = Field(min_length=8, max_length=72)
 

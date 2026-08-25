@@ -14,5 +14,5 @@ class AuditLogRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_by_id(self, audit_log_id: str, empresa_id: str) -> AuditLog | None:
+    async def get_by_id(self, audit_log_id: str, empresa_id: str | None) -> AuditLog | None:
         raise NotImplementedError

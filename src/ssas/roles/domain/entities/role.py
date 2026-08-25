@@ -6,7 +6,7 @@ from ssas.roles.domain.entities.permission import Permission
 @dataclass
 class Role:
     id: str
-    empresa_id: str
+    empresa_id: str | None
     name: str
     codigo: str
     description: str | None = None

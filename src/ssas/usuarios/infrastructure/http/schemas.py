@@ -4,6 +4,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class CrearUsuarioRequest(BaseModel):
+    empresa_id: str | None = None
     nombre: str = Field(min_length=2, max_length=120)
     apellido: str = Field(min_length=1, max_length=120)
     email: EmailStr
@@ -24,7 +25,7 @@ class ActualizarUsuarioRequest(BaseModel):
 
 class UsuarioResponse(BaseModel):
     id: str
-    empresa_id: str
+    empresa_id: str | None
     nombre: str
     apellido: str
     email: EmailStr

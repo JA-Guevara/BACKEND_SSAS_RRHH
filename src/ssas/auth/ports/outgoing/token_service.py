@@ -7,7 +7,7 @@ class TokenService(ABC):
     def create_access_token(
         self,
         subject: str,
-        empresa_id: str,
+        empresa_id: str | None,
         roles: list[str] | None = None,
         must_change_password: bool = False,
     ) -> str:
@@ -17,7 +17,7 @@ class TokenService(ABC):
     def create_refresh_token(
         self,
         subject: str,
-        empresa_id: str,
+        empresa_id: str | None,
     ) -> tuple[str, str, datetime]:
         raise NotImplementedError
 

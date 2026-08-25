@@ -18,7 +18,7 @@ class LoginUser:
     async def execute(
         self,
         password: str,
-        empresa_slug: str,
+        empresa_slug: str | None = None,
         email: str | None = None,
         username: str | None = None,
     ) -> dict[str, object]:
@@ -33,7 +33,11 @@ class LoginUser:
             raise AccountLockedError("La cuenta está bloqueada temporalmente")
         if not self.password_hasher.verify(password, user.hashed_password):
             raise InvalidCredentialsError("Credenciales inválidas")
-        if not user.is_active or not user.empresa_is_active or not user.empresa_id or not user.roles:
+        # Un administrador de plataforma no tiene empresa: no hay empresa que validar.
+        # Lo que sí se exige a todos por igual es estar activo y tener al menos un rol.
+        if not user.is_active or not user.roles:
+            raise InvalidCredentialsError("Credenciales inválidas")
+        if user.empresa_id is not None and not user.empresa_is_active:
             raise InvalidCredentialsError("Credenciales inválidas")
         if not user.email_verified:
             raise EmailNotVerifiedError("Debes verificar tu correo antes de iniciar sesión")

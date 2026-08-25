@@ -51,7 +51,7 @@ class SqlAlchemyAuditLogRepository(AuditLogRepository):
             total_result.scalar_one(),
         )
 
-    async def get_by_id(self, audit_log_id: str, empresa_id: str) -> AuditLog | None:
+    async def get_by_id(self, audit_log_id: str, empresa_id: str | None) -> AuditLog | None:
         result = await self.session.execute(
             select(AuditLogModel).where(
                 AuditLogModel.id == audit_log_id,

@@ -25,10 +25,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
     }
 )
 
-PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
-    "/docs/",
-    "/api/v1/platform/",
-)
+# /api/v1/platform ya NO se excluye: sus rutas pasan por el mismo middleware y las
+# protege el mismo sistema de permisos que el resto de la API.
+PUBLIC_PATH_PREFIXES: tuple[str, ...] = ("/docs/",)
 
 
 class EmpresaContextMiddleware(BaseHTTPMiddleware):
@@ -57,6 +56,9 @@ class EmpresaContextMiddleware(BaseHTTPMiddleware):
             return self._unauthorized("Token inválido")
 
         empresa_id = payload.get("tid")
+        if empresa_id is None:
+            # Administrador de plataforma: no hay empresa que fijar en el contexto.
+            return await call_next(request)
         if not isinstance(empresa_id, str) or not empresa_id.strip():
             return self._unauthorized("El token no contiene una empresa válida")
 

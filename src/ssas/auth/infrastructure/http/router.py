@@ -107,7 +107,7 @@ def _request_context(request: Request) -> dict[str, str | None]:
 
 async def _record_failed_login(user, request: Request) -> None:
     """Persiste el intento fallido aunque la petición principal termine con HTTP 401."""
-    if user is None or not user.empresa_id:
+    if user is None:
         return
     try:
         async with AsyncSessionLocal() as audit_session:
@@ -154,8 +154,9 @@ async def login_user(
             await _record_failed_login(user, http_request)
         _raise_http_auth_error(exc)
     payload = token_service.decode_token(result["access_token"], expected_type="access")
+    tid = payload.get("tid")
     await _events(session).login_success(
-        empresa_id=str(payload["tid"]),
+        empresa_id=str(tid) if tid is not None else None,
         user_id=str(payload["sub"]),
         actor_label=login,
         **_request_context(http_request),
@@ -230,7 +231,7 @@ async def forgot_password(
     ).execute(str(request.email), request.empresa_slug)
     if raw_token:
         user = await repository.get_by_login(str(request.email), request.empresa_slug)
-        if user and user.empresa_id:
+        if user:
             try:
                 await email_service.send_password_reset(user.email, raw_token)
             except EmailDeliveryError:

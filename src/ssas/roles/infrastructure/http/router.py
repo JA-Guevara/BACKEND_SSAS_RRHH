@@ -6,7 +6,7 @@ from ssas.bitacora.application.use_cases.register_audit_event import RegisterAud
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
 )
-from ssas.core.security.dependencies import CurrentUser, require_permission
+from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.roles.application.use_cases.assign_permissions import AssignPermissions
 from ssas.roles.application.use_cases.create_role import CreateRole
@@ -35,8 +35,16 @@ from ssas.roles.infrastructure.persistence.repositories.role_repository import (
 router = APIRouter(prefix="/roles", tags=["roles"])
 
 
-def _repository(session: AsyncSession, empresa_id: str) -> SqlAlchemyRoleRepository:
+def _repository(session: AsyncSession, empresa_id: str | None) -> SqlAlchemyRoleRepository:
     return SqlAlchemyRoleRepository(session, empresa_id)
+
+
+def _target_empresa(current_user: CurrentUser, requested: str | None) -> str | None:
+    if current_user.es_plataforma:
+        return requested
+    if requested is not None and requested != current_user.empresa_id:
+        raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
+    return current_user.empresa_id
 
 
 def _audit_context(request: Request, current_user: CurrentUser) -> dict[str, str | None]:
@@ -55,22 +63,31 @@ def _events(session: AsyncSession) -> RoleEvents:
 
 @router.get("", response_model=list[RoleSchema])
 async def list_roles(
-    current_user: CurrentUser = Depends(require_permission("roles:gestionar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
-    return await ListRoles(_repository(session, current_user.empresa_id)).execute()
+    return await ListRoles(
+        _repository(session, _target_empresa(current_user, empresa_id))
+    ).execute()
 
 
 @router.post("", response_model=RoleSchema, status_code=status.HTTP_201_CREATED)
 async def create_role(
     request: CreateRoleRequest,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("roles:gestionar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        role = await CreateRole(_repository(session, current_user.empresa_id)).execute(
-            empresa_id=current_user.empresa_id,
+        target_empresa = _target_empresa(current_user, empresa_id)
+        role = await CreateRole(_repository(session, target_empresa)).execute(
+            empresa_id=target_empresa,
             **request.model_dump(),
         )
         await _events(session).created(
@@ -86,11 +103,16 @@ async def create_role(
 @router.get("/{role_id}", response_model=RoleSchema)
 async def get_role(
     role_id: str,
-    current_user: CurrentUser = Depends(require_permission("roles:gestionar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await GetRole(_repository(session, current_user.empresa_id)).execute(role_id)
+        return await GetRole(
+            _repository(session, _target_empresa(current_user, empresa_id))
+        ).execute(role_id)
     except RoleNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -100,14 +122,17 @@ async def update_role(
     role_id: str,
     request: UpdateRoleRequest,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("roles:gestionar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
         values = request.model_dump(exclude_unset=True)
-        role = await UpdateRole(_repository(session, current_user.empresa_id)).execute(
-            role_id, values
-        )
+        role = await UpdateRole(
+            _repository(session, _target_empresa(current_user, empresa_id))
+        ).execute(role_id, values)
         await _events(session).updated(
             record_id=role.id,
             new_data=values,
@@ -124,11 +149,16 @@ async def update_role(
 async def delete_role(
     role_id: str,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("roles:gestionar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        await DeleteRole(_repository(session, current_user.empresa_id)).execute(role_id)
+        await DeleteRole(_repository(session, _target_empresa(current_user, empresa_id))).execute(
+            role_id
+        )
         await _events(session).deleted(
             record_id=role_id,
             **_audit_context(http_request, current_user),
@@ -142,12 +172,16 @@ async def assign_permissions(
     role_id: str,
     request: AssignPermissionsRequest,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("roles:gestionar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
         role = await AssignPermissions(
-            _repository(session, current_user.empresa_id), PermissionRepository(session)
+            _repository(session, _target_empresa(current_user, empresa_id)),
+            PermissionRepository(session),
         ).execute(role_id, request.permission_ids)
         await _events(session).permissions_assigned(
             record_id=role_id,

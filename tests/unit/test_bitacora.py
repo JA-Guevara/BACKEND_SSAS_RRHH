@@ -22,11 +22,7 @@ class FakeAuditRepository:
 
     async def get_by_id(self, audit_log_id, empresa_id):
         return next(
-            (
-                log
-                for log in self.logs
-                if log.id == audit_log_id and log.empresa_id == empresa_id
-            ),
+            (log for log in self.logs if log.id == audit_log_id and log.empresa_id == empresa_id),
             None,
         )
 

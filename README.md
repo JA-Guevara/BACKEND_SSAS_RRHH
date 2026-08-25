@@ -1,7 +1,7 @@
 # SSAS RRHH — Backend
 
 API REST multiempresa para la gestión de recursos humanos. Implementa autenticación, usuarios,
-roles y permisos, parámetros empresariales y bitácora de auditoría sobre una arquitectura modular.
+roles, permisos, empresas y bitácora de auditoría sobre una arquitectura modular.
 
 ## Estado actual
 
@@ -9,12 +9,12 @@ roles y permisos, parámetros empresariales y bitácora de auditoría sobre una 
 |---|---|
 | FastAPI y OpenAPI | Operativo |
 | PostgreSQL/Supabase | Conectado |
-| Alembic | Revisión `20260825_0004` aplicada |
+| Alembic | Migración inicial limpia `20260825_0001` preparada |
 | Auth, bloqueo, verificación y recuperación | Implementado; requiere SMTP |
 | Usuarios, roles y permisos | Implementado |
 | Bitácora persistente | Implementado |
 | Aislamiento multiempresa | Basado en `empresa_id` |
-| Administración global SSAS | Plataforma, empresas, planes y suscripciones implementados |
+| Administración global SSAS | Superadministradores y empresas mediante RBAC |
 
 ## Tecnologías principales
 

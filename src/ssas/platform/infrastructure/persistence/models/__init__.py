@@ -1,7 +1,7 @@
-from ssas.platform.infrastructure.persistence.models.platform_admin import PlatformAdminModel
-from ssas.platform.infrastructure.persistence.models.platform_audit_log import PlatformAuditLogModel
-from ssas.platform.infrastructure.persistence.models.platform_refresh_token import (
-    PlatformRefreshTokenModel,
-)
+"""El módulo platform ya no tiene modelos propios.
 
-__all__ = ["PlatformAdminModel", "PlatformAuditLogModel", "PlatformRefreshTokenModel"]
+Los administradores de la plataforma son filas de ``usuario`` con ``empresa_id IS NULL``,
+sus tokens viven en ``refresh_token`` y sus eventos en ``bitacora`` con ``empresa_id IS NULL``.
+"""
+
+__all__: list[str] = []

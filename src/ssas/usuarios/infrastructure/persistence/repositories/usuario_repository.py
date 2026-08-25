@@ -19,25 +19,47 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def list_usuarios(self, empresa_id: str, search: str | None, is_active: bool | None, page: int, per_page: int) -> tuple[list[Usuario], int]:
+    async def list_usuarios(
+        self,
+        empresa_id: str | None,
+        search: str | None,
+        is_active: bool | None,
+        page: int,
+        per_page: int,
+    ) -> tuple[list[Usuario], int]:
         conditions = [UserModel.empresa_id == empresa_id]
         if is_active is not None:
             conditions.append(UserModel.is_active.is_(is_active))
         if search:
             term = f"%{search.strip().lower()}%"
-            conditions.append(or_(func.lower(UserModel.name).like(term), func.lower(UserModel.apellido).like(term), func.lower(UserModel.email).like(term), func.lower(UserModel.username).like(term)))
-        total = (await self.session.execute(select(func.count(UserModel.id)).where(*conditions))).scalar_one()
-        result = await self.session.execute(self._base_query().where(*conditions).order_by(UserModel.name, UserModel.apellido).offset((page - 1) * per_page).limit(per_page))
+            conditions.append(
+                or_(
+                    func.lower(UserModel.name).like(term),
+                    func.lower(UserModel.apellido).like(term),
+                    func.lower(UserModel.email).like(term),
+                    func.lower(UserModel.username).like(term),
+                )
+            )
+        total = (
+            await self.session.execute(select(func.count(UserModel.id)).where(*conditions))
+        ).scalar_one()
+        result = await self.session.execute(
+            self._base_query()
+            .where(*conditions)
+            .order_by(UserModel.name, UserModel.apellido)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
         return [self._to_entity(model) for model in result.scalars().unique().all()], total
 
-    async def get_by_id(self, user_id: str, empresa_id: str) -> Usuario | None:
+    async def get_by_id(self, user_id: str, empresa_id: str | None) -> Usuario | None:
         result = await self.session.execute(
             self._base_query().where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def get_by_email(self, email: str, empresa_id: str) -> Usuario | None:
+    async def get_by_email(self, email: str, empresa_id: str | None) -> Usuario | None:
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.empresa_id == empresa_id,
@@ -47,7 +69,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def get_by_username(self, username: str, empresa_id: str) -> Usuario | None:
+    async def get_by_username(self, username: str, empresa_id: str | None) -> Usuario | None:
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.empresa_id == empresa_id,
@@ -59,7 +81,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
 
     async def create_usuario(
         self,
-        empresa_id: str,
+        empresa_id: str | None,
         nombre: str,
         apellido: str,
         email: str,
@@ -94,7 +116,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
     async def update_usuario(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         values: dict,
         role_ids: list[str] | None = None,
     ) -> Usuario:
@@ -113,7 +135,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             raise UsuarioNotFoundError("Usuario no encontrado")
         return usuario
 
-    async def activate_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+    async def activate_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         await self.session.execute(
             update(UserModel)
             .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
@@ -125,7 +147,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             raise UsuarioNotFoundError("Usuario no encontrado")
         return usuario
 
-    async def deactivate_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+    async def deactivate_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         await self.session.execute(
             update(UserModel)
             .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
@@ -137,7 +159,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             raise UsuarioNotFoundError("Usuario no encontrado")
         return usuario
 
-    async def role_ids_belong_to_empresa(self, role_ids: list[str], empresa_id: str) -> bool:
+    async def role_ids_belong_to_empresa(self, role_ids: list[str], empresa_id: str | None) -> bool:
         unique_role_ids = set(role_ids)
         if not unique_role_ids:
             return False
@@ -150,7 +172,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         )
         return result.scalar_one() == len(unique_role_ids)
 
-    async def count_active_admins(self, empresa_id: str) -> int:
+    async def count_active_admins(self, empresa_id: str | None) -> int:
         result = await self.session.execute(
             select(func.count(func.distinct(UserModel.id)))
             .select_from(UserModel)
@@ -161,12 +183,12 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
                 UserModel.is_active.is_(True),
                 RoleModel.empresa_id == empresa_id,
                 RoleModel.is_active.is_(True),
-                self._admin_role_filter(),
+                self._admin_role_filter(empresa_id),
             )
         )
         return result.scalar_one()
 
-    async def user_has_admin_role(self, user_id: str, empresa_id: str) -> bool:
+    async def user_has_admin_role(self, user_id: str, empresa_id: str | None) -> bool:
         result = await self.session.execute(
             select(func.count(RoleModel.id))
             .select_from(UserModel)
@@ -177,7 +199,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
                 UserModel.empresa_id == empresa_id,
                 RoleModel.empresa_id == empresa_id,
                 RoleModel.is_active.is_(True),
-                self._admin_role_filter(),
+                self._admin_role_filter(empresa_id),
             )
         )
         return result.scalar_one() > 0
@@ -193,16 +215,26 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             )
         await self.session.flush()
 
-    async def set_password(self, user_id: str, empresa_id: str, password_hash: str, must_change: bool) -> Usuario:
-        await self.session.execute(update(UserModel).where(UserModel.id == user_id, UserModel.empresa_id == empresa_id).values(hashed_password=password_hash, debe_cambiar_password=must_change))
+    async def set_password(
+        self, user_id: str, empresa_id: str | None, password_hash: str, must_change: bool
+    ) -> Usuario:
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(hashed_password=password_hash, debe_cambiar_password=must_change)
+        )
         await self.session.flush()
         usuario = await self.get_by_id(user_id, empresa_id)
         if usuario is None:
             raise UsuarioNotFoundError("Usuario no encontrado")
         return usuario
 
-    async def unlock_usuario(self, user_id: str, empresa_id: str) -> Usuario:
-        await self.session.execute(update(UserModel).where(UserModel.id == user_id, UserModel.empresa_id == empresa_id).values(intentos_fallidos=0, bloqueado_hasta=None, ultimo_intento_fallido=None))
+    async def unlock_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .values(intentos_fallidos=0, bloqueado_hasta=None, ultimo_intento_fallido=None)
+        )
         await self.session.flush()
         usuario = await self.get_by_id(user_id, empresa_id)
         if usuario is None:
@@ -214,7 +246,9 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         return select(UserModel).options(selectinload(UserModel.roles))
 
     @staticmethod
-    def _admin_role_filter():
+    def _admin_role_filter(empresa_id: str | None):
+        if empresa_id is None:
+            return RoleModel.codigo == "SUPER_ADMIN"
         return (RoleModel.codigo == ADMIN_ROLE_CODE) | (RoleModel.name == ADMIN_ROLE_NAME)
 
     @staticmethod

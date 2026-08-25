@@ -1,109 +1,60 @@
-# Administración global de SSAS
+# Superadministración y empresas
 
-## Separación de alcances
+## Modelo único de identidad
 
-La revisión `20260825_0004` separa dos contextos de seguridad:
+SSAS utiliza una sola tabla `usuario`, un solo Auth y un solo formato JWT:
 
-- `scope=platform`: superadministradores globales, sin `empresa_id`.
-- `scope=tenant`: usuarios empresariales con `tid=empresa_id`.
+- `usuario.empresa_id IS NULL`: administrador global.
+- `usuario.empresa_id = UUID`: usuario de una empresa.
+- `rol.empresa_id IS NULL`: rol global, como `SUPER_ADMIN`.
+- `rol.empresa_id = UUID`: rol perteneciente a esa empresa.
 
-Un token empresarial nunca es aceptado por `/api/v1/platform/*`; un token de plataforma tampoco
-sirve para las rutas internas de una empresa.
+No existen tablas ni endpoints paralelos de autenticación para plataforma. Tampoco forman parte del
+alcance actual los planes, suscripciones o parámetros legales.
 
-En Railway, permitir el frontend mediante:
+## Autenticación
 
-```env
-APP_CORS_ORIGINS=https://frontendssasrrhh-production.up.railway.app
-```
+Todos utilizan `/api/v1/auth/*`. En login, `empresa_slug` decide el ámbito:
 
-En producción, `APP_SECRET_KEY` debe tener al menos 32 caracteres y ser igual para tokens de
-plataforma y tenant.
+- Sin `empresa_slug`: busca una cuenta global.
+- Con `empresa_slug`: busca una cuenta dentro de esa empresa.
 
-## Creación inicial del superadministrador
-
-No existe registro público. Después de configurar `DATABASE_URL`, ejecutar:
+El primer superadministrador se crea por consola después de aplicar la migración:
 
 ```powershell
 .\.venv\Scripts\python.exe -m ssas.platform.infrastructure.cli.create_admin `
-  --nombre "Jose Armando" `
-  --apellido "Guevara Caballero" `
-  --email "jose.guevara1caballero@gmail.com" `
-  --username "ja.guevara"
+  --nombre "Nombre" --apellido "Apellido" `
+  --email "admin@example.com" --username "admin"
 ```
 
-La contraseña y su confirmación se solicitan de forma oculta. Debe cumplir la política segura del
-módulo Auth. El comando rechaza emails o usernames duplicados y registra el bootstrap en la
-bitácora global.
+## Empresas
 
-## Autenticación global
-
-| Método | Ruta | Función |
+| Método | Ruta | Alcance |
 |---|---|---|
-| POST | `/api/v1/platform/auth/login` | Iniciar sesión global |
-| POST | `/api/v1/platform/auth/refresh` | Rotar refresh token |
-| POST | `/api/v1/platform/auth/logout` | Revocar sesión |
-| GET | `/api/v1/platform/auth/me` | Perfil del superadministrador |
-| POST | `/api/v1/platform/auth/password/change` | Cambiar contraseña global |
+| GET/POST | `/api/v1/empresas` | Solo superadministrador |
+| GET/PATCH | `/api/v1/empresas/{id}` | Superadmin: cualquiera; admin empresa: la propia |
+| PATCH | `/api/v1/empresas/{id}/activar` | Solo superadministrador |
+| PATCH | `/api/v1/empresas/{id}/suspender` | Solo superadministrador |
 
-La cuenta se bloquea temporalmente bajo la misma política de intentos fallidos configurada para
-Auth. Los refresh tokens son independientes de los tokens empresariales.
+Crear una empresa genera sus roles base, el primer `ADMIN_EMPRESA`, su verificación de correo y el
+evento correspondiente de bitácora, todo dentro de la misma transacción.
 
-## Empresas y aprovisionamiento
+## Usuarios y roles
 
-| Método | Ruta | Función |
-|---|---|---|
-| GET | `/api/v1/platform/empresas` | Listar y buscar empresas |
-| POST | `/api/v1/platform/empresas` | Aprovisionar empresa completa |
-| GET | `/api/v1/platform/empresas/{id}` | Consultar empresa |
-| PATCH | `/api/v1/platform/empresas/{id}` | Actualizar empresa |
-| PATCH | `/api/v1/platform/empresas/{id}/activar` | Activar empresa |
-| PATCH | `/api/v1/platform/empresas/{id}/suspender` | Suspender empresa |
+Los endpoints son compartidos. Para un superadministrador, `empresa_id` selecciona el ámbito:
 
-El aprovisionamiento se ejecuta en una sola transacción y crea:
+- `empresa_id` omitido: usuarios o roles globales.
+- `empresa_id=<uuid>`: usuarios o roles de esa empresa.
 
-1. Empresa.
-2. Suscripción inicial.
-3. Roles `ADMIN_EMPRESA`, `RRHH`, `RECLUTADOR` y `EMPLEADO`.
-4. Asignaciones de permisos.
-5. Primer administrador empresarial.
-6. Token y correo de verificación.
-7. Evento de bitácora global.
+Para un administrador empresarial, el backend fuerza el `empresa_id` del token. Enviar el de otra
+empresa responde `403`. Un superadministrador puede crear otro superadministrador usando
+`POST /api/v1/usuarios`, sin `empresa_id`, y asignando el rol global `SUPER_ADMIN`.
 
-Si falla una operación de base de datos, toda la transacción se revierte.
+## Bitácora
 
-## Planes y suscripciones
+Existe una sola tabla y una sola ruta `/api/v1/bitacora`:
 
-| Método | Ruta | Función |
-|---|---|---|
-| GET/POST | `/api/v1/platform/planes` | Listar o crear planes |
-| GET/PATCH | `/api/v1/platform/planes/{id}` | Consultar o actualizar plan |
-| GET | `/api/v1/platform/suscripciones` | Listar suscripciones |
-| GET | `/api/v1/platform/empresas/{id}/suscripcion` | Suscripción activa |
-| PUT | `/api/v1/platform/empresas/{id}/suscripcion` | Reemplazar plan/vigencia |
-
-Reemplazar una suscripción desactiva la anterior y crea una nueva, conservando el historial.
-
-## Bitácora global
-
-```text
-GET /api/v1/platform/bitacora
-GET /api/v1/platform/bitacora/{id}
-```
-
-La tabla `bitacora_plataforma` está separada de la bitácora empresarial. Registra accesos globales,
-aprovisionamientos, cambios de empresa, planes y suscripciones.
-
-## Gestión de la propia empresa
-
-Los usuarios empresariales utilizan:
-
-```text
-GET   /api/v1/mi-empresa
-PATCH /api/v1/mi-empresa
-GET   /api/v1/mi-empresa/suscripcion
-GET   /api/v1/mi-empresa/parametros
-PUT   /api/v1/mi-empresa/parametros/{codigo}
-```
-
-Las rutas antiguas `/api/v1/empresa/parametros` se conservan temporalmente por compatibilidad. El
-administrador empresarial no puede cambiar su plan, suspender su empresa ni consultar otros tenants.
+- Evento global: `empresa_id IS NULL`.
+- Evento empresarial: contiene el `empresa_id` correspondiente.
+- Superadministrador: consulta global o selecciona una empresa.
+- Administrador empresarial: únicamente consulta su empresa.

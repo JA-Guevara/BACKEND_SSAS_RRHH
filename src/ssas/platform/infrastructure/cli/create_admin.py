@@ -1,15 +1,29 @@
+"""Crea el primer administrador de la plataforma.
+
+Es el único usuario que no puede crearse por la API: cuando la base está vacía no hay
+todavía nadie con permiso para hacerlo. A partir de él, el resto se crea por los
+endpoints normales.
+
+Un administrador de plataforma es una fila de ``usuario`` con ``empresa_id NULL``
+y el rol global ``SUPER_ADMIN``. No hay tabla aparte.
+
+    python -m ssas.platform.infrastructure.cli.create_admin \
+        --nombre Ana --apellido Perez --email ana@ssas.bo --username ana
+"""
+
 import argparse
 import asyncio
 import getpass
 import sys
 
+from sqlalchemy import text
+
 from ssas.auth.domain.exceptions import InvalidPasswordError
 from ssas.auth.domain.password_policy import validate_password
 from ssas.auth.infrastructure.security.password_hasher import Argon2PasswordHasher
 from ssas.infrastructure.database.session import AsyncSessionLocal
-from ssas.platform.infrastructure.persistence.repositories.platform_repository import (
-    PlatformRepository,
-)
+
+ROL_SUPER_ADMIN = "SUPER_ADMIN"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,31 +39,66 @@ async def _create(args: argparse.Namespace, password: str) -> None:
     email = args.email.strip().lower()
     username = args.username.strip().lower()
     validate_password(password, email, username)
+
     async with AsyncSessionLocal() as session:
-        repository = PlatformRepository(session)
-        if await repository.get_admin_by_login(email) or await repository.get_admin_by_login(username):
-            raise ValueError("Ya existe un administrador con ese email o username")
-        admin = await repository.create_admin(
-            nombre=args.nombre.strip(),
-            apellido=args.apellido.strip(),
-            email=email,
-            username=username,
-            password_hash=Argon2PasswordHasher().hash(password),
-            activo=True,
-            email_verified=True,
+        existente = await session.execute(
+            text(
+                "SELECT id FROM usuario "
+                "WHERE empresa_id IS NULL AND (lower(email) = :e OR lower(username) = :u)"
+            ),
+            {"e": email, "u": username},
         )
-        await repository.add_audit(
-            admin_id=admin.id,
-            actor_etiqueta=admin.email,
-            modulo="AUTH_PLATFORM",
-            accion="BOOTSTRAP",
-            nivel="INFO",
-            descripcion="Superadministrador inicial creado mediante CLI",
-            tabla_afectada="administrador_plataforma",
-            registro_id=admin.id,
+        if existente.scalar_one_or_none():
+            raise ValueError("Ya existe un administrador de plataforma con ese email o username")
+
+        rol_id = (
+            await session.execute(
+                text("SELECT id FROM rol WHERE empresa_id IS NULL AND codigo = :c"),
+                {"c": ROL_SUPER_ADMIN},
+            )
+        ).scalar_one_or_none()
+        if rol_id is None:
+            raise ValueError(
+                "No existe el rol global SUPER_ADMIN. Ejecutá antes 'alembic upgrade head'."
+            )
+
+        usuario_id = (
+            await session.execute(
+                text(
+                    "INSERT INTO usuario "
+                    "(empresa_id, nombre, apellido, email, username, password_hash, "
+                    " activo, email_verified, debe_cambiar_password) "
+                    "VALUES (NULL, :nombre, :apellido, :email, :username, :hash, "
+                    "        true, true, false) "
+                    "RETURNING id"
+                ),
+                {
+                    "nombre": args.nombre.strip(),
+                    "apellido": args.apellido.strip(),
+                    "email": email,
+                    "username": username,
+                    "hash": Argon2PasswordHasher().hash(password),
+                },
+            )
+        ).scalar_one()
+
+        await session.execute(
+            text("INSERT INTO usuario_rol (usuario_id, rol_id) VALUES (:u, :r)"),
+            {"u": usuario_id, "r": rol_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO bitacora "
+                "(empresa_id, usuario_id, actor_etiqueta, modulo, accion, nivel, descripcion, "
+                " tabla_afectada, registro_id) "
+                "VALUES (NULL, :u, :email, 'AUTH_PLATFORM', 'BOOTSTRAP', 'INFO', "
+                "        'Superadministrador inicial creado mediante CLI', 'usuario', :u)"
+            ),
+            {"u": usuario_id, "email": email},
         )
         await session.commit()
-        print(f"Superadministrador creado: {admin.email} ({admin.id})")
+        print(f"Superadministrador creado: {email} ({usuario_id})")
+        print("Iniciá sesión en POST /api/v1/auth/login SIN enviar empresa_slug.")
 
 
 def main() -> None:
@@ -59,8 +108,7 @@ def main() -> None:
     args.email = args.email or input("Email: ").strip()
     args.username = args.username or input("Username: ").strip()
     password = getpass.getpass("Password: ")
-    confirmation = getpass.getpass("Confirmar password: ")
-    if password != confirmation:
+    if password != getpass.getpass("Confirmar password: "):
         raise SystemExit("Las contraseñas no coinciden")
     try:
         if sys.platform == "win32":

@@ -6,7 +6,7 @@ from typing import Any
 @dataclass(frozen=True)
 class AuditLog:
     id: str
-    empresa_id: str
+    empresa_id: str | None
     module: str
     action: str
     description: str

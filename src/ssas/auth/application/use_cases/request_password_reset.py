@@ -12,7 +12,7 @@ class RequestPasswordReset:
 
     async def execute(self, email: str, empresa_slug: str) -> str | None:
         user = await self.user_repository.get_by_login(email.strip().lower(), empresa_slug)
-        if not user or not user.is_active or not user.empresa_id:
+        if not user or not user.is_active:
             return None
 
         await self.token_repository.revoke_password_reset_tokens(user.id, user.empresa_id)

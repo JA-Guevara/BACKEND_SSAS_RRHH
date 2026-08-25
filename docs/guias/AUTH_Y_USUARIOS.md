@@ -2,8 +2,8 @@
 
 ## Estado
 
-La revisión Alembic `20260824_0003` está aplicada. Los usuarios existentes fueron marcados como
-verificados para conservar su acceso; toda cuenta creada desde esta versión debe verificar su correo.
+La migración inicial limpia `20260825_0001` está preparada para una base vacía. Una sola identidad
+atiende cuentas globales y empresariales; toda cuenta nueva debe verificar su correo.
 
 ## Política de contraseña
 
@@ -27,7 +27,7 @@ Los límites se configuran con `APP_MAX_LOGIN_ATTEMPTS` y `APP_LOGIN_LOCK_MINUTE
 
 | Método | Ruta | Acceso | Función |
 |---|---|---|---|
-| POST | `/api/v1/auth/login` | Público | Inicia sesión por empresa |
+| POST | `/api/v1/auth/login` | Público | Inicia sesión global o por empresa |
 | POST | `/api/v1/auth/refresh` | Público | Rota el refresh token |
 | POST | `/api/v1/auth/logout` | Bearer | Revoca la sesión |
 | GET | `/api/v1/auth/me` | Bearer | Devuelve el usuario actual |
@@ -53,8 +53,9 @@ como huellas criptográficas, tienen vencimiento y solo pueden utilizarse una ve
 | PUT | `/api/v1/usuarios/{id}/password` | `usuarios:cambiar_password` |
 | PATCH | `/api/v1/usuarios/{id}/desbloquear` | `usuarios:desbloquear` |
 
-El listado acepta `search`, `is_active`, `page` y `per_page`. Todas las consultas y mutaciones están
-limitadas al `empresa_id` del token. No se permite desactivar al último administrador activo.
+El listado acepta `empresa_id`, `search`, `is_active`, `page` y `per_page`. Para cuentas globales,
+`empresa_id` selecciona una empresa o, si se omite, el ámbito global. Para cuentas empresariales el
+backend fuerza el `empresa_id` del token. No se permite desactivar al último administrador activo.
 
 ## Configuración SMTP
 

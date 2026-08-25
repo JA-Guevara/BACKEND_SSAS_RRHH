@@ -16,14 +16,20 @@ class RefreshToken:
         user_id = payload.get("sub")
         empresa_id = payload.get("tid")
         token_id = payload.get("jti")
-        if not isinstance(user_id, str) or not isinstance(empresa_id, str) or not isinstance(token_id, str):
+        if (
+            not isinstance(user_id, str)
+            or (empresa_id is not None and not isinstance(empresa_id, str))
+            or not isinstance(token_id, str)
+        ):
             raise InvalidTokenError("Token inválido")
 
         stored_token = await self.token_repository.get_active_refresh_token(token_id)
         if (
             not stored_token
             or stored_token.empresa_id != empresa_id
-            or not compare_digest(stored_token.token_hash, self.token_service.fingerprint(refresh_token))
+            or not compare_digest(
+                stored_token.token_hash, self.token_service.fingerprint(refresh_token)
+            )
         ):
             raise InvalidTokenError("El refresh token fue revocado o no existe")
 
@@ -31,7 +37,7 @@ class RefreshToken:
         if (
             not user
             or not user.is_active
-            or not user.empresa_is_active
+            or (empresa_id is not None and not user.empresa_is_active)
             or user.empresa_id != empresa_id
             or not user.roles
             or not user.email_verified

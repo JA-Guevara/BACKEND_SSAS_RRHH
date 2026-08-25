@@ -6,7 +6,7 @@ class CheckPermission:
     def __init__(self, authorization_repository: AuthorizationRepository):
         self.authorization_repository = authorization_repository
 
-    async def execute(self, user_id: str, empresa_id: str, required_permission: str) -> None:
+    async def execute(self, user_id: str, empresa_id: str | None, required_permission: str) -> None:
         permission_codes = await self.authorization_repository.get_user_permission_codes(
             user_id=user_id,
             empresa_id=empresa_id,

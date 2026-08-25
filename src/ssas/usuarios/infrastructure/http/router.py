@@ -11,7 +11,7 @@ from ssas.bitacora.application.use_cases.register_audit_event import RegisterAud
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
 )
-from ssas.core.security.dependencies import CurrentUser, require_permission
+from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.usuarios.application.use_cases.activar_usuario import ActivarUsuario
 from ssas.usuarios.application.use_cases.actualizar_usuario import ActualizarUsuario
@@ -42,6 +42,14 @@ from ssas.usuarios.infrastructure.persistence.repositories.usuario_repository im
 
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 password_hasher = Argon2PasswordHasher()
+
+
+def _target_empresa(current_user: CurrentUser, requested: str | None) -> str | None:
+    if current_user.es_plataforma:
+        return requested
+    if requested is not None and requested != current_user.empresa_id:
+        raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
+    return current_user.empresa_id
 
 
 def _repository(session: AsyncSession) -> SqlAlchemyUsuarioRepository:
@@ -78,15 +86,18 @@ def _raise_http_usuario_error(exc: UsuarioError) -> None:
 
 @router.get("", response_model=UsuarioPageResponse)
 async def listar_usuarios(
+    empresa_id: str | None = None,
     search: str | None = Query(default=None, max_length=120),
     is_active: bool | None = None,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-    current_user: CurrentUser = Depends(require_permission("usuarios:ver")),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:ver", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     return await ListarUsuarios(_repository(session)).execute(
-        current_user.empresa_id, search, is_active, page, per_page
+        _target_empresa(current_user, empresa_id), search, is_active, page, per_page
     )
 
 
@@ -94,13 +105,16 @@ async def listar_usuarios(
 async def crear_usuario(
     request: CrearUsuarioRequest,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("usuarios:crear")),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:crear", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        data = request.model_dump()
+        target_empresa = _target_empresa(current_user, data.pop("empresa_id", None))
         user = await CrearUsuario(_repository(session), password_hasher).execute(
-            empresa_id=current_user.empresa_id,
-            **request.model_dump(),
+            empresa_id=target_empresa, **data
         )
         await _events(session).created(
             record_id=user.id,
@@ -117,7 +131,10 @@ async def actualizar_usuario(
     usuario_id: str,
     request: ActualizarUsuarioRequest,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("usuarios:editar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:editar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -143,13 +160,16 @@ async def actualizar_usuario(
 async def activar_usuario(
     usuario_id: str,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("usuarios:editar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:editar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
         user = await ActivarUsuario(_repository(session)).execute(
             user_id=usuario_id,
-            empresa_id=current_user.empresa_id,
+            empresa_id=_target_empresa(current_user, empresa_id),
         )
         await _events(session).activated(
             record_id=user.id, **_audit_context(http_request, current_user)
@@ -163,13 +183,16 @@ async def activar_usuario(
 async def desactivar_usuario(
     usuario_id: str,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("usuarios:editar")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:editar", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
         user = await DesactivarUsuario(_repository(session)).execute(
             user_id=usuario_id,
-            empresa_id=current_user.empresa_id,
+            empresa_id=_target_empresa(current_user, empresa_id),
         )
         await _events(session).deactivated(
             record_id=user.id, **_audit_context(http_request, current_user)
@@ -182,12 +205,15 @@ async def desactivar_usuario(
 @router.get("/{usuario_id}", response_model=UsuarioResponse)
 async def obtener_usuario(
     usuario_id: str,
-    current_user: CurrentUser = Depends(require_permission("usuarios:ver")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:ver", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
         return await ObtenerUsuario(_repository(session)).execute(
-            usuario_id, current_user.empresa_id
+            usuario_id, _target_empresa(current_user, empresa_id)
         )
     except UsuarioError as exc:
         _raise_http_usuario_error(exc)
@@ -198,7 +224,10 @@ async def cambiar_password_usuario(
     usuario_id: str,
     request: CambiarPasswordUsuarioRequest,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("usuarios:cambiar_password")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:cambiar_password", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -206,7 +235,7 @@ async def cambiar_password_usuario(
             _repository(session), SqlAlchemyAuthTokenRepository(session), password_hasher
         ).execute(
             usuario_id,
-            current_user.empresa_id,
+            _target_empresa(current_user, empresa_id),
             request.new_password,
             request.must_change,
         )
@@ -224,12 +253,15 @@ async def cambiar_password_usuario(
 async def desbloquear_usuario(
     usuario_id: str,
     http_request: Request,
-    current_user: CurrentUser = Depends(require_permission("usuarios:desbloquear")),
+    empresa_id: str | None = None,
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:desbloquear", "platform:usuarios:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     try:
         user = await DesbloquearUsuario(_repository(session)).execute(
-            usuario_id, current_user.empresa_id
+            usuario_id, _target_empresa(current_user, empresa_id)
         )
         await _events(session).unlocked(
             record_id=user.id, **_audit_context(http_request, current_user)

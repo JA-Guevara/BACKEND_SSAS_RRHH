@@ -22,9 +22,19 @@ class AuditLogModel(Base):
         Index("idx_bitacora_fecha", "fecha"),
     )
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid())
-    empresa_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False)
-    user_id: Mapped[str | None] = mapped_column("usuario_id", UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    # NULL = evento de la plataforma (reemplaza a la antigua tabla bitacora_plataforma).
+    empresa_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=True
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        "usuario_id",
+        UUID(as_uuid=False),
+        ForeignKey("usuario.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     actor_label: Mapped[str | None] = mapped_column("actor_etiqueta", String(150), nullable=True)
     module: Mapped[str] = mapped_column("modulo", String(80), nullable=False)
     action: Mapped[str] = mapped_column("accion", String(100), nullable=False)
@@ -36,7 +46,9 @@ class AuditLogModel(Base):
     datos_nuevos_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     ip_origen: Mapped[str | None] = mapped_column(INET, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
-    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    fecha: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
-    empresa: Mapped["EmpresaModel"] = relationship(back_populates="bitacoras")
+    empresa: Mapped["EmpresaModel | None"] = relationship(back_populates="bitacoras")
     user: Mapped["UserModel | None"] = relationship(back_populates="bitacoras")

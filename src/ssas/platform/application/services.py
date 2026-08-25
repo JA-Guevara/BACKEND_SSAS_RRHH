@@ -11,22 +11,7 @@ def page_payload(items: list, total: int, page: int, per_page: int) -> dict:
     }
 
 
-def subscription_payload(model) -> dict:
-    return {
-        "id": model.id,
-        "empresa_id": model.empresa_id,
-        "empresa_nombre": model.empresa.nombre_comercial if getattr(model, "empresa", None) else None,
-        "plan": model.plan,
-        "fecha_inicio": model.fecha_inicio,
-        "fecha_fin": model.fecha_fin,
-        "activo": model.activo,
-        "created_at": model.created_at,
-    }
-
-
 def empresa_payload(model) -> dict:
-    subscriptions = [item for item in model.suscripciones if item.activo]
-    active = max(subscriptions, key=lambda item: item.fecha_inicio) if subscriptions else None
     return {
         "id": model.id,
         "nit": model.nit,
@@ -40,7 +25,6 @@ def empresa_payload(model) -> dict:
         "logo_url": model.logo_url,
         "activo": model.activo,
         "fecha_registro": model.fecha_registro,
-        "suscripcion": subscription_payload(active) if active else None,
         "created_at": model.created_at,
         "updated_at": model.updated_at,
     }

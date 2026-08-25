@@ -120,31 +120,51 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         )
         await self.session.flush()
 
-    async def save_email_verification_token(self, user_id: str, empresa_id: str, token_id: str, token_hash: str, expires_at: datetime) -> None:
-        self.session.add(EmailVerificationTokenModel(id=token_id, empresa_id=empresa_id, user_id=user_id, token_hash=token_hash, expires_at=expires_at))
+    async def save_email_verification_token(
+        self, user_id: str, empresa_id: str, token_id: str, token_hash: str, expires_at: datetime
+    ) -> None:
+        self.session.add(
+            EmailVerificationTokenModel(
+                id=token_id,
+                empresa_id=empresa_id,
+                user_id=user_id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+        )
         await self.session.flush()
 
     async def get_active_email_verification_token(self, token_hash: str) -> StoredToken | None:
         result = await self.session.execute(
-            select(EmailVerificationTokenModel).where(
+            select(EmailVerificationTokenModel)
+            .where(
                 EmailVerificationTokenModel.token_hash == token_hash,
                 EmailVerificationTokenModel.used_at.is_(None),
                 EmailVerificationTokenModel.expires_at > datetime.now(UTC),
-            ).with_for_update()
+            )
+            .with_for_update()
         )
         model = result.scalar_one_or_none()
         return self._email_to_entity(model) if model else None
 
     async def consume_email_verification_token(self, token_id: str) -> None:
-        await self.session.execute(update(EmailVerificationTokenModel).where(EmailVerificationTokenModel.id == token_id).values(used_at=datetime.now(UTC)))
+        await self.session.execute(
+            update(EmailVerificationTokenModel)
+            .where(EmailVerificationTokenModel.id == token_id)
+            .values(used_at=datetime.now(UTC))
+        )
         await self.session.flush()
 
     async def revoke_email_verification_tokens(self, user_id: str, empresa_id: str) -> None:
-        await self.session.execute(update(EmailVerificationTokenModel).where(
-            EmailVerificationTokenModel.user_id == user_id,
-            EmailVerificationTokenModel.empresa_id == empresa_id,
-            EmailVerificationTokenModel.used_at.is_(None),
-        ).values(used_at=datetime.now(UTC)))
+        await self.session.execute(
+            update(EmailVerificationTokenModel)
+            .where(
+                EmailVerificationTokenModel.user_id == user_id,
+                EmailVerificationTokenModel.empresa_id == empresa_id,
+                EmailVerificationTokenModel.used_at.is_(None),
+            )
+            .values(used_at=datetime.now(UTC))
+        )
         await self.session.flush()
 
     @staticmethod
@@ -171,4 +191,11 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
 
     @staticmethod
     def _email_to_entity(model: EmailVerificationTokenModel) -> StoredToken:
-        return StoredToken(id=model.id, user_id=model.user_id, empresa_id=model.empresa_id, token_hash=model.token_hash, expires_at=model.expires_at, revoked_at=model.used_at)
+        return StoredToken(
+            id=model.id,
+            user_id=model.user_id,
+            empresa_id=model.empresa_id,
+            token_hash=model.token_hash,
+            expires_at=model.expires_at,
+            revoked_at=model.used_at,
+        )

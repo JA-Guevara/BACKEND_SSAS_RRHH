@@ -14,7 +14,7 @@ class SqlAlchemyUserRepository(UserRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_email(self, email: str, empresa_id: str) -> User | None:
+    async def get_by_email(self, email: str, empresa_id: str | None) -> User | None:
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.empresa_id == empresa_id,
@@ -24,7 +24,7 @@ class SqlAlchemyUserRepository(UserRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def get_by_username(self, username: str, empresa_id: str) -> User | None:
+    async def get_by_username(self, username: str, empresa_id: str | None) -> User | None:
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.empresa_id == empresa_id,
@@ -34,26 +34,38 @@ class SqlAlchemyUserRepository(UserRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def get_by_login(self, login: str, empresa_slug: str) -> User | None:
+    async def get_by_login(self, login: str, empresa_slug: str | None) -> User | None:
+        """Busca por correo o usuario.
+
+        Sin ``empresa_slug`` se busca entre los administradores de la plataforma
+        (``empresa_id IS NULL``); con él, dentro de esa empresa. El mismo correo puede
+        repetirse en empresas distintas, por eso el slug forma parte de la búsqueda.
+        """
         normalized_login = login.strip().lower()
         identifier_filter = (
             func.lower(UserModel.email) == normalized_login
             if "@" in normalized_login
             else func.lower(UserModel.username) == normalized_login
         )
-        result = await self.session.execute(
-            self._base_query()
-            .join(EmpresaModel, EmpresaModel.id == UserModel.empresa_id)
-            .where(
-                func.lower(EmpresaModel.slug) == empresa_slug.strip().lower(),
-                EmpresaModel.activo.is_(True),
+        if empresa_slug is None:
+            consulta = self._base_query().where(
+                UserModel.empresa_id.is_(None),
                 identifier_filter,
             )
-        )
-        model = result.scalar_one_or_none()
+        else:
+            consulta = (
+                self._base_query()
+                .join(EmpresaModel, EmpresaModel.id == UserModel.empresa_id)
+                .where(
+                    func.lower(EmpresaModel.slug) == empresa_slug.strip().lower(),
+                    EmpresaModel.activo.is_(True),
+                    identifier_filter,
+                )
+            )
+        model = (await self.session.execute(consulta)).scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def get_by_id(self, user_id: str, empresa_id: str) -> User | None:
+    async def get_by_id(self, user_id: str, empresa_id: str | None) -> User | None:
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.id == user_id,
@@ -64,7 +76,7 @@ class SqlAlchemyUserRepository(UserRepository):
         return self._to_entity(model) if model else None
 
     async def update_password(
-        self, user_id: str, empresa_id: str, hashed_password: str, must_change: bool = False
+        self, user_id: str, empresa_id: str | None, hashed_password: str, must_change: bool = False
     ) -> None:
         await self.session.execute(
             update(UserModel)
@@ -74,13 +86,12 @@ class SqlAlchemyUserRepository(UserRepository):
         await self.session.flush()
 
     async def record_failed_login(
-        self, user_id: str, empresa_id: str, max_attempts: int, lock_minutes: int
+        self, user_id: str, empresa_id: str | None, max_attempts: int, lock_minutes: int
     ) -> None:
         now = datetime.now(UTC)
         next_attempts = case(
             (
-                UserModel.bloqueado_hasta.is_not(None)
-                & (UserModel.bloqueado_hasta <= now),
+                UserModel.bloqueado_hasta.is_not(None) & (UserModel.bloqueado_hasta <= now),
                 1,
             ),
             else_=UserModel.intentos_fallidos + 1,
@@ -99,7 +110,7 @@ class SqlAlchemyUserRepository(UserRepository):
         )
         await self.session.flush()
 
-    async def record_successful_login(self, user_id: str, empresa_id: str) -> None:
+    async def record_successful_login(self, user_id: str, empresa_id: str | None) -> None:
         await self.session.execute(
             update(UserModel)
             .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
@@ -112,7 +123,7 @@ class SqlAlchemyUserRepository(UserRepository):
         )
         await self.session.flush()
 
-    async def mark_email_verified(self, user_id: str, empresa_id: str) -> None:
+    async def mark_email_verified(self, user_id: str, empresa_id: str | None) -> None:
         await self.session.execute(
             update(UserModel)
             .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)

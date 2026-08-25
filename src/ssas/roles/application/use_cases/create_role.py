@@ -10,7 +10,7 @@ class CreateRole:
 
     async def execute(
         self,
-        empresa_id: str,
+        empresa_id: str | None,
         name: str,
         codigo: str,
         description: str | None = None,

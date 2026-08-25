@@ -1,14 +1,15 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AuditLogSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    empresa_id: str
+    # NULL cuando el evento es de la plataforma y no de una empresa concreta.
+    empresa_id: str | None = None
     module: str
     action: str
     description: str
@@ -22,6 +23,12 @@ class AuditLogSchema(BaseModel):
     source_ip: str | None = None
     user_agent: str | None = None
     created_at: datetime
+
+    @field_validator("source_ip", mode="before")
+    @classmethod
+    def _ip_a_texto(cls, value):
+        """La columna es INET: psycopg entrega IPv4Address, no str."""
+        return None if value is None else str(value)
 
 
 class AuditLogPageSchema(BaseModel):

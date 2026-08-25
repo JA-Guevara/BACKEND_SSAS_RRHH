@@ -10,7 +10,14 @@ def test_password_policy_accepts_strong_password() -> None:
 
 @pytest.mark.parametrize(
     "password",
-    ["Corta#1", "sinmayuscula#2026", "SINMINUSCULA#2026", "SinNumero#Clave", "SinSimbolo2026", "Con Espacio#2026"],
+    [
+        "Corta#1",
+        "sinmayuscula#2026",
+        "SINMINUSCULA#2026",
+        "SinNumero#Clave",
+        "SinSimbolo2026",
+        "Con Espacio#2026",
+    ],
 )
 def test_password_policy_rejects_weak_passwords(password: str) -> None:
     with pytest.raises(InvalidPasswordError):

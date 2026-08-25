@@ -13,7 +13,7 @@ class RegisterAuditEvent:
     async def execute(
         self,
         *,
-        empresa_id: str,
+        empresa_id: str | None,
         module: str,
         action: str,
         description: str,

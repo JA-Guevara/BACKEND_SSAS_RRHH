@@ -15,7 +15,7 @@ class ActualizarUsuario:
     async def execute(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         values: dict,
         role_ids: list[str] | None = None,
     ) -> Usuario:
@@ -33,9 +33,13 @@ class ActualizarUsuario:
 
         if "username" in updates and updates["username"] is not None:
             normalized_username = updates["username"].strip().lower()
-            existing = await self.usuario_repository.get_by_username(normalized_username, empresa_id)
+            existing = await self.usuario_repository.get_by_username(
+                normalized_username, empresa_id
+            )
             if existing and existing.id != user_id:
-                raise UsuarioAlreadyExistsError("Ya existe un usuario con ese username en la empresa")
+                raise UsuarioAlreadyExistsError(
+                    "Ya existe un usuario con ese username en la empresa"
+                )
             updates["username"] = normalized_username
 
         for field in ("nombre", "apellido", "telefono"):

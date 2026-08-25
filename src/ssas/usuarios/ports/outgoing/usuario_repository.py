@@ -5,24 +5,32 @@ from ssas.usuarios.domain.entities.usuario import Usuario
 
 class UsuarioRepository(ABC):
     @abstractmethod
-    async def list_usuarios(self, empresa_id: str, search: str | None, is_active: bool | None, page: int, per_page: int) -> tuple[list[Usuario], int]:
-        raise NotImplementedError
-    @abstractmethod
-    async def get_by_id(self, user_id: str, empresa_id: str) -> Usuario | None:
+    async def list_usuarios(
+        self,
+        empresa_id: str | None,
+        search: str | None,
+        is_active: bool | None,
+        page: int,
+        per_page: int,
+    ) -> tuple[list[Usuario], int]:
         raise NotImplementedError
 
     @abstractmethod
-    async def get_by_email(self, email: str, empresa_id: str) -> Usuario | None:
+    async def get_by_id(self, user_id: str, empresa_id: str | None) -> Usuario | None:
         raise NotImplementedError
 
     @abstractmethod
-    async def get_by_username(self, username: str, empresa_id: str) -> Usuario | None:
+    async def get_by_email(self, email: str, empresa_id: str | None) -> Usuario | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_by_username(self, username: str, empresa_id: str | None) -> Usuario | None:
         raise NotImplementedError
 
     @abstractmethod
     async def create_usuario(
         self,
-        empresa_id: str,
+        empresa_id: str | None,
         nombre: str,
         apellido: str,
         email: str,
@@ -37,30 +45,30 @@ class UsuarioRepository(ABC):
     async def update_usuario(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         values: dict,
         role_ids: list[str] | None = None,
     ) -> Usuario:
         raise NotImplementedError
 
     @abstractmethod
-    async def activate_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+    async def activate_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         raise NotImplementedError
 
     @abstractmethod
-    async def deactivate_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+    async def deactivate_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         raise NotImplementedError
 
     @abstractmethod
-    async def role_ids_belong_to_empresa(self, role_ids: list[str], empresa_id: str) -> bool:
+    async def role_ids_belong_to_empresa(self, role_ids: list[str], empresa_id: str | None) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    async def count_active_admins(self, empresa_id: str) -> int:
+    async def count_active_admins(self, empresa_id: str | None) -> int:
         raise NotImplementedError
 
     @abstractmethod
-    async def user_has_admin_role(self, user_id: str, empresa_id: str) -> bool:
+    async def user_has_admin_role(self, user_id: str, empresa_id: str | None) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -68,9 +76,11 @@ class UsuarioRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def set_password(self, user_id: str, empresa_id: str, password_hash: str, must_change: bool) -> Usuario:
+    async def set_password(
+        self, user_id: str, empresa_id: str | None, password_hash: str, must_change: bool
+    ) -> Usuario:
         raise NotImplementedError
 
     @abstractmethod
-    async def unlock_usuario(self, user_id: str, empresa_id: str) -> Usuario:
+    async def unlock_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         raise NotImplementedError

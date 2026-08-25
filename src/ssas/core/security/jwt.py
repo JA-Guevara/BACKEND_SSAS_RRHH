@@ -15,7 +15,7 @@ class JWTService(TokenService):
     def create_access_token(
         self,
         subject: str,
-        empresa_id: str,
+        empresa_id: str | None,
         roles: list[str] | None = None,
         must_change_password: bool = False,
     ) -> str:
@@ -32,7 +32,7 @@ class JWTService(TokenService):
     def create_refresh_token(
         self,
         subject: str,
-        empresa_id: str,
+        empresa_id: str | None,
     ) -> tuple[str, str, datetime]:
         expires_delta = timedelta(days=settings.app_refresh_token_expire_days)
         token_id = str(uuid4())
@@ -62,7 +62,7 @@ class JWTService(TokenService):
     def _create_token(
         self,
         subject: str,
-        empresa_id: str,
+        empresa_id: str | None,
         token_type: str,
         expires_delta: timedelta,
         roles: list[str] | None = None,
@@ -81,7 +81,7 @@ class JWTService(TokenService):
     def _encode(
         self,
         subject: str,
-        empresa_id: str,
+        empresa_id: str | None,
         token_type: str,
         token_id: str,
         expires_at: datetime,
@@ -89,6 +89,8 @@ class JWTService(TokenService):
         must_change_password: bool = False,
     ) -> str:
         now = datetime.now(UTC)
+        # tid = None identifica a un administrador de la plataforma: no pertenece a
+        # ninguna empresa, así que no hay contexto de tenant que fijar.
         payload: dict[str, object] = {
             "sub": subject,
             "tid": empresa_id,

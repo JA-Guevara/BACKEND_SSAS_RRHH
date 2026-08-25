@@ -20,16 +20,22 @@ class EmailVerificationTokenModel(Base):
     )
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
-    empresa_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False
+    # NULL cuando el token pertenece a un administrador de la plataforma.
+    empresa_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=True
     )
     user_id: Mapped[str] = mapped_column(
-        "usuario_id", UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False
+        "usuario_id",
+        UUID(as_uuid=False),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=False,
     )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
-    empresa: Mapped["EmpresaModel"] = relationship()
+    empresa: Mapped["EmpresaModel | None"] = relationship()
     user: Mapped["UserModel"] = relationship()

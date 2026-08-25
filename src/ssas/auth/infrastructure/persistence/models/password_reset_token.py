@@ -20,13 +20,27 @@ class PasswordResetTokenModel(Base):
         Index("idx_password_reset_token_expires_at", "expires_at"),
     )
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid())
-    empresa_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False)
-    user_id: Mapped[str] = mapped_column("usuario_id", UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    # NULL cuando el token pertenece a un administrador de la plataforma.
+    empresa_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        "usuario_id",
+        UUID(as_uuid=False),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column("consumed_at", DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    used_at: Mapped[datetime | None] = mapped_column(
+        "consumed_at", DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
-    empresa: Mapped["EmpresaModel"] = relationship(back_populates="password_reset_tokens")
+    empresa: Mapped["EmpresaModel | None"] = relationship(back_populates="password_reset_tokens")
     user: Mapped["UserModel"] = relationship(back_populates="password_reset_tokens")

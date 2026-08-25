@@ -1,11 +1,9 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from ssas.auth.domain.exceptions import InvalidTokenError
 from ssas.config.settings import settings
 from ssas.core.security.jwt import JWTService
 from ssas.main import app
-from ssas.platform.infrastructure.security.jwt_service import PlatformJWTService
 
 
 @pytest.fixture(autouse=True)
@@ -13,38 +11,32 @@ def secure_test_secret(monkeypatch) -> None:
     monkeypatch.setattr(settings, "app_secret_key", "unit-test-secret-key-with-at-least-32-bytes")
 
 
-def test_platform_token_has_global_scope_without_tenant() -> None:
-    service = PlatformJWTService()
-    token, _ = service.create_access_token("admin-id")
-    payload = service.decode(token, "access")
-    assert payload["scope"] == "platform"
+def test_unified_token_supports_global_scope_without_tenant() -> None:
+    service = JWTService()
+    token = service.create_access_token("admin-id", None, ["SUPER_ADMIN"])
+    payload = service.decode_token(token, "access")
+    assert payload["tid"] is None
     assert payload["roles"] == ["SUPER_ADMIN"]
-    assert "tid" not in payload
 
 
-def test_platform_rejects_tenant_token() -> None:
-    tenant_token = JWTService().create_access_token("user-id", "empresa-id", ["ADMIN_EMPRESA"])
-    with pytest.raises(InvalidTokenError):
-        PlatformJWTService().decode(tenant_token, "access")
-
-
-def test_openapi_separates_platform_and_tenant_routes() -> None:
+def test_openapi_has_shared_resources_without_platform_stack() -> None:
     paths = app.openapi()["paths"]
-    assert "/api/v1/platform/empresas" in paths
-    assert "/api/v1/platform/auth/login" in paths
-    assert "/api/v1/mi-empresa" in paths
+    assert "/api/v1/empresas" in paths
+    assert "/api/v1/auth/login" in paths
     assert "/api/v1/usuarios" in paths
+    assert not any(path.startswith("/api/v1/platform") for path in paths)
 
 
 @pytest.mark.asyncio
 async def test_cors_allows_configured_frontend() -> None:
+    origin = settings.cors_origins[0]
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.options(
-            "/api/v1/platform/empresas",
+            "/api/v1/empresas",
             headers={
-                "Origin": "http://localhost:3000",
+                "Origin": origin,
                 "Access-Control-Request-Method": "GET",
             },
         )
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert response.headers["access-control-allow-origin"] == origin

@@ -7,7 +7,7 @@ from ssas.roles.infrastructure.persistence.models.role import RoleModel
 
 
 class SqlAlchemyRoleRepository:
-    def __init__(self, session: AsyncSession, empresa_id: str):
+    def __init__(self, session: AsyncSession, empresa_id: str | None):
         self.session = session
         self.empresa_id = empresa_id
 
@@ -90,10 +90,7 @@ class SqlAlchemyRoleRepository:
             .where(RoleModel.id == role_id, RoleModel.empresa_id == self.empresa_id)
         )
         model = result.scalar_one()
-        model.permissions = [
-            permission_model
-            for permission_model in permissions
-        ]
+        model.permissions = [permission_model for permission_model in permissions]
         await self.session.flush()
         return self._to_entity(model)
 
@@ -110,5 +107,7 @@ class SqlAlchemyRoleRepository:
             codigo=model.codigo,
             description=model.description,
             is_active=model.is_active,
-            permissions=[PermissionRepository.to_entity(permission) for permission in model.permissions],
+            permissions=[
+                PermissionRepository.to_entity(permission) for permission in model.permissions
+            ],
         )

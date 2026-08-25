@@ -5,7 +5,7 @@ from datetime import datetime
 @dataclass
 class Usuario:
     id: str
-    empresa_id: str
+    empresa_id: str | None
     nombre: str
     apellido: str
     email: str

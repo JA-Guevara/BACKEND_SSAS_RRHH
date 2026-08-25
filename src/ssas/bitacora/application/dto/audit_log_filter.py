@@ -4,7 +4,7 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class AuditLogFilter:
-    empresa_id: str
+    empresa_id: str | None
     user_id: str | None = None
     module: str | None = None
     action: str | None = None

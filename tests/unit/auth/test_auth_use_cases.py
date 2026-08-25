@@ -49,11 +49,7 @@ class FakeUserRepository:
         if empresa_slug != EMPRESA_SLUG:
             return None
         return next(
-            (
-                user
-                for user in self.users.values()
-                if user.email == login or user.username == login
-            ),
+            (user for user in self.users.values() if user.email == login or user.username == login),
             None,
         )
 
@@ -94,7 +90,10 @@ class FakePasswordHasher:
 
 class FakeTokenService:
     def create_access_token(
-        self, subject: str, empresa_id: str, roles: list[str] | None = None,
+        self,
+        subject: str,
+        empresa_id: str,
+        roles: list[str] | None = None,
         must_change_password: bool = False,
     ) -> str:
         return f"access:{empresa_id}:{subject}"
@@ -156,8 +155,16 @@ class FakeTokenRepository:
     async def revoke_all_refresh_tokens(self, user_id, empresa_id) -> None:
         self.revoked_users.append((user_id, empresa_id))
 
-    async def save_email_verification_token(self, user_id, empresa_id, token_id, token_hash, expires_at) -> None:
-        self.reset_tokens[token_hash] = StoredToken(id=token_id, user_id=user_id, empresa_id=empresa_id, token_hash=token_hash, expires_at=expires_at)
+    async def save_email_verification_token(
+        self, user_id, empresa_id, token_id, token_hash, expires_at
+    ) -> None:
+        self.reset_tokens[token_hash] = StoredToken(
+            id=token_id,
+            user_id=user_id,
+            empresa_id=empresa_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
 
     async def get_active_email_verification_token(self, token_hash):
         return self.reset_tokens.get(token_hash)
@@ -250,9 +257,12 @@ async def test_login_rejects_temporarily_locked_account() -> None:
     user = make_user()
     user.locked_until = datetime.now(UTC) + timedelta(minutes=10)
     with pytest.raises(AccountLockedError):
-        await LoginUser(FakeUserRepository([user]), FakePasswordHasher(), FakeTokenService(), FakeTokenRepository()).execute(
-            password="secret123", email=user.email, empresa_slug=EMPRESA_SLUG
-        )
+        await LoginUser(
+            FakeUserRepository([user]),
+            FakePasswordHasher(),
+            FakeTokenService(),
+            FakeTokenRepository(),
+        ).execute(password="secret123", email=user.email, empresa_slug=EMPRESA_SLUG)
 
 
 @pytest.mark.asyncio
@@ -260,9 +270,12 @@ async def test_login_requires_verified_email() -> None:
     user = make_user()
     user.email_verified = False
     with pytest.raises(EmailNotVerifiedError):
-        await LoginUser(FakeUserRepository([user]), FakePasswordHasher(), FakeTokenService(), FakeTokenRepository()).execute(
-            password="secret123", email=user.email, empresa_slug=EMPRESA_SLUG
-        )
+        await LoginUser(
+            FakeUserRepository([user]),
+            FakePasswordHasher(),
+            FakeTokenService(),
+            FakeTokenRepository(),
+        ).execute(password="secret123", email=user.email, empresa_slug=EMPRESA_SLUG)
 
 
 @pytest.mark.asyncio
@@ -272,7 +285,9 @@ async def test_email_verification_token_marks_user_as_verified() -> None:
     users = FakeUserRepository([user])
     tokens = FakeTokenRepository()
     token_service = FakeTokenService()
-    result = await RequestEmailVerification(users, tokens, token_service, 30).execute(user.email, EMPRESA_SLUG)
+    result = await RequestEmailVerification(users, tokens, token_service, 30).execute(
+        user.email, EMPRESA_SLUG
+    )
     assert result is not None
     _, raw_token = result
     await VerifyEmail(users, tokens, token_service).execute(raw_token)

@@ -8,7 +8,7 @@ class User:
     name: str
     email: str
     hashed_password: str
-    empresa_id: str
+    empresa_id: str | None  # None = administrador de la plataforma
     username: str | None = None
     roles: list[str] = field(default_factory=list)
     empresa_is_active: bool = True
