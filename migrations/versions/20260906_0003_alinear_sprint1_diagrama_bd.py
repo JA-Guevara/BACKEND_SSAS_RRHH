@@ -105,7 +105,7 @@ def upgrade() -> None:
 
     op.rename_table("etapa_postulacion", "etapa_reclutamiento")
     op.execute(
-        "ALTER TRIGGER IF EXISTS trg_etapa_postulacion_updated_at "
+        "ALTER TRIGGER trg_etapa_postulacion_updated_at "
         "ON etapa_reclutamiento RENAME TO trg_etapa_reclutamiento_updated_at"
     )
     op.drop_constraint(
@@ -457,7 +457,7 @@ def downgrade() -> None:
     op.create_unique_constraint("uq_etapa_postulacion_orden", "etapa_reclutamiento", ["orden"])
     op.create_unique_constraint("uq_etapa_postulacion_codigo", "etapa_reclutamiento", ["codigo"])
     op.execute(
-        "ALTER TRIGGER IF EXISTS trg_etapa_reclutamiento_updated_at "
+        "ALTER TRIGGER trg_etapa_reclutamiento_updated_at "
         "ON etapa_reclutamiento RENAME TO trg_etapa_postulacion_updated_at"
     )
     op.rename_table("etapa_reclutamiento", "etapa_postulacion")
