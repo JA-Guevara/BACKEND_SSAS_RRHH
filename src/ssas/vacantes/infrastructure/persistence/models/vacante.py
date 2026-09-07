@@ -28,10 +28,10 @@ if TYPE_CHECKING:
         DepartamentoModel,
     )
     from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
+    from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
     from ssas.vacantes.infrastructure.persistence.models.vacante_habilidad import (
         VacanteHabilidadModel,
     )
-    from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 
 
 class VacanteModel(Base):

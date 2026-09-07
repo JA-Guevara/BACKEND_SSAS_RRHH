@@ -1,3 +1,5 @@
+import os
+
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -63,4 +65,4 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()
+settings = Settings(_env_file=os.getenv("SETTINGS_ENV_FILE", ".env"))

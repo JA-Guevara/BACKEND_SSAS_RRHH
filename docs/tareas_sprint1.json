@@ -1,0 +1,815 @@
+{
+  "meta": {
+    "proyecto": "backend_ssas_rrhh",
+    "sprint": 1,
+    "foco": "Captacion de candidatos de punta a punta",
+    "sincronizado": "2026-09-07",
+    "commit_base": "782ac60",
+    "documentos": {
+      "estado": "docs/01_ESTADO_PROYECTO.md",
+      "endpoints": "docs/02_API_ENDPOINTS.md",
+      "backlog": "docs/03_BACKLOG_IMPLEMENTACION.md",
+      "manual_multiagente": "docs/04_EJECUCION_MULTIAGENTE_SPRINT1.md"
+    },
+    "endpoints_actuales": 46,
+    "endpoints_pendientes": 18,
+    "endpoints_al_cierre": 64,
+    "archivos_compartidos_prohibidos_para_agentes": [
+      "src/ssas/core/api/router.py",
+      "src/ssas/core/tenancy/middleware.py",
+      "src/ssas/core/api/openapi.py",
+      "migrations/versions/"
+    ],
+    "verificacion_obligatoria": [
+      "ruff check src tests",
+      "pytest -q",
+      "alembic heads",
+      "APP_SECRET_KEY=x PYTHONPATH=src python -c \"from ssas.main import app; print(len(app.openapi()['paths']))\""
+    ]
+  },
+
+  "decisiones_pendientes": [
+    {
+      "id": "DEC-01",
+      "pregunta": "Permisos de vacantes: granulares (vacantes:ver|crear|editar|publicar|eliminar) o grueso (vacantes:gestionar)",
+      "bloquea": ["SEC-001", "VAC-004"],
+      "recomendacion": "Granulares, por coherencia con departamentos:* y cargos:* que ya lo son",
+      "resuelta": false
+    },
+    {
+      "id": "DEC-02",
+      "pregunta": "Maquina de estados de las etapas de reclutamiento: que transiciones son legales",
+      "bloquea": ["TAB-003"],
+      "recomendacion": "Permitir cualquier transicion y registrar todo en bitacora; endurecer con datos reales",
+      "resuelta": false
+    },
+    {
+      "id": "DEC-03",
+      "pregunta": "Donde se almacenan los CV: el disco de Railway es efimero y hoy se usa local_cv_storage.py",
+      "bloquea": ["POR-001", "NOT-001"],
+      "recomendacion": "Supabase Storage: ya esta en el stack",
+      "resuelta": false
+    },
+    {
+      "id": "DEC-04",
+      "pregunta": "plan_suscripcion y suscripcion: el perfil las disena, el codigo las elimino",
+      "bloquea": ["PERF-001"],
+      "recomendacion": "Decidir si el SaaS las necesita este semestre; si no, quitarlas del perfil",
+      "resuelta": false
+    },
+    {
+      "id": "DEC-05",
+      "pregunta": "Numeracion de CU: el perfil usa dos esquemas distintos entre 3.10 y el Capitulo 4",
+      "bloquea": ["PERF-001"],
+      "recomendacion": "Adoptar la del Capitulo 4 y corregir 3.10",
+      "resuelta": false
+    },
+    {
+      "id": "DEC-06",
+      "pregunta": "Notificaciones T-13: cola asincrona real o envio sincrono",
+      "bloquea": ["NOT-001"],
+      "recomendacion": "Fuera del Sprint 1. Envio sincrono en Sprint 2",
+      "resuelta": false
+    }
+  ],
+
+  "olas": [
+    { "n": 0, "modo": "secuencial", "agentes": 1, "tareas": ["MIG-002", "SEC-001", "TOOL-001", "TOOL-002", "DOC-003"], "puerta": "alembic heads = 1 · pytest verde · ruff verde · git limpio" },
+    { "n": 1, "modo": "paralelo", "agentes": 4, "tareas": ["VAC-004", "VAC-001", "TAB-001a", "INFRA-001"], "puerta": "los 5 permisos existen · repositorios filtran por empresa_id" },
+    { "n": 2, "modo": "paralelo", "agentes": 3, "tareas": ["VAC-002", "BUG-001", "TEST-001", "PTE-001", "HAB-001"], "puerta": "aislamiento probado en todos los modulos" },
+    { "n": 3, "modo": "paralelo", "agentes": 3, "tareas": ["VAC-003", "TAB-001b", "TEST-002", "TEST-003"], "puerta": "API-P01..P06, P15, P16 en OpenAPI" },
+    { "n": 4, "modo": "paralelo", "agentes": 2, "tareas": ["POR-001", "TAB-002"], "puerta": "API-P07, P08, P11, P12 · CP-S1-21 en verde" },
+    { "n": 5, "modo": "paralelo", "agentes": 2, "tareas": ["TAB-003", "PTE-003", "HAB-003"], "puerta": "API-P09, P10, P13, P14, P17, P18" },
+    { "n": 6, "modo": "orquestador", "agentes": 1, "tareas": ["DOC-002", "DOC-001", "PERF-001", "MIG-001"], "puerta": "64 endpoints · perfil alineado con el codigo" }
+  ],
+
+  "tareas": [
+    {
+      "id": "MIG-002",
+      "titulo": "Unificar las dos cabezas de Alembic",
+      "tipo": "DATABASE",
+      "prioridad": "CRITICA",
+      "estado": "PENDIENTE",
+      "ola": 0,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "El grafo de migraciones se bifurco en 20260825_0001 y nunca se volvio a unir. 'alembic upgrade head' falla con 'Multiple head revisions are present' y 'alembic heads' devuelve 20260825_0002 y 20260906_0004. Ningun agente puede crear el esquema ni anadir migraciones hasta que esto se resuelva. El daily del 27/08 ya lo anticipaba.",
+      "archivos_nuevos": ["migrations/versions/AAAAMMDD_000N_unificar_cabezas.py"],
+      "archivos_modificados": [],
+      "referencia": "alembic merge -m \"unificar cabezas sprint0 y sprint1\" 20260825_0002 20260906_0004",
+      "criterios_aceptacion": [
+        "alembic heads devuelve UNA sola cabeza",
+        "alembic upgrade head --sql termina sin error",
+        "la migracion nueva sigue la convencion AAAAMMDD_000N_descripcion",
+        "no se reescribieron las migraciones existentes"
+      ],
+      "endpoints": [],
+      "riesgos": "Local, Railway y las pruebas comparten la misma base de Supabase. Verificar DATABASE_URL antes de ejecutar. Para migraciones usar conexion directa (5432), no el pooler (6543)."
+    },
+    {
+      "id": "SEC-001",
+      "titulo": "El rol RECLUTADOR nace sin permisos",
+      "tipo": "SECURITY",
+      "prioridad": "CRITICA",
+      "estado": "PENDIENTE",
+      "ola": 0,
+      "cu": "CU-08, CU-09, CU-12",
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "ROLE_DEFINITIONS en provision_empresa.py da al rol RECLUTADOR los permisos 'vacantes:gestionar' y 'candidatos:gestionar'. Ninguno existe en el catalogo de 28 permisos, y el filtro que los resuelve descarta los codigos desconocidos sin avisar ('if code_ in permission_by_code'). Verificado: al aprovisionar una empresa, RECLUTADOR se crea con 0 permisos. El reclutador es el actor de CU-08, CU-09 y CU-12.",
+      "archivos_nuevos": ["tests/unit/test_roles_base_provision.py"],
+      "archivos_modificados": ["src/ssas/platform/application/use_cases/provision_empresa.py"],
+      "referencia": "src/ssas/platform/application/use_cases/provision_empresa.py lineas 25-34 y 80-94",
+      "criterios_aceptacion": [
+        "RECLUTADOR recibe los permisos de vacantes y postulaciones al aprovisionar una empresa",
+        "un codigo inexistente en ROLE_DEFINITIONS levanta una excepcion en vez de ignorarse",
+        "existe un test que falla si un rol base queda sin permisos",
+        "ningun rol de empresa recibe permisos con prefijo platform:"
+      ],
+      "endpoints": [],
+      "bloqueado_por_decision": "DEC-01"
+    },
+    {
+      "id": "TOOL-001",
+      "titulo": "pytest no encuentra el paquete ssas",
+      "tipo": "REFACTOR",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 0,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "'pytest' a secas falla con 8 errores de coleccion (ModuleNotFoundError: No module named 'ssas'). Con PYTHONPATH=src pasan 39 pruebas y se saltan 3. 'pip install -e .' no lo arregla. El paso 8 del protocolo de agentes es inejecutable como esta documentado.",
+      "archivos_nuevos": [],
+      "archivos_modificados": ["pyproject.toml", "README.md", "docs/01_ESTADO_PROYECTO.md"],
+      "referencia": "anadir pythonpath = [\"src\"] en [tool.pytest.ini_options]",
+      "criterios_aceptacion": [
+        "pytest a secas devuelve 39 passed, 3 skipped",
+        "el README y el documento 01 documentan el comando que funciona"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-002",
+      "titulo": "Dejar ruff en cero",
+      "tipo": "REFACTOR",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 0,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "'ruff check src tests' devuelve 15 errores preexistentes (14 autocorregibles): I001 en 5 archivos, UP037 en 6 anotaciones, RUF100, RUF019 y SIM102. Un agente no puede distinguir sus propios errores de los heredados.",
+      "archivos_nuevos": [],
+      "archivos_modificados": [
+        "src/ssas/main.py",
+        "src/ssas/infrastructure/database/base.py",
+        "src/ssas/infrastructure/database/session.py",
+        "src/ssas/cargos/application/use_cases/actualizar_cargo.py",
+        "src/ssas/cargos/infrastructure/persistence/models/cargo.py",
+        "src/ssas/vacantes/infrastructure/persistence/models/vacante.py",
+        "src/ssas/postulantes/infrastructure/persistence/models/postulante.py",
+        "src/ssas/postulaciones/infrastructure/persistence/models/etapa_reclutamiento.py",
+        "src/ssas/postulaciones/infrastructure/persistence/models/motivo_rechazo.py",
+        "src/ssas/postulaciones/infrastructure/storage/local_cv_storage.py"
+      ],
+      "referencia": "ruff check src tests --fix; el unico manual es SIM102 en actualizar_cargo.py:24",
+      "criterios_aceptacion": [
+        "ruff check src tests dice All checks passed",
+        "pytest sigue en verde",
+        "no se toco nada mas que lo que ruff senalo"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "DOC-003",
+      "titulo": "Versionar los documentos de control y normalizar finales de linea",
+      "tipo": "DOCUMENTATION",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 0,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "docs/01, docs/02, docs/03, docs/04 y scripts/ figuran como no versionados en git status. Un agente que clona el repositorio no los ve, y el paso 8 del protocolo manda ejecutar scripts/verificar_documentacion.py, que no esta en el repo. Ademas 157 archivos de src/ aparecen como modificados y la unica diferencia es el final de linea (CRLF frente a LF), lo que vuelve ilegible cualquier diff.",
+      "archivos_nuevos": [".gitattributes"],
+      "archivos_modificados": [],
+      "referencia": "git add docs/0*.md docs/tareas_sprint1.json scripts/ ; luego git add --renormalize .",
+      "criterios_aceptacion": [
+        "los cuatro documentos y scripts/ estan versionados",
+        "existe .gitattributes con * text=auto eol=lf",
+        "git status queda limpio salvo cambios reales",
+        "un clon nuevo del repositorio trae la documentacion"
+      ],
+      "endpoints": []
+    },
+
+    {
+      "id": "VAC-004",
+      "titulo": "Permisos de reclutamiento en el catalogo",
+      "tipo": "SECURITY",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 1,
+      "cu": "CU-08",
+      "tarea_perfil": "T-08",
+      "depende_de": ["MIG-002"],
+      "descripcion": "El catalogo tiene 28 permisos y ninguno de reclutamiento. Sin ellos los endpoints de vacantes, postulaciones, postulantes y habilidades no se pueden proteger. Es el UNICO agente de la Ola 1 autorizado a crear una migracion.",
+      "archivos_nuevos": [
+        "migrations/versions/AAAAMMDD_000N_permisos_reclutamiento.py",
+        "tests/unit/test_permisos_reclutamiento.py"
+      ],
+      "archivos_modificados": ["src/ssas/platform/application/use_cases/provision_empresa.py"],
+      "referencia": "migrations/versions/20260830_0002_crear_departamentos_y_cargos.py — ya siembra departamentos:* y cargos:* de forma idempotente",
+      "criterios_aceptacion": [
+        "los permisos de vacantes existen tras alembic upgrade head",
+        "existen tambien los de postulaciones, postulantes y habilidades",
+        "ADMIN_EMPRESA y RECLUTADOR los reciben al aprovisionar una empresa nueva",
+        "la migracion es idempotente",
+        "ningun permiso de empresa lleva prefijo platform:",
+        "alembic heads sigue devolviendo UNA cabeza"
+      ],
+      "endpoints": [],
+      "bloqueado_por_decision": "DEC-01"
+    },
+    {
+      "id": "VAC-001",
+      "titulo": "Puerto y repositorio de vacantes",
+      "tipo": "REPOSITORY",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 1,
+      "cu": "CU-08",
+      "tarea_perfil": "T-08",
+      "depende_de": [],
+      "descripcion": "Los modelos vacante y vacante_habilidad estan migrados y la entidad de dominio existe, pero no hay forma de leerlos ni escribirlos. No reescribas el modelo ORM ni la entidad: ya estan.",
+      "archivos_nuevos": [
+        "src/ssas/vacantes/domain/exceptions.py",
+        "src/ssas/vacantes/ports/__init__.py",
+        "src/ssas/vacantes/ports/outgoing/__init__.py",
+        "src/ssas/vacantes/ports/outgoing/vacante_repository.py",
+        "src/ssas/vacantes/infrastructure/persistence/repositories/__init__.py",
+        "src/ssas/vacantes/infrastructure/persistence/repositories/vacante_repository.py",
+        "tests/unit/test_vacantes_repository.py"
+      ],
+      "archivos_modificados": [],
+      "referencia": "src/ssas/cargos/ports/outgoing/cargo_repository.py y src/ssas/cargos/infrastructure/persistence/repositories/cargo_repository.py",
+      "criterios_aceptacion": [
+        "listar(empresa_id) devuelve solo vacantes de esa empresa",
+        "ninguna consulta del repositorio omite el filtro por empresa_id",
+        "SqlAlchemyVacanteRepository hereda de VacanteRepository",
+        "toda consulta que cargue habilidades_requeridas usa selectinload"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "TAB-001a",
+      "titulo": "Puertos y repositorios de etapas y motivos de rechazo",
+      "tipo": "REPOSITORY",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 1,
+      "cu": "CU-12",
+      "tarea_perfil": "T-12",
+      "depende_de": [],
+      "descripcion": "Las tablas etapa_reclutamiento y motivo_rechazo estan migradas y sin uso. El tablero las necesita para agrupar columnas y para exigir motivo al rechazar. Ambos catalogos son por empresa.",
+      "archivos_nuevos": [
+        "src/ssas/postulaciones/ports/outgoing/etapa_reclutamiento_repository.py",
+        "src/ssas/postulaciones/ports/outgoing/motivo_rechazo_repository.py",
+        "src/ssas/postulaciones/infrastructure/persistence/repositories/etapa_reclutamiento_repository.py",
+        "src/ssas/postulaciones/infrastructure/persistence/repositories/motivo_rechazo_repository.py"
+      ],
+      "archivos_modificados": [],
+      "referencia": "src/ssas/postulaciones/infrastructure/persistence/repositories/postulacion_publica_repository.py",
+      "criterios_aceptacion": [
+        "los repositorios filtran por empresa_id",
+        "las etapas se devuelven ordenadas por el campo orden",
+        "cada implementacion hereda de su puerto"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "INFRA-001",
+      "titulo": "Separar la base de pruebas de la de produccion",
+      "tipo": "ARCHITECTURE",
+      "prioridad": "CRITICA",
+      "estado": "PENDIENTE",
+      "ola": 1,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "Local, Railway y las pruebas apuntan a la misma base de Supabase. Un alembic upgrade, un seed o un pytest distraido impacta produccion. Mientras no se resuelva, ninguna tarea que toque la base es segura.",
+      "archivos_nuevos": [".env.test.example"],
+      "archivos_modificados": ["tests/conftest.py", "docs/guias/GUIA_DESARROLLO.md"],
+      "referencia": "tests/integration/test_database_connection.py — el freno actual saltea los e2e si DATABASE_URL no es local",
+      "criterios_aceptacion": [
+        "existe una DATABASE_URL de pruebas distinta de la de produccion",
+        "pytest corre la suite completa sin saltear los e2e",
+        "el freno de los e2e no se quito: se complementa con una base propia",
+        "la documentacion indica cual usar en cada caso"
+      ],
+      "endpoints": []
+    },
+
+    {
+      "id": "VAC-002",
+      "titulo": "Casos de uso de vacantes",
+      "tipo": "USE_CASE",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 2,
+      "cu": "CU-08",
+      "tarea_perfil": "T-08",
+      "depende_de": ["VAC-001"],
+      "descripcion": "CRUD y publicacion de vacantes. Seis casos de uso, uno por operacion, con dependencias por constructor.",
+      "archivos_nuevos": [
+        "src/ssas/vacantes/application/__init__.py",
+        "src/ssas/vacantes/application/use_cases/__init__.py",
+        "src/ssas/vacantes/application/use_cases/listar_vacantes.py",
+        "src/ssas/vacantes/application/use_cases/crear_vacante.py",
+        "src/ssas/vacantes/application/use_cases/obtener_vacante.py",
+        "src/ssas/vacantes/application/use_cases/actualizar_vacante.py",
+        "src/ssas/vacantes/application/use_cases/publicar_vacante.py",
+        "src/ssas/vacantes/application/use_cases/eliminar_vacante.py",
+        "tests/unit/test_vacantes_use_cases.py"
+      ],
+      "archivos_modificados": ["src/ssas/vacantes/domain/exceptions.py"],
+      "referencia": "src/ssas/cargos/application/use_cases/",
+      "criterios_aceptacion": [
+        "empresa_id lo fija quien llama, nunca viene del cuerpo",
+        "publicar con fecha de cierre anterior a hoy devuelve error de validacion (CP03 del perfil)",
+        "publicar sin campos obligatorios devuelve 422 con detalle (CP02 del perfil)",
+        "crear una vacante en otra empresa es imposible manipulando el JSON",
+        "una vacante de otra empresa se responde como inexistente",
+        "las transiciones de estado respetan BORRADOR, PUBLICADA, PAUSADA, CERRADA, CANCELADA"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "BUG-001",
+      "titulo": "Corregir el aislamiento multi-tenant del tablero de candidatos",
+      "tipo": "BUG",
+      "prioridad": "CRITICA",
+      "estado": "PENDIENTE",
+      "ola": 2,
+      "cu": "CU-12",
+      "tarea_perfil": "T-12",
+      "depende_de": ["INFRA-001"],
+      "descripcion": "El reporte de pruebas del perfil marca CP-S1-21 como FALLA (05/09/2026): un usuario de la empresa B pide el tablero de una vacante de la empresa A y no recibe 404. Nota: el endpoint del tablero todavia no existe, asi que ese caso se probo contra el frontend con datos simulados. Al implementar TAB-002 hay que hacerlo pasar de verdad con dos empresas reales.",
+      "archivos_nuevos": ["tests/unit/test_aislamiento_tablero.py"],
+      "archivos_modificados": ["src/ssas/postulaciones/infrastructure/persistence/repositories/postulacion_repository.py"],
+      "referencia": "regla 7 de docs/01_ESTADO_PROYECTO.md: el filtro va en el repositorio, no en el router",
+      "criterios_aceptacion": [
+        "CP-S1-21 pasa: la empresa B recibe 404 al pedir el tablero de la empresa A",
+        "se responde 404 y no 403: un 403 confirmaria que la vacante existe",
+        "existe un test que falla si alguien quita el filtro del repositorio",
+        "el reporte de pruebas del perfil se actualiza de FALLA a OK"
+      ],
+      "endpoints": ["API-P11"]
+    },
+    {
+      "id": "TEST-001",
+      "titulo": "Tests de aislamiento entre empresas",
+      "tipo": "TEST",
+      "prioridad": "CRITICA",
+      "estado": "PENDIENTE",
+      "ola": 2,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": ["INFRA-001"],
+      "descripcion": "6 de los 9 modulos con endpoints no tienen ningun test. El aislamiento entre empresas, que es la pregunta 3.d del examen final, no esta verificado para departamentos, cargos, empresas ni postulaciones.",
+      "archivos_nuevos": ["tests/integration/test_aislamiento_empresas.py"],
+      "archivos_modificados": ["tests/conftest.py"],
+      "referencia": "tests/unit/test_platform.py",
+      "criterios_aceptacion": [
+        "existe un fixture con dos empresas reales",
+        "un usuario de la empresa A recibe 403 o 404 al pedir recursos de la B en cada modulo",
+        "el super administrador si accede a ambas por el mismo endpoint",
+        "la suite pasa en verde"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "PTE-001",
+      "titulo": "Repositorio y casos de uso de postulantes",
+      "tipo": "REPOSITORY",
+      "prioridad": "MEDIA",
+      "estado": "PENDIENTE",
+      "ola": 2,
+      "cu": "CU-11",
+      "tarea_perfil": "T-10",
+      "depende_de": [],
+      "descripcion": "El modelo postulante esta migrado con cv_url y cv_texto. Falta la capa de aplicacion para el banco de talentos.",
+      "archivos_nuevos": [
+        "src/ssas/postulantes/domain/exceptions.py",
+        "src/ssas/postulantes/ports/outgoing/postulante_repository.py",
+        "src/ssas/postulantes/infrastructure/persistence/repositories/postulante_repository.py",
+        "src/ssas/postulantes/application/use_cases/listar_postulantes.py",
+        "src/ssas/postulantes/application/use_cases/obtener_postulante.py",
+        "tests/unit/test_postulantes.py"
+      ],
+      "archivos_modificados": [],
+      "referencia": "src/ssas/cargos/",
+      "criterios_aceptacion": [
+        "el repositorio filtra por empresa_id",
+        "el filtro en_banco_talento funciona",
+        "la implementacion hereda de su puerto"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "HAB-001",
+      "titulo": "Capa de aplicacion de habilidades",
+      "tipo": "USE_CASE",
+      "prioridad": "MEDIA",
+      "estado": "PENDIENTE",
+      "ola": 2,
+      "cu": "apoyo CU-08",
+      "tarea_perfil": "T-08",
+      "depende_de": [],
+      "descripcion": "El modelo habilidad y la relacion vacante_habilidad estan migrados y sin uso. Las vacantes necesitan el catalogo para declarar habilidades requeridas con peso.",
+      "archivos_nuevos": [
+        "src/ssas/habilidades/domain/exceptions.py",
+        "src/ssas/habilidades/ports/outgoing/habilidad_repository.py",
+        "src/ssas/habilidades/infrastructure/persistence/repositories/habilidad_repository.py",
+        "src/ssas/habilidades/application/use_cases/listar_habilidades.py",
+        "src/ssas/habilidades/application/use_cases/crear_habilidad.py",
+        "tests/unit/test_habilidades.py"
+      ],
+      "archivos_modificados": [],
+      "referencia": "src/ssas/cargos/",
+      "criterios_aceptacion": [
+        "el catalogo es por empresa",
+        "el nombre es unico por empresa, sin distinguir mayusculas",
+        "la implementacion hereda de su puerto"
+      ],
+      "endpoints": []
+    },
+
+    {
+      "id": "VAC-003",
+      "titulo": "Endpoints de vacantes",
+      "tipo": "API",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 3,
+      "cu": "CU-08",
+      "tarea_perfil": "T-08",
+      "depende_de": ["VAC-002", "VAC-004"],
+      "descripcion": "Exponer el CRUD y la publicacion siguiendo el patron de cargos y departamentos. Es el primer eslabon del flujo de valor del Sprint 1: sin esto no hay vacante que publicar ni a la que postularse.",
+      "archivos_nuevos": [
+        "src/ssas/vacantes/infrastructure/http/__init__.py",
+        "src/ssas/vacantes/infrastructure/http/router.py",
+        "src/ssas/vacantes/infrastructure/http/schemas.py",
+        "tests/unit/test_vacantes_api.py"
+      ],
+      "archivos_modificados": ["docs/02_API_ENDPOINTS.md"],
+      "integracion_requerida": ["src/ssas/core/api/router.py"],
+      "referencia": "src/ssas/cargos/infrastructure/http/router.py — copiar _target_empresa, _repository, _raise_http_cargo_error y el guard require_scoped_permission. Usar TAG_VACANTES y AUTHENTICATED_RESPONSES de ssas.core.api.openapi",
+      "criterios_aceptacion": [
+        "POST /api/v1/vacantes responde 201 con datos validos (CP01 del perfil)",
+        "responde 401 sin token y 403 sin permiso",
+        "un administrador de la empresa A no ve vacantes de la B",
+        "el response coincide con el contrato de 02_API_ENDPOINTS.md",
+        "la logica de negocio no vive en el router"
+      ],
+      "endpoints": ["API-P01", "API-P02", "API-P03", "API-P04", "API-P05", "API-P06"]
+    },
+    {
+      "id": "TAB-001b",
+      "titulo": "Endpoints de catalogos y seed de etapas base",
+      "tipo": "API",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 3,
+      "cu": "CU-12",
+      "tarea_perfil": "T-12",
+      "depende_de": ["TAB-001a", "VAC-004"],
+      "descripcion": "Endpoints de solo lectura de etapas y motivos de rechazo, y siembra de las etapas base al aprovisionar una empresa. El perfil precarga siete etapas por defecto (T1-03).",
+      "archivos_nuevos": [
+        "src/ssas/postulaciones/application/use_cases/listar_etapas.py",
+        "src/ssas/postulaciones/application/use_cases/listar_motivos_rechazo.py",
+        "tests/unit/test_catalogos_reclutamiento.py"
+      ],
+      "archivos_modificados": [
+        "src/ssas/postulaciones/infrastructure/http/router.py",
+        "src/ssas/postulaciones/infrastructure/http/schemas.py",
+        "src/ssas/platform/application/use_cases/provision_empresa.py",
+        "docs/02_API_ENDPOINTS.md"
+      ],
+      "referencia": "ROLE_DEFINITIONS de provision_empresa.py: el seed de etapas va en el mismo lugar donde se siembran los roles base",
+      "criterios_aceptacion": [
+        "GET /api/v1/etapas-reclutamiento devuelve las etapas de la empresa del token, ordenadas",
+        "GET /api/v1/motivos-rechazo devuelve los motivos de la empresa del token",
+        "una empresa nueva nace con sus etapas base sembradas",
+        "exactamente una etapa tiene es_inicial, una es_contratado y una es_rechazado",
+        "un usuario de otra empresa no ve estos catalogos"
+      ],
+      "endpoints": ["API-P15", "API-P16"]
+    },
+    {
+      "id": "TEST-002",
+      "titulo": "Tests de departamentos y cargos",
+      "tipo": "TEST",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 3,
+      "cu": "CU-07",
+      "tarea_perfil": "T-07",
+      "depende_de": ["INFRA-001"],
+      "descripcion": "CU-07 esta implementado con 8 endpoints y cero tests. Es la unica parte del Sprint 1 que funciona y no esta cubierta.",
+      "archivos_nuevos": ["tests/unit/test_departamentos.py", "tests/unit/test_cargos.py"],
+      "archivos_modificados": [],
+      "referencia": "tests/unit/test_roles.py",
+      "criterios_aceptacion": [
+        "el arbol por departamento_padre_id se cubre",
+        "el 409 por nombre duplicado se cubre",
+        "el aislamiento entre empresas se cubre",
+        "el rango salario_min/salario_max del cargo se cubre"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "TEST-003",
+      "titulo": "Tests de empresas (platform)",
+      "tipo": "TEST",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 3,
+      "cu": "CU-01",
+      "tarea_perfil": null,
+      "depende_de": ["INFRA-001"],
+      "descripcion": "8 endpoints de empresas sin tests propios, incluido el aprovisionamiento, que es el que siembra roles y permisos.",
+      "archivos_nuevos": ["tests/unit/test_empresas.py"],
+      "archivos_modificados": [],
+      "referencia": "tests/unit/test_platform.py",
+      "criterios_aceptacion": [
+        "el aprovisionamiento crea empresa, roles base y administrador",
+        "ningun rol de empresa recibe permisos platform:",
+        "el slug duplicado responde 409",
+        "suspender, restaurar y activar cambian el estado esperado"
+      ],
+      "endpoints": []
+    },
+
+    {
+      "id": "POR-001",
+      "titulo": "Portal publico de empleos",
+      "tipo": "API",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 4,
+      "cu": "CU-09",
+      "tarea_perfil": "T-09",
+      "depende_de": ["VAC-003"],
+      "descripcion": "Listado y detalle de vacantes publicadas por empresa, sin autenticacion, en /api/v1/publico/{empresa_slug}/vacantes. Hoy solo existe /publico/postulaciones.",
+      "archivos_nuevos": [
+        "src/ssas/vacantes/infrastructure/http/router_publico.py",
+        "src/ssas/vacantes/infrastructure/http/schemas_publicos.py",
+        "src/ssas/vacantes/application/use_cases/listar_vacantes_publicas.py",
+        "src/ssas/vacantes/application/use_cases/obtener_vacante_publica.py",
+        "tests/unit/test_portal_publico.py"
+      ],
+      "archivos_modificados": ["docs/02_API_ENDPOINTS.md"],
+      "integracion_requerida": [
+        "src/ssas/core/api/router.py",
+        "src/ssas/core/tenancy/middleware.py"
+      ],
+      "referencia": "PUBLIC_PATH_PREFIXES en core/tenancy/middleware.py ya incluye /api/v1/publico/postulaciones/. Usar TAG_PORTAL_PUBLICO",
+      "criterios_aceptacion": [
+        "GET /api/v1/publico/{slug}/vacantes responde 200 sin token y muestra la marca de la empresa",
+        "los filtros de ciudad y modalidad reducen la lista",
+        "una vacante con fecha de cierre vencida no aparece (paso 4 del plan CU-09)",
+        "un slug inexistente responde 404 con mensaje generico, sin revelar informacion (paso 5)",
+        "el detalle oculta el rango salarial cuando mostrar_salario esta desactivado (paso 3)",
+        "no se expone empresa_id crudo ni campos de gestion",
+        "solo aparecen vacantes en estado PUBLICADA"
+      ],
+      "endpoints": ["API-P07", "API-P08"],
+      "riesgos": "Superficie publica sin autenticacion: revisar limite de tasa y que campos se exponen."
+    },
+    {
+      "id": "TAB-002",
+      "titulo": "Tablero de candidatos por etapas",
+      "tipo": "API",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 4,
+      "cu": "CU-12",
+      "tarea_perfil": "T-12",
+      "depende_de": ["TAB-001b", "VAC-003", "BUG-001"],
+      "descripcion": "Vista Kanban de las postulaciones de una vacante, agrupadas por etapa y con contador por columna.",
+      "archivos_nuevos": [
+        "src/ssas/postulaciones/application/use_cases/obtener_tablero_vacante.py",
+        "src/ssas/postulaciones/application/use_cases/listar_postulaciones.py",
+        "src/ssas/postulaciones/infrastructure/persistence/repositories/postulacion_repository.py",
+        "tests/unit/test_tablero.py"
+      ],
+      "archivos_modificados": [
+        "src/ssas/postulaciones/ports/outgoing/postulacion_repository.py",
+        "src/ssas/postulaciones/infrastructure/http/router.py",
+        "docs/02_API_ENDPOINTS.md"
+      ],
+      "referencia": "src/ssas/cargos/infrastructure/http/router.py para el patron HTTP",
+      "criterios_aceptacion": [
+        "GET /api/v1/vacantes/{id}/tablero agrupa por etapa segun orden, con contador por columna",
+        "un usuario de otra empresa recibe 404 (CP-S1-21)",
+        "responde 403 sin el permiso de postulaciones",
+        "las consultas usan selectinload para postulante y etapa"
+      ],
+      "endpoints": ["API-P11", "API-P12"],
+      "riesgos": "No cerrar esta tarea sin el test de aislamiento de BUG-001 en verde."
+    },
+
+    {
+      "id": "TAB-003",
+      "titulo": "Mover de etapa y rechazar con motivo",
+      "tipo": "API",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 5,
+      "cu": "CU-12",
+      "tarea_perfil": "T-12",
+      "depende_de": ["TAB-002"],
+      "descripcion": "Acciones del tablero: cambiar la etapa de una postulacion y rechazarla exigiendo un motivo del catalogo. Cada cambio queda en la bitacora.",
+      "archivos_nuevos": [
+        "src/ssas/postulaciones/application/use_cases/mover_postulacion_etapa.py",
+        "src/ssas/postulaciones/application/use_cases/rechazar_postulacion.py",
+        "tests/unit/test_acciones_tablero.py"
+      ],
+      "archivos_modificados": [
+        "src/ssas/postulaciones/infrastructure/http/router.py",
+        "src/ssas/postulaciones/domain/exceptions.py",
+        "docs/02_API_ENDPOINTS.md"
+      ],
+      "referencia": "src/ssas/bitacora/ para el registro de eventos",
+      "criterios_aceptacion": [
+        "mover de etapa cambia la columna y escribe un evento en la bitacora (CP-S1-19)",
+        "rechazar sin motivo responde 400 (CP-S1-20)",
+        "el motivo debe pertenecer al catalogo de la empresa",
+        "un usuario de otra empresa recibe 404 (CP-S1-21)",
+        "fecha_ultimo_cambio se actualiza"
+      ],
+      "endpoints": ["API-P13", "API-P14"],
+      "bloqueado_por_decision": "DEC-02"
+    },
+    {
+      "id": "PTE-003",
+      "titulo": "Endpoints de postulantes",
+      "tipo": "API",
+      "prioridad": "MEDIA",
+      "estado": "PENDIENTE",
+      "ola": 5,
+      "cu": "CU-11",
+      "tarea_perfil": "T-10",
+      "depende_de": ["PTE-001", "VAC-004"],
+      "descripcion": "Banco de talentos: listar y consultar postulantes de la empresa.",
+      "archivos_nuevos": [
+        "src/ssas/postulantes/infrastructure/http/router.py",
+        "src/ssas/postulantes/infrastructure/http/schemas.py",
+        "tests/unit/test_postulantes_api.py"
+      ],
+      "archivos_modificados": ["docs/02_API_ENDPOINTS.md"],
+      "integracion_requerida": ["src/ssas/core/api/router.py"],
+      "referencia": "src/ssas/cargos/infrastructure/http/router.py",
+      "criterios_aceptacion": [
+        "GET /api/v1/postulantes lista solo los de la empresa del token",
+        "responde 403 sin el permiso",
+        "no se expone cv_texto completo en el listado"
+      ],
+      "endpoints": ["API-P09", "API-P10"]
+    },
+    {
+      "id": "HAB-003",
+      "titulo": "Endpoints de habilidades",
+      "tipo": "API",
+      "prioridad": "BAJA",
+      "estado": "PENDIENTE",
+      "ola": 5,
+      "cu": "apoyo CU-08",
+      "tarea_perfil": "T-08",
+      "depende_de": ["HAB-001", "VAC-004"],
+      "descripcion": "Catalogo de habilidades por empresa, para que las vacantes declaren sus requisitos.",
+      "archivos_nuevos": [
+        "src/ssas/habilidades/infrastructure/http/router.py",
+        "src/ssas/habilidades/infrastructure/http/schemas.py",
+        "tests/unit/test_habilidades_api.py"
+      ],
+      "archivos_modificados": ["docs/02_API_ENDPOINTS.md"],
+      "integracion_requerida": ["src/ssas/core/api/router.py"],
+      "referencia": "src/ssas/cargos/infrastructure/http/router.py",
+      "criterios_aceptacion": [
+        "GET /api/v1/habilidades lista solo las de la empresa del token",
+        "POST responde 409 si el nombre ya existe en la empresa",
+        "responde 403 sin el permiso"
+      ],
+      "endpoints": ["API-P17", "API-P18"]
+    },
+
+    {
+      "id": "NOT-001",
+      "titulo": "Servicio de notificaciones y cola asincrona",
+      "tipo": "INTEGRATION",
+      "prioridad": "MEDIA",
+      "estado": "BLOQUEADO",
+      "ola": null,
+      "cu": "CU-35",
+      "tarea_perfil": "T-13",
+      "depende_de": ["POR-001"],
+      "descripcion": "T-13 del cronograma. No existe nada en el codigo: ni Celery, ni broker, ni servicio de envio. Queda FUERA del Sprint 1: sin decision sobre el broker (DEC-06) ni sobre el almacenamiento de archivos (DEC-03) no se puede cerrar.",
+      "archivos_nuevos": [],
+      "archivos_modificados": [],
+      "referencia": null,
+      "criterios_aceptacion": [],
+      "endpoints": [],
+      "bloqueado_por_decision": "DEC-06"
+    },
+    {
+      "id": "PERF-001",
+      "titulo": "Alinear el perfil del proyecto con el codigo",
+      "tipo": "DOCUMENTATION",
+      "prioridad": "ALTA",
+      "estado": "PENDIENTE",
+      "ola": 6,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "El perfil usa dos numeraciones de CU distintas: en 3.10.2 CU-07 es Gestionar vacante y en el Capitulo 4 CU-07 es Gestionar departamentos y cargos. Ademas el diseno de datos del Sprint 1 todavia crea plan_suscripcion y suscripcion, que el codigo elimino, y documenta 23 tablas cuando el ORM define 19. Es el primer error que detecta la docente.",
+      "archivos_nuevos": [],
+      "archivos_modificados": ["docs/01_ESTADO_PROYECTO.md"],
+      "referencia": "Perfil_Proyecto_RRHH_Grupo12.docx, secciones 3.9, 3.10 y Capitulo 4",
+      "criterios_aceptacion": [
+        "una sola numeracion de CU en todo el perfil",
+        "el script DDL del perfil se puede ejecutar contra el esquema actual",
+        "el numero de tablas del perfil coincide con el del ORM",
+        "CP-S1-21 refleja el resultado real tras BUG-001"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "MIG-001",
+      "titulo": "Normalizar la numeracion de migraciones",
+      "tipo": "REFACTOR",
+      "prioridad": "MEDIA",
+      "estado": "PENDIENTE",
+      "ola": 6,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": ["MIG-002"],
+      "descripcion": "Hay dos migraciones numeradas 0002 (20260825_0002 y 20260830_0002) y dos que conservan el hash autogenerado (0d142a1a7539, 7694bb109d4b). Alembic se guia por down_revision, asi que no rompe nada, pero confunde el orden real. Hacerlo DESPUES de MIG-002 y solo si la base de produccion lo tolera.",
+      "archivos_nuevos": [],
+      "archivos_modificados": ["migrations/versions/"],
+      "referencia": "convencion AAAAMMDD_000N_descripcion",
+      "criterios_aceptacion": [
+        "no hay dos migraciones con el mismo numero",
+        "ninguna conserva el hash autogenerado",
+        "alembic history muestra una cadena lineal legible",
+        "alembic heads sigue devolviendo UNA cabeza"
+      ],
+      "endpoints": [],
+      "riesgos": "Renombrar revisiones ya aplicadas en produccion rompe alembic_version. Verificar el estado de la base antes."
+    },
+    {
+      "id": "DOC-002",
+      "titulo": "Regenerar la coleccion Postman desde el OpenAPI",
+      "tipo": "DOCUMENTATION",
+      "prioridad": "BAJA",
+      "estado": "PENDIENTE",
+      "ola": 6,
+      "cu": null,
+      "tarea_perfil": "T1-10",
+      "depende_de": ["VAC-003", "POR-001", "TAB-002", "TAB-003"],
+      "descripcion": "La coleccion se llama SSAH_RRHH y el proyecto es SSAS. Ademas no incluye los 18 endpoints nuevos.",
+      "archivos_nuevos": [],
+      "archivos_modificados": ["docs/postman/SSAH_RRHH_Sprint1.postman_collection.json"],
+      "referencia": "generar desde /openapi.json",
+      "criterios_aceptacion": [
+        "la coleccion se llama SSAS_RRHH",
+        "incluye los 64 endpoints",
+        "las variables de entorno estan parametrizadas y sin credenciales reales"
+      ],
+      "endpoints": []
+    },
+    {
+      "id": "DOC-001",
+      "titulo": "Retirar el esquema SQL escrito a mano",
+      "tipo": "DOCUMENTATION",
+      "prioridad": "MEDIA",
+      "estado": "PENDIENTE",
+      "ola": 6,
+      "cu": null,
+      "tarea_perfil": null,
+      "depende_de": [],
+      "descripcion": "docs/database/schema_sprint0_sprint1.sql documenta 23 tablas y el ORM define 19: es una segunda fuente de verdad ya desincronizada. El esquema real lo definen las migraciones.",
+      "archivos_nuevos": [],
+      "archivos_modificados": ["docs/database/"],
+      "referencia": null,
+      "criterios_aceptacion": [
+        "el archivo esta archivado o eliminado",
+        "la documentacion apunta a las migraciones como fuente unica del esquema"
+      ],
+      "endpoints": []
+    }
+  ]
+}

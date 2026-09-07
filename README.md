@@ -38,6 +38,11 @@ python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 # Configurar DATABASE_URL y APP_SECRET_KEY en .env
 
+# Para pruebas de integración, usar una base separada:
+$env:SETTINGS_ENV_FILE = ".env.test"
+$env:APP_ENV = "test"
+$env:RUN_DATABASE_TESTS = "1"
+
 python -m uvicorn ssas.main:app --reload
 ```
 

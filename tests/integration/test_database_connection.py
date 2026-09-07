@@ -71,6 +71,6 @@ async def test_database_schema_matches_orm_metadata() -> None:
 
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_DATABASE_TESTS") != "1",
-    reason="Pruebas de base real: ejecutar con RUN_DATABASE_TESTS=1",
+    os.getenv("RUN_DATABASE_TESTS") != "1" or os.getenv("APP_ENV") != "test",
+    reason="Pruebas de base real: requieren RUN_DATABASE_TESTS=1 y APP_ENV=test",
 )

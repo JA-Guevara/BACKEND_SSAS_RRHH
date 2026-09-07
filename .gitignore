@@ -10,6 +10,8 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.test
+.env.*.local
 
 # IDE
 .vscode/
