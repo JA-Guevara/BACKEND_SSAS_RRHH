@@ -16,6 +16,27 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _rename_trigger_if_exists(table: str, old_name: str, new_name: str) -> None:
+    """Renombra un trigger porque PostgreSQL no admite ALTER TRIGGER IF EXISTS."""
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM pg_trigger
+                WHERE tgname = '{old_name}'
+                  AND tgrelid = '{table}'::regclass
+                  AND NOT tgisinternal
+            ) THEN
+                ALTER TRIGGER {old_name} ON {table} RENAME TO {new_name};
+            END IF;
+        END
+        $$
+        """
+    )
+
+
 def upgrade() -> None:
     op.add_column(
         "departamento",
@@ -104,9 +125,10 @@ def upgrade() -> None:
     )
 
     op.rename_table("etapa_postulacion", "etapa_reclutamiento")
-    op.execute(
-        "ALTER TRIGGER trg_etapa_postulacion_updated_at "
-        "ON etapa_reclutamiento RENAME TO trg_etapa_reclutamiento_updated_at"
+    _rename_trigger_if_exists(
+        "etapa_reclutamiento",
+        "trg_etapa_postulacion_updated_at",
+        "trg_etapa_reclutamiento_updated_at",
     )
     op.drop_constraint(
         "uq_etapa_postulacion_codigo",
@@ -456,9 +478,10 @@ def downgrade() -> None:
     )
     op.create_unique_constraint("uq_etapa_postulacion_orden", "etapa_reclutamiento", ["orden"])
     op.create_unique_constraint("uq_etapa_postulacion_codigo", "etapa_reclutamiento", ["codigo"])
-    op.execute(
-        "ALTER TRIGGER trg_etapa_reclutamiento_updated_at "
-        "ON etapa_reclutamiento RENAME TO trg_etapa_postulacion_updated_at"
+    _rename_trigger_if_exists(
+        "etapa_reclutamiento",
+        "trg_etapa_reclutamiento_updated_at",
+        "trg_etapa_postulacion_updated_at",
     )
     op.rename_table("etapa_reclutamiento", "etapa_postulacion")
 
