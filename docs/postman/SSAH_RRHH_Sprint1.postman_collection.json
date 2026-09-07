@@ -1,0 +1,681 @@
+{
+  "info": {
+    "_postman_id": "fbb3c3f2-0e73-47f8-a8d2-ace000000110",
+    "name": "SSAH RRHH - Sprint 1",
+    "description": "Coleccion Postman del Sprint 1. Usa {{base_url}} como URL base. Las rutas privadas requieren Bearer {{access_token}}; las rutas de portal publico no requieren token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "login_email",
+      "value": ""
+    },
+    {
+      "key": "login_password",
+      "value": ""
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "empresa_id",
+      "value": ""
+    },
+    {
+      "key": "departamento_id",
+      "value": ""
+    },
+    {
+      "key": "cargo_id",
+      "value": ""
+    },
+    {
+      "key": "vacante_id",
+      "value": ""
+    },
+    {
+      "key": "codigo_seguimiento",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Verifica que la API este levantada."
+      }
+    },
+    {
+      "name": "Autenticación",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "  if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicia sesion y guarda access_token y refresh_token en variables de la coleccion."
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "  if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Renueva el par de tokens usando refresh_token."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Cierra sesion revocando el refresh token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Departamentos",
+      "item": [
+        {
+          "name": "Listar departamentos",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/departamentos?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departamentos"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear departamento",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.id) pm.collectionVariables.set('departamento_id', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Recursos Humanos\",\n  \"descripcion\": \"Departamento de gestion humana\",\n  \"activo\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departamentos?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departamentos"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Actualizar departamento",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Talento Humano\",\n  \"descripcion\": \"Gestion de personas\",\n  \"activo\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departamentos/{{departamento_id}}?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departamentos",
+                "{{departamento_id}}"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Eliminar departamento",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/departamentos/{{departamento_id}}?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departamentos",
+                "{{departamento_id}}"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cargos",
+      "item": [
+        {
+          "name": "Listar cargos",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/cargos?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cargos"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear cargo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.id) pm.collectionVariables.set('cargo_id', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Analista de Recursos Humanos\",\n  \"descripcion\": \"Gestion de personal\",\n  \"departamento_id\": \"{{departamento_id}}\",\n  \"activo\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/cargos?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cargos"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Actualizar cargo",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Analista RRHH\",\n  \"descripcion\": \"Gestion operativa de RRHH\",\n  \"departamento_id\": \"{{departamento_id}}\",\n  \"activo\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/cargos/{{cargo_id}}?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cargos",
+                "{{cargo_id}}"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Eliminar cargo",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/cargos/{{cargo_id}}?empresa_id={{empresa_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cargos",
+                "{{cargo_id}}"
+              ],
+              "query": [
+                {
+                  "key": "empresa_id",
+                  "value": "{{empresa_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vacantes",
+      "description": "Pendiente: no se encontro router HTTP real de vacantes en el backend actual, por eso no se agregan rutas inventadas."
+    },
+    {
+      "name": "Portal público",
+      "item": [
+        {
+          "name": "Crear postulacion publica con CV",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.codigo_seguimiento) pm.collectionVariables.set('codigo_seguimiento', json.codigo_seguimiento);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "vacante_id",
+                  "value": "{{vacante_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nombres",
+                  "value": "Juan",
+                  "type": "text"
+                },
+                {
+                  "key": "apellidos",
+                  "value": "Perez",
+                  "type": "text"
+                },
+                {
+                  "key": "ci",
+                  "value": "1234567",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "juan.perez@test.com",
+                  "type": "text"
+                },
+                {
+                  "key": "telefono",
+                  "value": "70000000",
+                  "type": "text"
+                },
+                {
+                  "key": "ciudad",
+                  "value": "Santa Cruz",
+                  "type": "text"
+                },
+                {
+                  "key": "nivel_educativo",
+                  "value": "LICENCIATURA",
+                  "type": "text"
+                },
+                {
+                  "key": "anios_experiencia",
+                  "value": "2",
+                  "type": "text"
+                },
+                {
+                  "key": "linkedin",
+                  "value": "https://linkedin.com/in/juanperez",
+                  "type": "text"
+                },
+                {
+                  "key": "cv",
+                  "type": "file",
+                  "src": "C:\\\\ruta\\\\cv.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/publico/postulaciones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "publico",
+                "postulaciones"
+              ]
+            },
+            "description": "Ruta publica. Recibe datos del postulante y CV PDF/DOCX maximo 5 MB."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Postulaciones",
+      "item": [
+        {
+          "name": "Consultar postulacion por codigo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/publico/postulaciones/{{codigo_seguimiento}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "publico",
+                "postulaciones",
+                "{{codigo_seguimiento}}"
+              ]
+            },
+            "description": "Ruta publica. Consulta el estado de una postulacion usando el codigo de seguimiento."
+          }
+        }
+      ],
+      "description": "Incluye la consulta publica por codigo. Endpoints internos de postulaciones quedan pendientes si se implementan despues."
+    }
+  ]
+}

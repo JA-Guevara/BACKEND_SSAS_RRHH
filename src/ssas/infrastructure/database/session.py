@@ -1,4 +1,6 @@
 from collections.abc import AsyncIterator
+import asyncio
+import sys
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -6,6 +8,9 @@ from ssas.config.settings import settings
 from ssas.infrastructure.database.base import import_all_models
 
 import_all_models()
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 engine = create_async_engine(
     settings.database_url,

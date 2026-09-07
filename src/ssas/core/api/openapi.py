@@ -5,6 +5,12 @@ TAG_USERS = "Usuarios"
 TAG_COMPANIES = "Empresas"
 TAG_ROLES = "Roles y permisos"
 TAG_AUDIT = "Bitácora"
+TAG_DEPARTAMENTOS = "Departamentos"
+TAG_CARGOS = "Cargos"
+TAG_VACANTES = "Vacantes"
+TAG_PORTAL_PUBLICO = "Portal público"
+TAG_POSTULACIONES = "Postulaciones"
+TAG_STATUS = "Estado"
 
 EMPRESA_SCOPE_DESCRIPTION = (
     "Identificador de empresa. Los administradores de plataforma pueden indicarlo para "

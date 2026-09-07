@@ -30,6 +30,9 @@ dist/
 # Database
 *.sqlite3
 
+# Local uploads
+uploads/
+
 # OS
 .DS_Store
 Thumbs.db
