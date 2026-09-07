@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from ssas.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
     from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
     from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
+    from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
 
 class UserModel(Base):
@@ -90,6 +91,9 @@ class UserModel(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     bitacoras: Mapped[list["AuditLogModel"]] = relationship(back_populates="user")
+    vacantes_responsables: Mapped[list["VacanteModel"]] = relationship(
+        back_populates="responsable"
+    )
 
 
 Index(

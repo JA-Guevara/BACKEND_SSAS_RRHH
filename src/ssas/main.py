@@ -8,9 +8,15 @@ from ssas.config.settings import settings
 from ssas.core.api.openapi import (
     TAG_AUDIT,
     TAG_AUTH,
+    TAG_CARGOS,
     TAG_COMPANIES,
+    TAG_DEPARTAMENTOS,
+    TAG_POSTULACIONES,
+    TAG_PORTAL_PUBLICO,
     TAG_ROLES,
+    TAG_STATUS,
     TAG_USERS,
+    TAG_VACANTES,
 )
 from ssas.core.api.router import api_router
 from ssas.core.tenancy.middleware import EmpresaContextMiddleware
@@ -61,6 +67,30 @@ app = FastAPI(
             "name": TAG_AUDIT,
             "description": "Consulta de eventos registrados por módulo, usuario y empresa.",
         },
+        {
+            "name": TAG_DEPARTAMENTOS,
+            "description": "CRUD de departamentos limitado por empresa autenticada.",
+        },
+        {
+            "name": TAG_CARGOS,
+            "description": "CRUD de cargos limitado por empresa y opcionalmente por departamento.",
+        },
+        {
+            "name": TAG_VACANTES,
+            "description": "Gestión de vacantes y su publicación durante el ciclo de reclutamiento.",
+        },
+        {
+            "name": TAG_PORTAL_PUBLICO,
+            "description": "Vacantes públicas y postulación externa con hoja de vida.",
+        },
+        {
+            "name": TAG_POSTULACIONES,
+            "description": "Seguimiento y gestión de postulaciones del proceso de reclutamiento.",
+        },
+        {
+            "name": TAG_STATUS,
+            "description": "Estado operativo de la API.",
+        },
     ],
     license_info={"name": "MIT", "identifier": "MIT"},
 )
@@ -80,6 +110,12 @@ async def read_root() -> dict[str, str]:
     return {"message": "Backend SSAS RRHH"}
 
 
-@app.get("/health", include_in_schema=False)
+@app.get(
+    "/health",
+    tags=[TAG_STATUS],
+    summary="Verificar estado del servicio",
+    description="Endpoint público usado para verificar que la API está levantada.",
+    responses={200: {"description": "La API está disponible."}},
+)
 async def health_check() -> dict[str, str]:
     return {"status": "ok"}

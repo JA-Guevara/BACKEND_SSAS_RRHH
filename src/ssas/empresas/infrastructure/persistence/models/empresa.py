@@ -14,7 +14,20 @@ if TYPE_CHECKING:
     from ssas.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
     from ssas.auth.infrastructure.persistence.models.user import UserModel
     from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
+    from ssas.cargos.infrastructure.persistence.models.cargo import CargoModel
+    from ssas.departamentos.infrastructure.persistence.models.departamento import (
+        DepartamentoModel,
+    )
+    from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
+    from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
+        EtapaReclutamientoModel,
+    )
+    from ssas.postulaciones.infrastructure.persistence.models.motivo_rechazo import (
+        MotivoRechazoModel,
+    )
+    from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
     from ssas.roles.infrastructure.persistence.models.role import RoleModel
+    from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
 
 class EmpresaModel(Base):
@@ -57,6 +70,27 @@ class EmpresaModel(Base):
         back_populates="empresa", cascade="all, delete-orphan"
     )
     bitacoras: Mapped[list["AuditLogModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    departamentos: Mapped[list["DepartamentoModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    cargos: Mapped[list["CargoModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    habilidades: Mapped[list["HabilidadModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    vacantes: Mapped[list["VacanteModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    etapas_reclutamiento: Mapped[list["EtapaReclutamientoModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    motivos_rechazo: Mapped[list["MotivoRechazoModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    postulantes: Mapped[list["PostulanteModel"]] = relationship(
         back_populates="empresa", cascade="all, delete-orphan"
     )
 

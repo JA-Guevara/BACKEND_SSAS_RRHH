@@ -22,12 +22,13 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/password/reset",
         "/api/v1/auth/email/verification/resend",
         "/api/v1/auth/email/verify",
+        "/api/v1/publico/postulaciones",
     }
 )
 
 # /api/v1/platform ya NO se excluye: sus rutas pasan por el mismo middleware y las
 # protege el mismo sistema de permisos que el resto de la API.
-PUBLIC_PATH_PREFIXES: tuple[str, ...] = ("/docs/",)
+PUBLIC_PATH_PREFIXES: tuple[str, ...] = ("/docs/", "/api/v1/publico/postulaciones/")
 
 
 class EmpresaContextMiddleware(BaseHTTPMiddleware):

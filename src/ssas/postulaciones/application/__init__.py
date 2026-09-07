@@ -1,0 +1,1 @@
+"""Aplicacion del modulo postulaciones."""

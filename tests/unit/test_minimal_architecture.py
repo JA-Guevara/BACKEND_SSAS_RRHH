@@ -24,6 +24,15 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "password_reset_token",
         "email_verification_token",
         "bitacora",
+        "departamento",
+        "cargo",
+        "habilidad",
+        "vacante",
+        "vacante_habilidad",
+        "postulante",
+        "etapa_reclutamiento",
+        "motivo_rechazo",
+        "postulacion",
     }
 
 
@@ -52,11 +61,17 @@ def test_openapi_is_grouped_and_describes_every_business_operation() -> None:
         "Empresas",
         "Roles y permisos",
         "Bitácora",
+        "Departamentos",
+        "Cargos",
+        "Vacantes",
+        "Portal público",
+        "Postulaciones",
+        "Estado",
     }
 
     assert {tag["name"] for tag in schema["tags"]} == expected_tags
     assert "/" not in schema["paths"]
-    assert "/health" not in schema["paths"]
+    assert "/health" in schema["paths"]
     assert "/api/v1/auth/health" not in schema["paths"]
 
     for operations in schema["paths"].values():
