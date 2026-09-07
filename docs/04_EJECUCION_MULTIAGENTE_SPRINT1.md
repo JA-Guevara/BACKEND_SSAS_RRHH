@@ -87,7 +87,8 @@ El grafo de migraciones se bifurcó en `20260825_0001` y nunca se volvió a unir
                           ┌── 20260825_0002  (borrado_logico)              ← cabeza 1
 <base> ── 20260825_0001 ──┤
                           └── 20260830_0002 ── 7694bb109d4b ── 0d142a1a7539
-                                            ── 20260906_0003 ── 20260906_0004 ← cabeza 2
+                                            ── 20260906_0003 ── 20260906_0004 ── 20260907_0007 ← cabeza 2
+                                                                                  └── 20260907_0008 (merge)
 ```
 
 El daily del 27/08 ya lo anticipaba: *«Coordinar con Jose Armando el orden de las
@@ -96,7 +97,7 @@ migraciones de Alembic (dos cabezas en paralelo)»*. Nunca se resolvió.
 **Qué hacer.** Generar una migración de fusión y no reescribir las existentes:
 
 ```bash
-alembic merge -m "unificar cabezas sprint0 y sprint1" 20260825_0002 20260906_0004
+alembic merge -m "unificar cabezas sprint0 y sprint1" 20260825_0002 20260907_0007
 alembic upgrade head --sql > /dev/null   # debe terminar sin error
 alembic heads                            # debe imprimir UNA sola cabeza
 ```

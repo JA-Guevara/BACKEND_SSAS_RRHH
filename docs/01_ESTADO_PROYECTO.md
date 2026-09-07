@@ -98,8 +98,8 @@ cinco están en rojo**, y eso bloquea a cualquier agente antes de que empiece.
 | `PYTHONPATH=src pytest -q` | **OK** — 39 passed, 3 skipped | — |
 | `pytest -q` | **FALLA** — 8 errores: `ModuleNotFoundError: No module named 'ssas'` | `TOOL-001` |
 | `ruff check src tests` | **FALLA** — 15 errores preexistentes (14 autocorregibles) | `TOOL-002` |
-| `alembic upgrade head` | **FALLA** — `Multiple head revisions are present` | `MIG-002` |
-| `alembic heads` | **DOS cabezas** — `20260825_0002` y `20260906_0004` | `MIG-002` |
+| `alembic upgrade head` | **OK en modo SQL** — merge `20260907_0008` creado | `MIG-002` |
+| `alembic heads` | **UNA cabeza** — `20260907_0008` | `MIG-002` |
 | `python scripts/verificar_documentacion.py` | **NO SE PUEDE** — `scripts/` no está versionado | `DOC-003` |
 
 Dos hallazgos más, verificados leyendo y ejecutando el código:
@@ -256,7 +256,7 @@ bitacora  <- transversal: todos los módulos generan eventos, ninguno depende de
 | 8 | **CP-S1-21 figura como FALLA** en el reporte de pruebas del perfil (05/09/2026): un usuario de la empresa B accede al tablero de la empresa A sin recibir 404 | Fallo de aislamiento multi-tenant documentado y sin resolver → `BUG-001` (CRÍTICA) |
 | 9 | El diseño de datos del Sprint 1 en el perfil todavía crea `plan_suscripcion` y `suscripcion`, y el código las eliminó | El script del perfil no se puede ejecutar contra el esquema actual → `PERF-001` |
 | 10 | El portal público del perfil es `/publico/{empresa_slug}/vacantes`; el código solo expone `/publico/postulaciones` | La ruta documentada no existe → `POR-001` |
-| 11 | **El grafo de Alembic tiene dos cabezas.** `alembic upgrade head` falla con `Multiple head revisions are present`; `alembic heads` devuelve `20260825_0002` y `20260906_0004`, ambas descendientes de `20260825_0001` | **Bloqueador duro.** Un clon nuevo no puede construir el esquema, y ninguna migración nueva se puede añadir sin elegir cabeza. Es más grave que la numeración de la inconsistencia 1 → `MIG-002` (CRÍTICA) |
+| 11 | **Resuelto el 2026-09-07.** El grafo tenía dos cabezas (`20260825_0002` y `20260907_0007`); la revisión de merge `20260907_0008` las unifica y `alembic heads` devuelve una sola | `alembic upgrade --sql head` genera el plan sin error; falta ejecutar la migración sobre la base de pruebas separada antes de Railway → `MIG-002` |
 | 12 | **El rol RECLUTADOR se aprovisiona con cero permisos.** `ROLE_DEFINITIONS` le pide `vacantes:gestionar` y `candidatos:gestionar`; ninguno existe en el catálogo de 28, y `if code_ in permission_by_code` los descarta en silencio | El actor de CU-08, CU-09 y CU-12 no puede operar, y no hay error visible → `SEC-001` (CRÍTICA) |
 | 13 | El backlog planea permisos granulares (`vacantes:ver|crear|…`) y `provision_empresa.py` espera uno grueso (`vacantes:gestionar`) | Si `VAC-004` y `SEC-001` no usan el mismo vocabulario, el rol vuelve a quedar vacío. `DECISIÓN PENDIENTE` → §6 del documento 04 |
 | 14 | `pytest` a secas falla con 8 errores de colección; sólo funciona con `PYTHONPATH=src`. `pip install -e .` no lo arregla | El paso 8 de este protocolo es inejecutable como está escrito → `TOOL-001` |
