@@ -9,7 +9,7 @@ class AuthTokenRepository(ABC):
     async def save_refresh_token(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         token_id: str,
         token_hash: str,
         expires_at: datetime,
@@ -25,14 +25,14 @@ class AuthTokenRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def revoke_all_refresh_tokens(self, user_id: str, empresa_id: str) -> None:
+    async def revoke_all_refresh_tokens(self, user_id: str, empresa_id: str | None) -> None:
         raise NotImplementedError
 
     @abstractmethod
     async def save_password_reset_token(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         token_id: str,
         token_hash: str,
         expires_at: datetime,
@@ -48,12 +48,17 @@ class AuthTokenRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def revoke_password_reset_tokens(self, user_id: str, empresa_id: str) -> None:
+    async def revoke_password_reset_tokens(self, user_id: str, empresa_id: str | None) -> None:
         raise NotImplementedError
 
     @abstractmethod
     async def save_email_verification_token(
-        self, user_id: str, empresa_id: str, token_id: str, token_hash: str, expires_at: datetime
+        self,
+        user_id: str,
+        empresa_id: str | None,
+        token_id: str,
+        token_hash: str,
+        expires_at: datetime,
     ) -> None:
         raise NotImplementedError
 
@@ -66,5 +71,7 @@ class AuthTokenRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def revoke_email_verification_tokens(self, user_id: str, empresa_id: str) -> None:
+    async def revoke_email_verification_tokens(
+        self, user_id: str, empresa_id: str | None
+    ) -> None:
         raise NotImplementedError

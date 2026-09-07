@@ -2,8 +2,8 @@
 
 ## Estado
 
-La migración inicial limpia `20260825_0001` está preparada para una base vacía. Una sola identidad
-atiende cuentas globales y empresariales; toda cuenta nueva debe verificar su correo.
+La revisión `20260825_0002` agrega eliminación lógica recuperable sobre la migración inicial. Una
+sola identidad atiende cuentas globales y empresariales; toda cuenta nueva debe verificar su correo.
 
 ## Política de contraseña
 
@@ -50,12 +50,20 @@ como huellas criptográficas, tienen vencimiento y solo pueden utilizarse una ve
 | PATCH | `/api/v1/usuarios/{id}` | `usuarios:editar` |
 | PATCH | `/api/v1/usuarios/{id}/activar` | `usuarios:editar` |
 | PATCH | `/api/v1/usuarios/{id}/desactivar` | `usuarios:editar` |
+| DELETE | `/api/v1/usuarios/{id}` | `usuarios:eliminar` |
+| PATCH | `/api/v1/usuarios/{id}/restaurar` | `usuarios:restaurar` |
 | PUT | `/api/v1/usuarios/{id}/password` | `usuarios:cambiar_password` |
 | PATCH | `/api/v1/usuarios/{id}/desbloquear` | `usuarios:desbloquear` |
 
 El listado acepta `empresa_id`, `search`, `is_active`, `page` y `per_page`. Para cuentas globales,
 `empresa_id` selecciona una empresa o, si se omite, el ámbito global. Para cuentas empresariales el
-backend fuerza el `empresa_id` del token. No se permite desactivar al último administrador activo.
+backend fuerza el `empresa_id` del token. `incluir_eliminados=true` permite consultar también las
+cuentas eliminadas. No se permite desactivar o eliminar al último administrador activo, ni eliminar
+la cuenta propia.
+
+La eliminación es lógica: conserva roles y bitácora, desactiva la cuenta y revoca sus sesiones. La
+restauración recupera la cuenta todavía inactiva; su acceso solo vuelve después de llamar a
+`PATCH /api/v1/usuarios/{id}/activar`.
 
 ## Configuración SMTP
 
@@ -79,4 +87,4 @@ SMTP_USE_TLS=true
 
 Se registran inicios correctos y fallidos, logout, solicitudes y finalizaciones de recuperación,
 cambio de contraseña, verificación de correo, creación y modificación de usuarios, activación,
-desactivación, desbloqueo y asignación administrativa de contraseña.
+desactivación, eliminación, restauración, desbloqueo y asignación administrativa de contraseña.

@@ -19,7 +19,7 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
     async def save_refresh_token(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         token_id: str,
         token_hash: str,
         expires_at: datetime,
@@ -56,7 +56,7 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         )
         await self.session.flush()
 
-    async def revoke_all_refresh_tokens(self, user_id: str, empresa_id: str) -> None:
+    async def revoke_all_refresh_tokens(self, user_id: str, empresa_id: str | None) -> None:
         await self.session.execute(
             update(RefreshTokenModel)
             .where(
@@ -71,7 +71,7 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
     async def save_password_reset_token(
         self,
         user_id: str,
-        empresa_id: str,
+        empresa_id: str | None,
         token_id: str,
         token_hash: str,
         expires_at: datetime,
@@ -108,7 +108,7 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         )
         await self.session.flush()
 
-    async def revoke_password_reset_tokens(self, user_id: str, empresa_id: str) -> None:
+    async def revoke_password_reset_tokens(self, user_id: str, empresa_id: str | None) -> None:
         await self.session.execute(
             update(PasswordResetTokenModel)
             .where(
@@ -121,7 +121,12 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         await self.session.flush()
 
     async def save_email_verification_token(
-        self, user_id: str, empresa_id: str, token_id: str, token_hash: str, expires_at: datetime
+        self,
+        user_id: str,
+        empresa_id: str | None,
+        token_id: str,
+        token_hash: str,
+        expires_at: datetime,
     ) -> None:
         self.session.add(
             EmailVerificationTokenModel(
@@ -155,7 +160,9 @@ class SqlAlchemyAuthTokenRepository(AuthTokenRepository):
         )
         await self.session.flush()
 
-    async def revoke_email_verification_tokens(self, user_id: str, empresa_id: str) -> None:
+    async def revoke_email_verification_tokens(
+        self, user_id: str, empresa_id: str | None
+    ) -> None:
         await self.session.execute(
             update(EmailVerificationTokenModel)
             .where(

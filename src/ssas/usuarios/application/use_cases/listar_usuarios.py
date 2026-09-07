@@ -12,9 +12,10 @@ class ListarUsuarios:
         is_active: bool | None,
         page: int,
         per_page: int,
+        include_deleted: bool = False,
     ) -> dict:
         items, total = await self.repository.list_usuarios(
-            empresa_id, search, is_active, page, per_page
+            empresa_id, search, is_active, page, per_page, include_deleted
         )
         return {
             "items": items,

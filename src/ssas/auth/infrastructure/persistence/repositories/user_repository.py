@@ -18,6 +18,7 @@ class SqlAlchemyUserRepository(UserRepository):
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.empresa_id == empresa_id,
+                UserModel.eliminado_at.is_(None),
                 func.lower(UserModel.email) == email.strip().lower(),
             )
         )
@@ -28,6 +29,7 @@ class SqlAlchemyUserRepository(UserRepository):
         result = await self.session.execute(
             self._base_query().where(
                 UserModel.empresa_id == empresa_id,
+                UserModel.eliminado_at.is_(None),
                 func.lower(UserModel.username) == username.strip().lower(),
             )
         )
@@ -50,6 +52,7 @@ class SqlAlchemyUserRepository(UserRepository):
         if empresa_slug is None:
             consulta = self._base_query().where(
                 UserModel.empresa_id.is_(None),
+                UserModel.eliminado_at.is_(None),
                 identifier_filter,
             )
         else:
@@ -59,6 +62,8 @@ class SqlAlchemyUserRepository(UserRepository):
                 .where(
                     func.lower(EmpresaModel.slug) == empresa_slug.strip().lower(),
                     EmpresaModel.activo.is_(True),
+                    EmpresaModel.eliminado_at.is_(None),
+                    UserModel.eliminado_at.is_(None),
                     identifier_filter,
                 )
             )
@@ -70,6 +75,7 @@ class SqlAlchemyUserRepository(UserRepository):
             self._base_query().where(
                 UserModel.id == user_id,
                 UserModel.empresa_id == empresa_id,
+                UserModel.eliminado_at.is_(None),
             )
         )
         model = result.scalar_one_or_none()

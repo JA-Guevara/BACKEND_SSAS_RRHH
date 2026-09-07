@@ -22,5 +22,17 @@ class LastAdminCannotBeDisabledError(UsuarioError):
     pass
 
 
+class UsuarioDeletedError(UsuarioError):
+    pass
+
+
+class UsuarioNotDeletedError(UsuarioError):
+    pass
+
+
+class CannotDeleteSelfError(UsuarioError):
+    pass
+
+
 class UsuarioPasswordError(UsuarioError):
     pass

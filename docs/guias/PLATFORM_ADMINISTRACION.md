@@ -35,9 +35,16 @@ El primer superadministrador se crea por consola después de aplicar la migraci�
 | GET/PATCH | `/api/v1/empresas/{id}` | Superadmin: cualquiera; admin empresa: la propia |
 | PATCH | `/api/v1/empresas/{id}/activar` | Solo superadministrador |
 | PATCH | `/api/v1/empresas/{id}/suspender` | Solo superadministrador |
+| DELETE | `/api/v1/empresas/{id}` | Solo superadministrador |
+| PATCH | `/api/v1/empresas/{id}/restaurar` | Solo superadministrador |
 
 Crear una empresa genera sus roles base, el primer `ADMIN_EMPRESA`, su verificación de correo y el
 evento correspondiente de bitácora, todo dentro de la misma transacción.
+
+Eliminar una empresa es una operación lógica: suspende la empresa, desactiva sus usuarios, revoca
+sus sesiones y conserva todos los datos y la bitácora. Restaurarla no reactiva automáticamente ni la
+empresa ni sus usuarios; primero se activa la empresa y después se decide qué cuentas reactivar.
+El listado excluye eliminadas por defecto y admite `incluir_eliminadas=true` para su administración.
 
 ## Usuarios y roles
 

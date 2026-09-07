@@ -53,6 +53,9 @@ class EmpresaResponse(BaseModel):
     ciudad: str | None = None
     logo_url: str | None = None
     activo: bool
+    eliminado_at: datetime | None = None
+    eliminado_por_id: str | None = None
+    eliminada: bool = False
     fecha_registro: datetime
     created_at: datetime
     updated_at: datetime

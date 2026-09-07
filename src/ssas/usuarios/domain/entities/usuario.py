@@ -16,6 +16,12 @@ class Usuario:
     must_change_password: bool = False
     failed_login_attempts: int = 0
     locked_until: datetime | None = None
+    eliminado_at: datetime | None = None
+    eliminado_por_id: str | None = None
     roles: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.eliminado_at is not None

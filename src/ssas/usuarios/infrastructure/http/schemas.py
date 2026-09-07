@@ -36,6 +36,9 @@ class UsuarioResponse(BaseModel):
     must_change_password: bool
     failed_login_attempts: int
     locked_until: datetime | None = None
+    eliminado_at: datetime | None = None
+    eliminado_por_id: str | None = None
+    is_deleted: bool = False
     roles: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

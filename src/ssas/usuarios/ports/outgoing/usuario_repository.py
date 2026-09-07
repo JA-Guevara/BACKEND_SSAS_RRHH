@@ -12,11 +12,14 @@ class UsuarioRepository(ABC):
         is_active: bool | None,
         page: int,
         per_page: int,
+        include_deleted: bool = False,
     ) -> tuple[list[Usuario], int]:
         raise NotImplementedError
 
     @abstractmethod
-    async def get_by_id(self, user_id: str, empresa_id: str | None) -> Usuario | None:
+    async def get_by_id(
+        self, user_id: str, empresa_id: str | None, include_deleted: bool = False
+    ) -> Usuario | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -57,6 +60,16 @@ class UsuarioRepository(ABC):
 
     @abstractmethod
     async def deactivate_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def soft_delete_usuario(
+        self, user_id: str, empresa_id: str | None, actor_id: str
+    ) -> Usuario:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def restore_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         raise NotImplementedError
 
     @abstractmethod

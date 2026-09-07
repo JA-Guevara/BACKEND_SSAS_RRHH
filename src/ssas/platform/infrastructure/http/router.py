@@ -103,12 +103,17 @@ async def list_empresas(
         default=None, max_length=150, description="Busca por razón social, nombre, NIT o slug."
     ),
     activo: bool | None = Query(default=None, description="Filtra por estado activo."),
+    incluir_eliminadas: bool = Query(
+        default=False, description="Incluye empresas eliminadas lógicamente."
+    ),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     _: CurrentPlatformAdmin = Depends(require_platform_permission("platform:empresas:ver")),
     session: AsyncSession = Depends(get_session),
 ):
-    items, total = await _repo(session).list_empresas(search, activo, page, per_page)
+    items, total = await _repo(session).list_empresas(
+        search, activo, page, per_page, incluir_eliminadas
+    )
     return page_payload([empresa_payload(item) for item in items], total, page, per_page)
 
 
@@ -241,8 +246,13 @@ async def _set_empresa_status(
     session: AsyncSession,
 ):
     repository = _repo(session)
-    if not await repository.get_empresa(empresa_id):
+    empresa_actual = await repository.get_empresa(empresa_id, include_deleted=True)
+    if not empresa_actual:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    if empresa_actual.eliminado_at is not None:
+        raise HTTPException(
+            status_code=409, detail="Debe restaurar la empresa antes de activarla o suspenderla"
+        )
     empresa = await repository.update_empresa(empresa_id, {"activo": active})
     action = "ACTIVATE" if active else "SUSPEND"
     await _audit(
@@ -297,3 +307,84 @@ async def suspend_empresa(
     session: AsyncSession = Depends(get_session),
 ):
     return await _set_empresa_status(empresa_id, False, request, current, session)
+
+
+@router.delete(
+    "/{empresa_id}",
+    response_model=EmpresaResponse,
+    summary="Eliminar empresa",
+    description=(
+        "Elimina lógicamente la empresa, desactiva sus usuarios y revoca todas sus "
+        "sesiones. Conserva la información y la bitácora. Operación exclusiva de "
+        "plataforma; requiere `platform:empresas:eliminar`."
+    ),
+    responses={409: {"description": "La empresa ya fue eliminada."}},
+)
+async def delete_empresa(
+    empresa_id: str,
+    request: Request,
+    current: CurrentPlatformAdmin = Depends(
+        require_platform_permission("platform:empresas:eliminar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    repository = _repo(session)
+    empresa = await repository.get_empresa(empresa_id, include_deleted=True)
+    if empresa is None:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    if empresa.eliminado_at is not None:
+        raise HTTPException(status_code=409, detail="La empresa ya está eliminada")
+    deleted = await repository.soft_delete_empresa(empresa_id, current.id)
+    await _audit(
+        session,
+        request,
+        current,
+        module="EMPRESAS",
+        action="DELETE",
+        description="Empresa eliminada lógicamente",
+        table="empresa",
+        record_id=empresa_id,
+        previous={"activo": empresa.activo},
+        new={"activo": False, "eliminado_at": str(deleted.eliminado_at)},
+    )
+    return empresa_payload(deleted)
+
+
+@router.patch(
+    "/{empresa_id}/restaurar",
+    response_model=EmpresaResponse,
+    summary="Restaurar empresa",
+    description=(
+        "Recupera una empresa eliminada y la mantiene suspendida. Después debe usarse "
+        "`/activar` para habilitar nuevamente el acceso. Operación exclusiva de "
+        "plataforma; requiere `platform:empresas:restaurar`."
+    ),
+    responses={409: {"description": "La empresa no está eliminada."}},
+)
+async def restore_empresa(
+    empresa_id: str,
+    request: Request,
+    current: CurrentPlatformAdmin = Depends(
+        require_platform_permission("platform:empresas:restaurar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    repository = _repo(session)
+    empresa = await repository.get_empresa(empresa_id, include_deleted=True)
+    if empresa is None:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    if empresa.eliminado_at is None:
+        raise HTTPException(status_code=409, detail="La empresa no está eliminada")
+    restored = await repository.restore_empresa(empresa_id)
+    await _audit(
+        session,
+        request,
+        current,
+        module="EMPRESAS",
+        action="RESTORE",
+        description="Empresa restaurada en estado suspendido",
+        table="empresa",
+        record_id=empresa_id,
+        new={"activo": False, "eliminado_at": None},
+    )
+    return empresa_payload(restored)

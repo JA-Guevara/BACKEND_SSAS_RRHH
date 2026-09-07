@@ -9,12 +9,12 @@ roles, permisos, empresas y bitácora de auditoría sobre una arquitectura modul
 |---|---|
 | FastAPI y OpenAPI | Operativo |
 | PostgreSQL/Supabase | Conectado |
-| Alembic | Migración inicial limpia `20260825_0001` preparada |
+| Alembic | `20260825_0001` aplicada; `20260825_0002` preparada para revisión |
 | Auth, bloqueo, verificación y recuperación | Implementado; requiere SMTP |
-| Usuarios, roles y permisos | Implementado |
+| Usuarios, roles y permisos | CRUD, activación y eliminación recuperable implementados |
 | Bitácora persistente | Implementado |
 | Aislamiento multiempresa | Basado en `empresa_id` |
-| Administración global SSAS | Superadministradores y empresas mediante RBAC |
+| Administración global SSAS | Gestión completa y recuperable de empresas mediante RBAC |
 
 ## Tecnologías principales
 

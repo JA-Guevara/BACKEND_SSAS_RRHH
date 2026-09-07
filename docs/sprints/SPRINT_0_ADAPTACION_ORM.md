@@ -260,7 +260,8 @@ Quedo implementado y verificado:
 - Parametros legales por empresa y vigencia
 - Conexion asincrona a PostgreSQL/Supabase
 - Login y repositorios principales delimitados por empresa
-- Migraciones Alembic 0001 y 0002 aplicadas
+- Migración inicial `20260825_0001` aplicada
+- Migración `20260825_0002` de eliminación lógica preparada y pendiente de aplicación
 - Registro persistente de eventos de Auth y Roles en bitacora
 - Esquema ORM sincronizado con Alembic
 
@@ -300,5 +301,5 @@ alembic upgrade head
 
 Nota para futuras migraciones
 ============================
-La migracion actual ya fue aplicada. Antes de aplicar una migracion nueva se debe revisar el SQL,
-confirmar DATABASE_URL, disponer de respaldo y validar primero en un ambiente no productivo.
+La migración `20260825_0002` todavía no debe marcarse como aplicada hasta revisar su SQL, confirmar
+DATABASE_URL, disponer de respaldo y validarla primero en un ambiente no productivo.

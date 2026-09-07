@@ -7,7 +7,7 @@ class DesactivarUsuario:
     def __init__(self, usuario_repository: UsuarioRepository):
         self.usuario_repository = usuario_repository
 
-    async def execute(self, user_id: str, empresa_id: str) -> Usuario:
+    async def execute(self, user_id: str, empresa_id: str | None) -> Usuario:
         if await self.usuario_repository.get_by_id(user_id, empresa_id) is None:
             raise UsuarioNotFoundError("Usuario no encontrado")
         if await self.usuario_repository.user_has_admin_role(user_id, empresa_id):

@@ -43,7 +43,7 @@ async def test_minimal_schema_is_applied() -> None:
                     "to_regclass('public.bitacora')"
                 )
             )
-        assert revision == "20260825_0001"
+        assert revision == "20260825_0002"
         assert all(tables.one())
     finally:
         await engine.dispose()

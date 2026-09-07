@@ -38,6 +38,7 @@ class UserModel(Base):
         Index("idx_usuario_empresa_id", "empresa_id"),
         Index("idx_usuario_email", "email"),
         Index("idx_usuario_bloqueado_hasta", "bloqueado_hasta"),
+        Index("idx_usuario_eliminado_at", "eliminado_at"),
         CheckConstraint(
             "intentos_fallidos >= 0",
             name="ck_usuario_intentos_fallidos_no_negativo",
@@ -70,6 +71,8 @@ class UserModel(Base):
         "activo", Boolean, nullable=False, server_default="true"
     )
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    eliminado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    eliminado_por_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

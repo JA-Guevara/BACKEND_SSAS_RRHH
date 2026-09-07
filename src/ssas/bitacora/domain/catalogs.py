@@ -25,6 +25,7 @@ class AuditAction(StrEnum):
     CREATE = "CREATE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    RESTORE = "RESTORE"
     ACTIVATE = "ACTIVATE"
     DEACTIVATE = "DEACTIVATE"
     ASSIGN = "ASSIGN"

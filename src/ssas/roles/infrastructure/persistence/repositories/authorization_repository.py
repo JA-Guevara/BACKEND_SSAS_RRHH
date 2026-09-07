@@ -27,6 +27,7 @@ class SqlAlchemyAuthorizationRepository(AuthorizationRepository):
         condiciones = [
             UserModel.id == user_id,
             UserModel.is_active.is_(True),
+            UserModel.eliminado_at.is_(None),
             UserModel.email_verified.is_(True),
             or_(
                 UserModel.bloqueado_hasta.is_(None),
@@ -55,6 +56,7 @@ class SqlAlchemyAuthorizationRepository(AuthorizationRepository):
                 UserModel.empresa_id == empresa_id,
                 EmpresaModel.id == empresa_id,
                 EmpresaModel.activo.is_(True),
+                EmpresaModel.eliminado_at.is_(None),
                 RoleModel.empresa_id == empresa_id,
             ]
 

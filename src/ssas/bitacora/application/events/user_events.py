@@ -18,6 +18,12 @@ class UserEvents:
     async def deactivated(self, **context):
         return await self._record(AuditAction.DEACTIVATE, "Usuario desactivado", **context)
 
+    async def deleted(self, **context):
+        return await self._record(AuditAction.DELETE, "Usuario eliminado", **context)
+
+    async def restored(self, **context):
+        return await self._record(AuditAction.RESTORE, "Usuario restaurado", **context)
+
     async def password_changed(self, **context):
         return await self._record(AuditAction.UPDATE, "Contraseña temporal asignada", **context)
 

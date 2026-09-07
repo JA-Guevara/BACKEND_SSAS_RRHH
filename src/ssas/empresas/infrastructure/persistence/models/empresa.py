@@ -32,7 +32,10 @@ if TYPE_CHECKING:
 
 class EmpresaModel(Base):
     __tablename__ = "empresa"
-    __table_args__ = (CheckConstraint("length(trim(slug)) > 0", name="chk_empresa_slug_no_vacio"),)
+    __table_args__ = (
+        CheckConstraint("length(trim(slug)) > 0", name="chk_empresa_slug_no_vacio"),
+        Index("idx_empresa_eliminado_at", "eliminado_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
@@ -47,6 +50,8 @@ class EmpresaModel(Base):
     ciudad: Mapped[str | None] = mapped_column(String(100), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    eliminado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    eliminado_por_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

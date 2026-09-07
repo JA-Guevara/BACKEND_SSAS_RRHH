@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import delete, func, insert, or_, select, update
@@ -26,8 +27,11 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         is_active: bool | None,
         page: int,
         per_page: int,
+        include_deleted: bool = False,
     ) -> tuple[list[Usuario], int]:
         conditions = [UserModel.empresa_id == empresa_id]
+        if not include_deleted:
+            conditions.append(UserModel.eliminado_at.is_(None))
         if is_active is not None:
             conditions.append(UserModel.is_active.is_(is_active))
         if search:
@@ -52,9 +56,14 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         )
         return [self._to_entity(model) for model in result.scalars().unique().all()], total
 
-    async def get_by_id(self, user_id: str, empresa_id: str | None) -> Usuario | None:
+    async def get_by_id(
+        self, user_id: str, empresa_id: str | None, include_deleted: bool = False
+    ) -> Usuario | None:
+        conditions = [UserModel.id == user_id, UserModel.empresa_id == empresa_id]
+        if not include_deleted:
+            conditions.append(UserModel.eliminado_at.is_(None))
         result = await self.session.execute(
-            self._base_query().where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            self._base_query().where(*conditions)
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
@@ -138,7 +147,11 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
     async def activate_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
         await self.session.execute(
             update(UserModel)
-            .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
+            .where(
+                UserModel.id == user_id,
+                UserModel.empresa_id == empresa_id,
+                UserModel.eliminado_at.is_(None),
+            )
             .values(is_active=True)
         )
         await self.session.flush()
@@ -152,6 +165,44 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             update(UserModel)
             .where(UserModel.id == user_id, UserModel.empresa_id == empresa_id)
             .values(is_active=False)
+        )
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
+    async def soft_delete_usuario(
+        self, user_id: str, empresa_id: str | None, actor_id: str
+    ) -> Usuario:
+        await self.session.execute(
+            update(UserModel)
+            .where(
+                UserModel.id == user_id,
+                UserModel.empresa_id == empresa_id,
+                UserModel.eliminado_at.is_(None),
+            )
+            .values(
+                is_active=False,
+                eliminado_at=datetime.now(UTC),
+                eliminado_por_id=actor_id,
+            )
+        )
+        await self.session.flush()
+        usuario = await self.get_by_id(user_id, empresa_id, include_deleted=True)
+        if usuario is None:
+            raise UsuarioNotFoundError("Usuario no encontrado")
+        return usuario
+
+    async def restore_usuario(self, user_id: str, empresa_id: str | None) -> Usuario:
+        await self.session.execute(
+            update(UserModel)
+            .where(
+                UserModel.id == user_id,
+                UserModel.empresa_id == empresa_id,
+                UserModel.eliminado_at.is_not(None),
+            )
+            .values(is_active=False, eliminado_at=None, eliminado_por_id=None)
         )
         await self.session.flush()
         usuario = await self.get_by_id(user_id, empresa_id)
@@ -181,6 +232,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             .where(
                 UserModel.empresa_id == empresa_id,
                 UserModel.is_active.is_(True),
+                UserModel.eliminado_at.is_(None),
                 RoleModel.empresa_id == empresa_id,
                 RoleModel.is_active.is_(True),
                 self._admin_role_filter(empresa_id),
@@ -277,6 +329,8 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             must_change_password=model.debe_cambiar_password,
             failed_login_attempts=model.intentos_fallidos,
             locked_until=model.bloqueado_hasta,
+            eliminado_at=model.eliminado_at,
+            eliminado_por_id=model.eliminado_por_id,
             roles=[role.name for role in model.roles if role.is_active],
             created_at=model.created_at,
             updated_at=model.updated_at,

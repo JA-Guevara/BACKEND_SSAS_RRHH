@@ -94,6 +94,20 @@ def test_openapi_explains_multitenant_scope_and_login_lock() -> None:
     assert "propia empresa" in empresa_parameter["description"].lower()
 
 
+def test_openapi_exposes_recoverable_company_and_user_deletion() -> None:
+    paths = app.openapi()["paths"]
+
+    assert "delete" in paths["/api/v1/empresas/{empresa_id}"]
+    assert "patch" in paths["/api/v1/empresas/{empresa_id}/restaurar"]
+    assert "delete" in paths["/api/v1/usuarios/{usuario_id}"]
+    assert "patch" in paths["/api/v1/usuarios/{usuario_id}/restaurar"]
+
+    company_description = paths["/api/v1/empresas/{empresa_id}"]["delete"]["description"]
+    user_description = paths["/api/v1/usuarios/{usuario_id}"]["delete"]["description"]
+    assert "lógicamente" in company_description
+    assert "revoca" in user_description
+
+
 def test_platform_admin_can_select_target_scope() -> None:
     current = CurrentUser(id="admin", empresa_id=None, roles=["SUPER_ADMIN"])
     assert _target_empresa(current, None) is None

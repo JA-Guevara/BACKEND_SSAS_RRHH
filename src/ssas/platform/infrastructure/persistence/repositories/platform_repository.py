@@ -1,6 +1,14 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.auth.infrastructure.persistence.models.email_verification_token import (
+    EmailVerificationTokenModel,
+)
+from ssas.auth.infrastructure.persistence.models.password_reset_token import PasswordResetTokenModel
+from ssas.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
+from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 
@@ -10,9 +18,14 @@ class PlatformRepository:
         self.session = session
 
     async def list_empresas(
-        self, search: str | None, activo: bool | None, page: int, per_page: int
+        self,
+        search: str | None,
+        activo: bool | None,
+        page: int,
+        per_page: int,
+        include_deleted: bool = False,
     ) -> tuple[list[EmpresaModel], int]:
-        filters = []
+        filters = [] if include_deleted else [EmpresaModel.eliminado_at.is_(None)]
         if activo is not None:
             filters.append(EmpresaModel.activo.is_(activo))
         if search:
@@ -37,8 +50,12 @@ class PlatformRepository:
         )
         return list((await self.session.execute(query)).scalars().unique().all()), total
 
-    async def get_empresa(self, empresa_id: str, *, lock: bool = False) -> EmpresaModel | None:
+    async def get_empresa(
+        self, empresa_id: str, *, lock: bool = False, include_deleted: bool = False
+    ) -> EmpresaModel | None:
         query = select(EmpresaModel).where(EmpresaModel.id == empresa_id)
+        if not include_deleted:
+            query = query.where(EmpresaModel.eliminado_at.is_(None))
         if lock:
             query = query.with_for_update()
         return (await self.session.execute(query)).scalar_one_or_none()
@@ -57,6 +74,58 @@ class PlatformRepository:
         )
         await self.session.flush()
         return await self.get_empresa(empresa_id)
+
+    async def soft_delete_empresa(self, empresa_id: str, actor_id: str) -> EmpresaModel:
+        now = datetime.now(UTC)
+        await self.session.execute(
+            update(EmpresaModel)
+            .where(EmpresaModel.id == empresa_id, EmpresaModel.eliminado_at.is_(None))
+            .values(activo=False, eliminado_at=now, eliminado_por_id=actor_id)
+        )
+        await self.session.execute(
+            update(UserModel)
+            .where(UserModel.empresa_id == empresa_id)
+            .values(is_active=False)
+        )
+        await self.session.execute(
+            update(RefreshTokenModel)
+            .where(
+                RefreshTokenModel.empresa_id == empresa_id,
+                RefreshTokenModel.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        await self.session.execute(
+            update(PasswordResetTokenModel)
+            .where(
+                PasswordResetTokenModel.empresa_id == empresa_id,
+                PasswordResetTokenModel.used_at.is_(None),
+            )
+            .values(used_at=now)
+        )
+        await self.session.execute(
+            update(EmailVerificationTokenModel)
+            .where(
+                EmailVerificationTokenModel.empresa_id == empresa_id,
+                EmailVerificationTokenModel.used_at.is_(None),
+            )
+            .values(used_at=now)
+        )
+        await self.session.flush()
+        empresa = await self.get_empresa(empresa_id, include_deleted=True)
+        assert empresa is not None
+        return empresa
+
+    async def restore_empresa(self, empresa_id: str) -> EmpresaModel:
+        await self.session.execute(
+            update(EmpresaModel)
+            .where(EmpresaModel.id == empresa_id, EmpresaModel.eliminado_at.is_not(None))
+            .values(activo=False, eliminado_at=None, eliminado_por_id=None)
+        )
+        await self.session.flush()
+        empresa = await self.get_empresa(empresa_id)
+        assert empresa is not None
+        return empresa
 
     # ── Bitácora ──────────────────────────────────────────────────────────────
     # Los eventos de plataforma son filas de 'bitacora' con empresa_id NULL. Antes

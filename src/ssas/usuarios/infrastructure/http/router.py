@@ -24,13 +24,18 @@ from ssas.usuarios.application.use_cases.cambiar_password_usuario import Cambiar
 from ssas.usuarios.application.use_cases.crear_usuario import CrearUsuario
 from ssas.usuarios.application.use_cases.desactivar_usuario import DesactivarUsuario
 from ssas.usuarios.application.use_cases.desbloquear_usuario import DesbloquearUsuario
+from ssas.usuarios.application.use_cases.eliminar_usuario import EliminarUsuario
 from ssas.usuarios.application.use_cases.listar_usuarios import ListarUsuarios
 from ssas.usuarios.application.use_cases.obtener_usuario import ObtenerUsuario
+from ssas.usuarios.application.use_cases.restaurar_usuario import RestaurarUsuario
 from ssas.usuarios.domain.exceptions import (
+    CannotDeleteSelfError,
     InvalidRoleForEmpresaError,
     LastAdminCannotBeDisabledError,
     UsuarioAlreadyExistsError,
+    UsuarioDeletedError,
     UsuarioError,
+    UsuarioNotDeletedError,
     UsuarioNotFoundError,
     UsuarioWithoutRoleError,
 )
@@ -77,7 +82,15 @@ def _audit_context(request: Request, current_user: CurrentUser) -> dict[str, str
 def _raise_http_usuario_error(exc: UsuarioError) -> None:
     if isinstance(exc, UsuarioNotFoundError):
         code = status.HTTP_404_NOT_FOUND
-    elif isinstance(exc, UsuarioAlreadyExistsError):
+    elif isinstance(
+        exc,
+        (
+            UsuarioAlreadyExistsError,
+            UsuarioDeletedError,
+            UsuarioNotDeletedError,
+            CannotDeleteSelfError,
+        ),
+    ):
         code = status.HTTP_409_CONFLICT
     elif isinstance(
         exc,
@@ -105,6 +118,10 @@ async def listar_usuarios(
         default=None, max_length=120, description="Busca por nombre, usuario o correo."
     ),
     is_active: bool | None = Query(default=None, description="Filtra por estado activo."),
+    incluir_eliminados: bool = Query(
+        default=False,
+        description="Incluye cuentas eliminadas lógicamente. Requiere el mismo alcance autorizado.",
+    ),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     current_user: CurrentUser = Depends(
@@ -113,7 +130,12 @@ async def listar_usuarios(
     session: AsyncSession = Depends(get_session),
 ):
     return await ListarUsuarios(_repository(session)).execute(
-        _target_empresa(current_user, empresa_id), search, is_active, page, per_page
+        _target_empresa(current_user, empresa_id),
+        search,
+        is_active,
+        page,
+        per_page,
+        incluir_eliminados,
     )
 
 
@@ -181,7 +203,7 @@ async def actualizar_usuario(
         role_ids = data.pop("role_ids", None)
         user = await ActualizarUsuario(_repository(session)).execute(
             user_id=usuario_id,
-            empresa_id=current_user.empresa_id,
+            empresa_id=_target_empresa(current_user, empresa_id),
             values=data,
             role_ids=role_ids,
         )
@@ -254,6 +276,77 @@ async def desactivar_usuario(
         )
         await _events(session).deactivated(
             record_id=user.id, **_audit_context(http_request, current_user)
+        )
+        return user
+    except UsuarioError as exc:
+        _raise_http_usuario_error(exc)
+
+
+@router.delete(
+    "/{usuario_id}",
+    response_model=UsuarioResponse,
+    summary="Eliminar usuario",
+    description=(
+        "Elimina lógicamente la cuenta, desactiva su acceso y revoca sus sesiones sin "
+        "borrar roles ni bitácora. No permite autoeliminación ni eliminar al último "
+        "administrador activo. Permisos: `usuarios:eliminar` o "
+        "`platform:usuarios:gestionar`."
+    ),
+    responses={409: {"description": "La cuenta no puede eliminarse en su estado actual."}},
+)
+async def eliminar_usuario(
+    usuario_id: str,
+    http_request: Request,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:eliminar", "platform:usuarios:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        target_empresa = _target_empresa(current_user, empresa_id)
+        user = await EliminarUsuario(
+            _repository(session), SqlAlchemyAuthTokenRepository(session)
+        ).execute(usuario_id, target_empresa, current_user.id)
+        await _events(session).deleted(
+            record_id=user.id,
+            previous_data={"is_active": True},
+            new_data={"is_active": False, "eliminado_at": str(user.eliminado_at)},
+            **_audit_context(http_request, current_user),
+        )
+        return user
+    except UsuarioError as exc:
+        _raise_http_usuario_error(exc)
+
+
+@router.patch(
+    "/{usuario_id}/restaurar",
+    response_model=UsuarioResponse,
+    summary="Restaurar usuario",
+    description=(
+        "Recupera una cuenta eliminada y la mantiene inactiva. Después debe usarse "
+        "`/activar` para habilitar su acceso. Permisos: `usuarios:restaurar` o "
+        "`platform:usuarios:gestionar`."
+    ),
+    responses={409: {"description": "La cuenta no está eliminada."}},
+)
+async def restaurar_usuario(
+    usuario_id: str,
+    http_request: Request,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("usuarios:restaurar", "platform:usuarios:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        user = await RestaurarUsuario(_repository(session)).execute(
+            usuario_id, _target_empresa(current_user, empresa_id)
+        )
+        await _events(session).restored(
+            record_id=user.id,
+            new_data={"is_active": False, "eliminado_at": None},
+            **_audit_context(http_request, current_user),
         )
         return user
     except UsuarioError as exc:
