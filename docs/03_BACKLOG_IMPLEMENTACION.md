@@ -15,17 +15,27 @@
 | ID | Tarea | Módulo | PA / CU | Tipo | Prioridad | Estado | Dependencias | Endpoints |
 |---|---|---|---|---|---|---|---|---|
 | **AUTH-001** | Autenticación y sesión | Auth | PA-01 / CU-03 | API | CRITICA | IMPLEMENTADO | — | API-001, API-002, API-003, API-004, API-005, API-006, API-007, API-008, API-009 |
-| **BUG-001** | Corregir el aislamiento multi-tenant del tablero de candidatos | Tablero | PA-03 / CU-12 | BUG | CRITICA | PENDIENTE | — | API-P11 |
+| **BUG-001** | Corregir el aislamiento multi-tenant del tablero de candidatos | Tablero | PA-03 / CU-12 | BUG | CRITICA | IMPLEMENTADO | — | API-P11 |
 | **INFRA-001** | Separar la base de pruebas de la de producción | Infraestructura | — | ARCHITECTURE | CRITICA | BLOQUEADO | — | — |
+| **MIG-002** | Unificar las dos cabezas de Alembic | Infraestructura | — | DATABASE | CRITICA | PENDIENTE | — | — |
+| **SEC-001** | El rol RECLUTADOR sigue naciendo sin permisos | Empresas | PA-01 / CU-01 | SECURITY | CRITICA | PENDIENTE | — | — |
+| **TEST-004** | Tests de vacantes y portal público | Vacantes | PA-02 / CU-08, CU-09 | TEST | CRITICA | PENDIENTE | TOOL-001, TOOL-002 | API-P01..API-P08 |
+| **TEST-005** | Tests del tablero, etapas y motivos | Tablero | PA-03 / CU-12 | TEST | CRITICA | PENDIENTE | TOOL-001, TOOL-002 | API-P11..API-P16 |
+| **TEST-006** | Test de permisos de los roles base | Empresas | PA-01 / CU-01, CU-05 | TEST | CRITICA | PENDIENTE | SEC-001 | — |
+| **ARCH-001** | Extraer el repositorio del tablero fuera del router | Tablero | PA-03 / CU-12 | REFACTOR | ALTA | PENDIENTE | TEST-005 | API-P11..API-P16 |
+| **DOC-003** | Versionar el trabajo del sprint y normalizar finales de línea | Documentación | — | DOCUMENTATION | ALTA | PENDIENTE | MIG-002, SEC-001, TOOL-001, TOOL-002 | — |
+| **TAB-004** | Seed de etapas base al aprovisionar una empresa | Tablero | PA-03 / CU-12 | USE_CASE | ALTA | PENDIENTE | SEC-001 | API-P15 |
+| **TOOL-001** | `pytest` no encuentra el paquete `ssas` | Infraestructura | — | REFACTOR | ALTA | PENDIENTE | — | — |
+| **TOOL-002** | Dejar `ruff` en cero | Transversal | — | REFACTOR | ALTA | PENDIENTE | — | — |
 | **TEST-001** | Tests de aislamiento entre empresas | Transversal | PA-01 | TEST | CRITICA | PENDIENTE | INFRA-001 | API-010..API-046 |
 | **EMP-001** | Empresas y aprovisionamiento | Empresas | PA-01 / CU-01, CU-02 | API | ALTA | IMPLEMENTADO | ROL-001 | API-026, API-027, API-028, API-029, API-030, API-031, API-032, API-033 |
 | **PERF-001** | Alinear el perfil del proyecto con el código | Documentación | — | DOCUMENTATION | ALTA | PENDIENTE | — | — |
-| **POR-001** | Portal público de empleos | Portal | PA-02 / CU-09 | API | ALTA | PENDIENTE | VAC-003 | API-P07, API-P08 |
+| **POR-001** | Portal público de empleos | Portal | PA-02 / CU-09 | API | ALTA | IMPLEMENTADO | VAC-003 | API-P07, API-P08 |
 | **POS-001** | Postulación pública | Postulaciones | PA-02 / CU-09, CU-12 | API | ALTA | IMPLEMENTADO | — | API-044, API-045 |
 | **ROL-001** | Roles y permisos | Roles | PA-01 / CU-05 | API | ALTA | IMPLEMENTADO | USR-001 | API-020, API-021, API-022, API-023, API-024, API-025 |
-| **TAB-001** | Catálogos de etapas y motivos de rechazo | Tablero | PA-03 / CU-12 | API | ALTA | PENDIENTE | — | API-P15, API-P16 |
-| **TAB-002** | Tablero de candidatos por etapas | Tablero | PA-03 / CU-12 | API | ALTA | PENDIENTE | TAB-001, VAC-003, BUG-001 | API-P11, API-P12 |
-| **TAB-003** | Mover de etapa y rechazar con motivo | Tablero | PA-03 / CU-12 | API | ALTA | PENDIENTE | TAB-002 | API-P13, API-P14 |
+| **TAB-001** | Catálogos de etapas y motivos de rechazo | Tablero | PA-03 / CU-12 | API | ALTA | IMPLEMENTADO | — | API-P15, API-P16 |
+| **TAB-002** | Tablero de candidatos por etapas | Tablero | PA-03 / CU-12 | API | ALTA | IMPLEMENTADO | TAB-001, VAC-003, BUG-001 | API-P11, API-P12 |
+| **TAB-003** | Mover de etapa y rechazar con motivo | Tablero | PA-03 / CU-12 | API | ALTA | IMPLEMENTADO | TAB-002 | API-P13, API-P14 |
 | **TEST-002** | Tests de departamentos y cargos | Organización | PA-04 / CU-19 | TEST | ALTA | PENDIENTE | INFRA-001 | — |
 | **TEST-003** | Tests de empresas (platform) | Empresas | PA-01 / CU-01 | TEST | ALTA | PENDIENTE | INFRA-001 | — |
 | **USR-001** | Gestión de usuarios | Usuarios | PA-01 / CU-04 | API | ALTA | IMPLEMENTADO | AUTH-001 | API-010, API-011, API-012, API-013, API-014, API-015, API-016, API-017, API-018, API-019 |
@@ -37,40 +47,420 @@
 | **CAR-001** | Cargos | Cargos | PA-04 / CU-19 | API | MEDIA | IMPLEMENTADO | DEP-001 | API-040, API-041, API-042, API-043 |
 | **DEP-001** | Departamentos | Departamentos | PA-04 / CU-19 | API | MEDIA | IMPLEMENTADO | EMP-001 | API-036, API-037, API-038, API-039 |
 | **DOC-001** | Retirar el esquema SQL escrito a mano | Documentación | — | DOCUMENTATION | MEDIA | PENDIENTE | — | — |
-| **HAB-001** | Capa de aplicación de habilidades | Habilidades | PA-02 / apoyo CU-08 | USE_CASE | MEDIA | PENDIENTE | — | — |
+| **HAB-001** | Capa de aplicación de habilidades | Habilidades | PA-02 / apoyo CU-08 | USE_CASE | MEDIA | IMPLEMENTADO | — | — |
 | **MIG-001** | Normalizar la numeración de migraciones | Infraestructura | — | REFACTOR | MEDIA | PENDIENTE | — | — |
 | **NOT-001** | Servicio de notificaciones y cola asíncrona | Notificaciones | PA-02 / CU-35 | INTEGRATION | MEDIA | BLOQUEADO | POR-001 | — |
-| **PTE-001** | Repositorio y casos de uso de postulantes | Postulantes | PA-02 / CU-11 | REPOSITORY | MEDIA | PENDIENTE | — | — |
-| **PTE-003** | Endpoints de postulantes | Postulantes | PA-02 / CU-11 | API | MEDIA | PENDIENTE | PTE-001 | API-P09, API-P10 |
+| **PTE-001** | Repositorio y casos de uso de postulantes | Postulantes | PA-02 / CU-11 | REPOSITORY | MEDIA | IMPLEMENTADO | — | — |
+| **PTE-003** | Endpoints de postulantes | Postulantes | PA-02 / CU-11 | API | MEDIA | IMPLEMENTADO | PTE-001 | API-P09, API-P10 |
 | **SYS-001** | Healthcheck | Sistema | — | API | MEDIA | IMPLEMENTADO | — | API-046 |
 | **DOC-002** | Regenerar la colección Postman desde el OpenAPI | Documentación | — | DOCUMENTATION | BAJA | PENDIENTE | — | — |
-| **HAB-003** | Endpoints de habilidades | Habilidades | PA-02 / apoyo CU-08 | API | BAJA | PENDIENTE | HAB-001 | API-P17, API-P18 |
+| **HAB-003** | Endpoints de habilidades | Habilidades | PA-02 / apoyo CU-08 | API | BAJA | IMPLEMENTADO | HAB-001 | API-P17, API-P18 |
 
-**31 tareas:** 4 críticas · 15 altas · 10 medias · 2 bajas
+**41 tareas:** 9 críticas · 20 altas · 10 medias · 2 bajas
 
-## Orden de ejecución sugerido
+> **`IMPLEMENTADO` no es `VALIDADO`.** Las 19 tareas marcadas IMPLEMENTADO del
+> Sprint 1 tienen el endpoint respondiendo según el contrato y **cero tests**.
+> Pasan a `VALIDADO` cuando exista la prueba que lo demuestre: eso es la Ola 1.
+
+## Orden de ejecución
+
+El plan vive en **[`04_EJECUCION_MULTIAGENTE_SPRINT1.md`](04_EJECUCION_MULTIAGENTE_SPRINT1.md)**
+y los textos listos para pegarle a cada agente en
+**[`PROMPT_INICIO_MULTIAGENTE.md`](PROMPT_INICIO_MULTIAGENTE.md)**. La versión consumible
+por un orquestador está en [`tareas_sprint1.json`](tareas_sprint1.json).
+
+**El Sprint 1 está funcionalmente terminado: 65 endpoints.** Lo que falta no es
+funcionalidad, es lo que la vuelve entregable. Verificado ejecutando el código el
+2026-09-07 sobre el árbol de trabajo:
 
 ```text
-INFRA-001  (base de pruebas separada)
-   ├── TEST-001  aislamiento entre empresas
-   ├── TEST-002  departamentos y cargos
-   └── TEST-003  empresas
+OLA 0 — desbloquear la entrega (un agente, secuencial)
+   MIG-002   alembic upgrade head FALLA: dos cabezas → los 15 permisos nuevos
+             no llegan a la base y los 19 endpoints quedan inalcanzables
+   SEC-001   ROLE_DEFINITIONS pide vacantes:gestionar y las migraciones crearon
+             los granulares → RECLUTADOR recibe 0 permisos, en silencio
+   TOOL-001  pytest a secas falla: 8 errores de colección
+   TOOL-002  ruff check src tests: 15 errores, 8 en archivos del Sprint 1
+   DOC-003   los 19 endpoints nuevos NO están commiteados
+   Puerta: alembic heads = 1 · pytest verde a secas · ruff verde · commiteado
 
-VAC-001 ── VAC-002 ──┐
-VAC-004 ─────────────┴── VAC-003 ── VAC-005
-                            └────── VAC-006
-                            └────── POS-003 ── POS-004 (BLOQUEADO)
+OLA 1 — probar lo que ya se escribió (4 agentes)
+   TEST-004 vacantes y portal · TEST-005 tablero (cierra BUG-001 / CP-S1-21)
+   TEST-002 departamentos y cargos · TEST-003 + TEST-006 empresas y roles base
+   Puerta: CP01–CP03 y CP-S1-08…21 en verde · aislamiento probado
 
-PTE-001 ── PTE-003        HAB-001 ── HAB-003
-MIG-001 · DOC-001 · DOC-002   (independientes)
+OLA 2 — devolver la arquitectura a su sitio (3 agentes)
+   ARCH-001 sacar los 8 session.execute de tablero_router.py a repositorios
+   TAB-004  seed de las 7 etapas base al aprovisionar (hoy nacen sin ninguna)
+   INFRA-001 base de pruebas separada de producción
+
+OLA 3 — cierre documental (orquestador)
+   DOC-002 Postman · DOC-001 retirar el SQL a mano
+   PERF-001 alinear el perfil · MIG-001 numeración de migraciones
 ```
 
-> `POS-004` está **BLOQUEADO**: la máquina de estados de las etapas de selección es
-> una decisión de negocio pendiente. No iniciarla hasta resolverla.
+> `NOT-001` queda **fuera del Sprint 1**: falta decidir el broker y dónde se almacenan los
+> CV, porque el disco de Railway es efímero. Las siete decisiones pendientes están en el
+> §6 del documento 04.
 
 ---
 
 ## Fichas
+
+### TASK MIG-002 — Unificar las dos cabezas de Alembic
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | CRITICA | DATABASE | Infraestructura | — |
+
+**Descripción.** El grafo se bifurcó en `20260825_0001` y nunca se volvió a unir. Las
+migraciones de permisos del Sprint 1 extendieron una de las dos ramas, así que el problema
+sigue igual:
+
+```text
+$ alembic upgrade head
+FAILED: Multiple head revisions are present for given argument 'head'
+
+$ alembic heads
+20260825_0002 (head)
+20260907_0007 (head)
+```
+
+```text
+                          ┌── 20260825_0002  (borrado_logico)                    ← cabeza 1
+<base> ── 20260825_0001 ──┤
+                          └── 20260830_0002 ── 7694bb109d4b ── 0d142a1a7539 ──
+                              20260906_0003 ── 0004 ── 0005 ── 0006 ── 0007      ← cabeza 2
+```
+
+**Consecuencia práctica:** las migraciones `0005`, `0006` y `0007` **no se pueden aplicar**
+con el comando documentado. Los 15 permisos nuevos existen en el código y no en la base, y
+los 19 endpoints del Sprint 1 están protegidos por permisos que nadie tiene. El daily del
+27/08 ya lo anticipaba: *«Coordinar con Jose Armando el orden de las migraciones de Alembic
+(dos cabezas en paralelo)»*.
+
+**Dependencias:** ninguna · **Endpoints:** —
+
+**Criterios de aceptación**
+
+- [ ] `alembic heads` devuelve **una** sola línea
+- [ ] `alembic upgrade head --sql` termina sin error
+- [ ] Los 43 permisos existen en la base después de aplicarla
+- [ ] No se reescribió ninguna migración existente
+
+```bash
+alembic merge -m "unificar cabezas sprint0 y sprint1" 20260825_0002 20260907_0007
+alembic heads && alembic upgrade head --sql > /dev/null
+```
+
+**Tests requeridos:** Integration
+
+**Riesgos.** Local, Railway y las pruebas apuntan a la **misma** base de Supabase.
+Verificar `DATABASE_URL`. Para migraciones, conexión directa (5432), no el pooler (6543).
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK SEC-001 — El rol RECLUTADOR sigue naciendo sin permisos
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | CRITICA | SECURITY | Empresas | PA-01 / CU-01 |
+
+**Descripción.** Caso de libro de por qué el reparto entre agentes necesita un dueño de la
+integración. Las migraciones del Sprint 1 crearon los permisos **granulares**
+(`vacantes:ver|crear|editar|publicar|eliminar`), pero `provision_empresa.py` no se tocó y
+sigue pidiendo el **grueso**:
+
+```python
+("RECLUTADOR", "Reclutador", ("vacantes:gestionar", "candidatos:gestionar")),
+```
+
+Ninguno de esos dos códigos existe entre los 43, y el filtro descarta lo que no encuentra
+**sin avisar**:
+
+```python
+selected = [permission_by_code[c] for c in permission_codes if c in permission_by_code]
+```
+
+Comprobado sobre el árbol actual: `RECLUTADOR pide 2 → recibe 0`. El actor de CU-08, CU-09
+y CU-12 no puede llamar a ninguno de los 19 endpoints nuevos, y no hay error que lo delate.
+
+**Dependencias:** ninguna (coordinar con `TEST-006`) · **Endpoints:** —
+
+**Reglas de negocio**
+
+- Un rol de empresa **nunca** recibe permisos con prefijo `platform:`
+- Un código de permiso que no existe es un error de programación, no un caso a ignorar
+
+**Criterios de aceptación**
+
+- [ ] RECLUTADOR recibe `vacantes:ver|crear|editar|publicar`, `postulaciones:ver|gestionar`, `postulantes:ver` y `habilidades:ver`
+- [ ] Un código inexistente en `ROLE_DEFINITIONS` levanta una excepción
+- [ ] Ningún rol de empresa recibe permisos `platform:*`
+
+**Tests requeridos:** Unit · Integration (ver `TEST-006`)
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK TOOL-001 — `pytest` no encuentra el paquete `ssas`
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | ALTA | REFACTOR | Infraestructura | — |
+
+**Descripción.** El paso 8 del protocolo de agentes manda ejecutar `pytest`, y falla:
+
+```text
+$ pytest -q                    -> ModuleNotFoundError: No module named 'ssas' · 8 errors
+$ PYTHONPATH=src pytest -q     -> 39 passed, 3 skipped
+```
+
+`pip install -e .` **no** lo arregla (comprobado). Los 3 saltados llevan freno intencional
+(`RUN_DATABASE_TESTS=1`): eso está bien y no se toca.
+
+**Dependencias:** ninguna · **Endpoints:** —
+
+**Criterios de aceptación**
+
+- [ ] `pytest -q` a secas devuelve `39 passed, 3 skipped`
+- [ ] El comando documentado en `README` y en `01` es el que funciona
+- [ ] Los 3 tests con freno de base real siguen saltándose
+
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]          # ← esta línea
+```
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK TOOL-002 — Dejar `ruff` en cero
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | ALTA | REFACTOR | Transversal | — |
+
+**Descripción.** `ruff check src tests` devuelve **15 errores**, 14 autocorregibles.
+**8 están en archivos recién escritos del Sprint 1**, así que no es deuda vieja.
+
+| Regla | Cuántos | Dónde |
+|---|---|---|
+| `UP037` comillas en anotaciones | 6 | modelos de `etapa_reclutamiento`, `motivo_rechazo`, `postulante` |
+| `I001` imports desordenados | 6 | `main.py`, `database/base.py`, `database/session.py`, `cargo.py`, `vacante.py`, `local_cv_storage.py` |
+| `RUF100` `noqa` sin usar | 1 | `database/base.py:29` |
+| `RUF019` + `SIM102` | 2 | `cargos/…/actualizar_cargo.py:24` — `SIM102` es el único manual |
+
+Aparte: `src/ssas/core/api/router.py` tiene **dos líneas indentadas con tabulación**
+mientras el resto del proyecto usa cuatro espacios.
+
+**Dependencias:** ninguna · **Endpoints:** —
+
+**Criterios de aceptación**
+
+- [ ] `ruff check src tests` dice `All checks passed`
+- [ ] `pytest` sigue en verde
+- [ ] `core/api/router.py` usa 4 espacios, no tabulaciones
+- [ ] No se tocó nada que ruff no haya señalado
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK DOC-003 — Versionar el trabajo del sprint y normalizar finales de línea
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | ALTA | DOCUMENTATION | Documentación | — |
+
+**Descripción.** Dos problemas que rompen cualquier trabajo coordinado:
+
+1. **Los 19 endpoints nuevos no están commiteados.** El último commit es `782ac60` y el
+   árbol tiene 17 archivos nuevos o modificados sin versionar, incluidas las tres
+   migraciones de permisos. Tampoco están versionados `docs/01`, `02`, `03`, `04`,
+   `PROMPT_INICIO_MULTIAGENTE.md`, `tareas_sprint1.json` ni `scripts/` — y el paso 8 del
+   protocolo manda ejecutar `scripts/verificar_documentacion.py`, que no existe en el
+   repositorio.
+2. **157 archivos de `src/` figuran como modificados por puro final de línea** (CRLF frente
+   a LF). Comprobado: normalizando los saltos, el árbol local y el de GitHub son idénticos
+   byte a byte. Cualquier diff de agente es hoy ilegible.
+
+**Dependencias:** MIG-002, SEC-001, TOOL-001, TOOL-002 (es el último paso de la Ola 0)
+
+**Criterios de aceptación**
+
+- [ ] `git status` queda limpio salvo cambios reales
+- [ ] Un clon nuevo trae los 65 endpoints y los cuatro documentos
+- [ ] Existe `.gitattributes` con `* text=auto eol=lf`
+- [ ] `python scripts/verificar_documentacion.py` se ejecuta desde un clon nuevo
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK TEST-004 — Tests de vacantes y portal público
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | CRITICA | TEST | Vacantes | PA-02 / CU-08, CU-09 |
+
+**Descripción.** Los 8 endpoints de vacantes y portal público existen y no tienen una sola
+prueba. Hay que cubrir los casos que el propio perfil declara.
+
+**Dependencias:** TOOL-001, TOOL-002 · **Endpoints:** API-P01 … API-P08
+
+**Criterios de aceptación**
+
+- [ ] `CP01` — `POST /vacantes` con datos válidos → 201, y la vacante aparece en el portal
+- [ ] `CP02` — campos obligatorios vacíos → 422 con el detalle
+- [ ] `CP03` — `fecha_cierre` anterior a hoy → error de validación
+- [ ] `CP-S1-08` — el portal responde 200 sin token y muestra la marca de la empresa
+- [ ] `CP-S1-09` — slug inexistente → 404 genérico, sin revelar información
+- [ ] `CP-S1-10` — vacante con `fecha_cierre` vencida **no** aparece en el portal
+- [ ] `CP-S1-11` — con `mostrar_salario` desactivado el detalle no expone el rango
+- [ ] aislamiento — la empresa A no ve ni edita vacantes de la B (404)
+- [ ] el test de aislamiento **falla** si alguien quita el filtro del repositorio
+
+**Tests requeridos:** API · Unit
+
+**Referencia:** `tests/unit/test_roles.py` para el estilo · el repositorio a probar es
+`vacantes/infrastructure/persistence/repositories/vacante_repository.py` y sus condiciones
+públicas están en `_public_conditions`.
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK TEST-005 — Tests del tablero, etapas y motivos de rechazo
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | CRITICA | TEST | Tablero | PA-03 / CU-12 |
+
+**Descripción.** Los 5 endpoints del tablero existen sin pruebas. **Esta es la tarea que
+cierra `BUG-001`:** el reporte del perfil marca `CP-S1-21` como FALLA (05/09/2026) y el
+código nuevo **sí** responde 404 (`tablero_router.py:118-120`), pero nadie lo probó y nada
+impide que el próximo cambio lo rompa.
+
+**Dependencias:** TOOL-001, TOOL-002 · **Endpoints:** API-P11 … API-P16
+
+**Criterios de aceptación**
+
+- [ ] `CP-S1-19` — mover de etapa cambia la columna **y** escribe un evento en la bitácora
+- [ ] `CP-S1-20` — rechazar sin motivo → 400
+- [ ] `CP-S1-21` — la empresa B recibe **404** (no 403) al pedir el tablero de la A
+- [ ] el motivo de rechazo debe pertenecer al catálogo de la empresa
+- [ ] el tablero agrupa por etapa según `orden`, con contador por columna
+- [ ] sin el permiso `postulaciones:ver` → 403
+- [ ] el test de `CP-S1-21` **falla** si alguien quita el filtro por empresa
+
+**Tests requeridos:** API · Integration
+
+**DECISIÓN PENDIENTE.** La máquina de estados de las etapas: ¿se puede mover una
+postulación hacia atrás? El código actual permite cualquier transición. Hay que decidirlo
+antes de escribir el caso.
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK TEST-006 — Test de permisos de los roles base
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | CRITICA | TEST | Empresas | PA-01 / CU-01, CU-05 |
+
+**Descripción.** El fallo de `SEC-001` —un rol base con cero permisos— es silencioso y
+pudo entrar porque **nada lo verifica**. Este test es la red que impide que vuelva a pasar
+cada vez que se agregue un permiso nuevo.
+
+**Dependencias:** SEC-001 · **Endpoints:** —
+
+**Criterios de aceptación**
+
+- [ ] Falla si algún rol base declarado con permisos queda con cero
+- [ ] Falla si `ROLE_DEFINITIONS` cita un código que no existe en el catálogo
+- [ ] Falla si un rol de empresa recibe un permiso `platform:`
+- [ ] RECLUTADOR queda con al menos los permisos de vacantes y postulaciones
+
+**Tests requeridos:** Unit
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK ARCH-001 — Extraer el repositorio del tablero fuera del router
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | ALTA | REFACTOR | Tablero | PA-03 / CU-12 |
+
+**Descripción.** `tablero_router.py` hace **8 llamadas directas a `session.execute` /
+`session.scalar` y no usa ningún repositorio**. Contradice dos reglas del propio proyecto:
+
+> *«La lógica de negocio no vive en los routers.»*
+> *«Todo repositorio de un recurso de empresa filtra por `empresa_id`. **En el repositorio,
+> no en el router.**»* — regla 7 de `01_ESTADO_PROYECTO.md`
+
+Hoy funciona. El problema es que el filtro de empresa es lo único que separa los datos de
+dos clientes, y está en la capa donde es más fácil olvidarlo en el próximo endpoint.
+
+**Dependencias:** TEST-005 · **Endpoints:** API-P11 … API-P16
+
+**Reglas de negocio**
+
+- El contrato HTTP de los 5 endpoints **no cambia**: mismas rutas, mismos códigos, mismos cuerpos
+- Cada repositorio hereda de su puerto
+- Patrón a copiar: el módulo `src/ssas/cargos/` completo
+
+**Criterios de aceptación**
+
+- [ ] Cero `session.execute` / `session.scalar` en `tablero_router.py`
+- [ ] El filtro por `empresa_id` vive en el repositorio
+- [ ] `TEST-005` sigue en verde **sin modificar los tests**
+
+**Tests requeridos:** los de `TEST-005`, sin tocarlos
+
+**Riesgos.** No iniciarla antes de que `TEST-005` esté en verde: esos tests son la única
+red que garantiza que el contrato no cambie.
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK TAB-004 — Seed de etapas base al aprovisionar una empresa
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| PENDIENTE | ALTA | USE_CASE | Tablero | PA-03 / CU-12 |
+
+**Descripción.** `provision_empresa.py` no menciona `etapa` **ni una vez**. Una empresa
+nueva nace **sin etapas de reclutamiento**, así que su tablero arranca vacío y
+`PATCH /postulaciones/{id}/etapa` responde 404 para cualquier etapa. El perfil precarga
+**siete etapas por defecto** (tarea T1-03 del sprint). El seed va donde ya se siembran los
+roles base.
+
+**Dependencias:** SEC-001 · **Endpoints:** API-P15
+
+**Criterios de aceptación**
+
+- [ ] Una empresa nueva nace con sus siete etapas base
+- [ ] Exactamente una tiene `es_inicial`, una `es_contratado` y una `es_rechazado`
+- [ ] El campo `orden` es único y consecutivo dentro de la empresa
+- [ ] `GET /api/v1/etapas-reclutamiento` devuelve esas siete tras aprovisionar
+- [ ] El seed es idempotente: aprovisionar dos veces no duplica etapas
+
+**Tests requeridos:** Unit · Integration
+
+**Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
 
 ### TASK AUTH-001 — Autenticación y sesión
 

@@ -37,30 +37,32 @@ pytest && ruff check src tests
 |---|---|---|---|---|---|
 | Arquitectura | IMPLEMENTADO | — | — | 2 | Vertical slicing + hexagonal; `core/` transversal |
 | Base de datos | IMPLEMENTADO | — | — | 3 | **19 tablas** · Supabase compartida entre local y Railway |
-| Migraciones | PARCIAL | — | — | 1 | 7 migraciones con **numeración inconsistente**: dos `0002` y dos con hash |
+| Migraciones | **ROTO** | — | — | 1 | 10 migraciones y **DOS cabezas**: `alembic upgrade head` falla → `MIG-002` |
 | Auth | IMPLEMENTADO | PA-01 | 9 | 5 | JWT access+refresh con rotación, verificación de correo, bloqueo por intentos |
 | Usuarios | IMPLEMENTADO | PA-01 | 10 | 2 | CRUD + borrado lógico + restaurar + desbloquear |
-| Roles y permisos | IMPLEMENTADO | PA-01 | 6 | 2 | 28 permisos en catálogo; asignación por rol |
+| Roles y permisos | IMPLEMENTADO | PA-01 | 6 | 2 | **43 permisos** en catálogo. **El rol RECLUTADOR recibe 0** → `SEC-001` |
 | Empresas / Tenants | IMPLEMENTADO | PA-01 | 8 | 0 | **Sin tests propios** |
 | Multitenencia | IMPLEMENTADO | PA-01 | — | 0 | Tenant implícito en el token; guards de doble alcance |
 | Bitácora | IMPLEMENTADO | PA-01 | 2 | 1 | Auditoría de empresa y de plataforma en una sola tabla |
 | Departamentos | IMPLEMENTADO | PA-04 | 4 | 0 | **Sin tests** |
 | Cargos | IMPLEMENTADO | PA-04 | 4 | 0 | **Sin tests** |
-| Vacantes | PENDIENTE | PA-02 | 0 | 0 | CU-08 · T-08. Modelos migrados; **sin repositorio, casos de uso ni endpoints** |
-| Postulantes | PARCIAL | PA-02 | 0 | 0 | CU-11. Modelo con `cv_url`; **sin capa de aplicación ni HTTP** |
-| Habilidades | PENDIENTE | PA-02 | 0 | 0 | Apoyo de CU-08. Modelo y relación `vacante_habilidad` migrados, sin uso |
-| Portal público | PENDIENTE | PA-02 | 0 | 0 | CU-09 · T-09. Falta `/publico/{empresa_slug}/vacantes` |
-| Postulaciones | PARCIAL | PA-02 | 2 | 0 | CU-10 y CU-11. Postular con CV y consultar por código **sí** funcionan; falta la gestión interna |
-| Tablero de candidatos | PENDIENTE | PA-03 | 0 | 0 | CU-12 · T-12. `etapa_reclutamiento` y `motivo_rechazo` migradas, sin uso. **CP-S1-21 marcado FALLA** |
+| Vacantes | IMPLEMENTADO | PA-02 | 6 | **0** | CU-08 · T-08. Puerto, repositorio, casos de uso y router completos. **Sin tests** → `TEST-004` |
+| Postulantes | IMPLEMENTADO | PA-02 | 2 | **0** | CU-11. Banco de talentos. **Sin tests** |
+| Habilidades | IMPLEMENTADO | PA-02 | 3 | **0** | Apoyo de CU-08. `DELETE` no está en el contrato de `02` → `DOC-002` |
+| Portal público | IMPLEMENTADO | PA-02 | 2 | **0** | CU-09 · T-09. `/publico/{slug}/vacantes` y su detalle. **Sin tests** → `TEST-004` |
+| Postulaciones | IMPLEMENTADO | PA-02 | 4 | **0** | CU-10 y CU-11. Postular con CV, consultar por código y gestión interna |
+| Tablero de candidatos | IMPLEMENTADO | PA-03 | 5 | **0** | CU-12 · T-12. Tablero, etapas, motivos, mover y rechazar. **Sin repositorio: 8 `session.execute` en el router** → `ARCH-001`. **`CP-S1-21` sin verificar** → `TEST-005` |
 | Notificaciones | PENDIENTE | PA-02 | 0 | 0 | T-13. **No existe nada**: ni Celery, ni broker, ni servicio de envío |
 | Administración de Personal | PENDIENTE | PA-04 | 0 | 0 | Solo la estructura organizativa (departamentos, cargos) |
 | Capacitación | PENDIENTE | PA-05 | 0 | 0 | No iniciado |
 | Inteligencia Artificial | PENDIENTE | PA-06 | 0 | 0 | No iniciado |
 | Reportes e Indicadores | PENDIENTE | PA-07 | 0 | 0 | No iniciado |
-| Tests | PARCIAL | — | — | 10 | 10 archivos; **6 de 9 módulos con endpoints no tienen tests** |
+| Tests | **INSUFICIENTE** | — | — | 39 | 11 archivos, 39 pruebas, **los mismos de antes del sprint**. Los 19 endpoints nuevos tienen **cero** → Ola 1 |
 | Documentación | PARCIAL | — | — | — | Este sistema de control; docs previos parcialmente desactualizados |
 
-**Resumen:** 46 endpoints implementados en 8 módulos · 4 áreas PARCIAL · 5 PENDIENTE.
+**Resumen:** **65 endpoints** en 12 módulos. El alcance funcional del Sprint 1 está completo;
+lo que falta son pruebas, la unificación de migraciones y el commit del trabajo.
+Ver §2 ter.
 
 ---
 
@@ -70,50 +72,66 @@ Según el Capítulo 4 del perfil, el Sprint 1 entrega *«el primer flujo complet
 publicar una vacante, exponerla en un portal público, permitir la postulación con carga de
 hoja de vida desde web y móvil, y visualizar a los postulantes en el tablero»*.
 
-| CU | Caso de uso | Tarea | HU | Backend | Qué falta |
-|---|---|---|---|---|---|
-| CU-07 | Gestionar departamentos y cargos | T-07 | HU-02 | **IMPLEMENTADO** | Tests (`TEST-002`) |
-| CU-08 | Gestionar vacantes | T-08 | HU-03 | **PENDIENTE** | Repositorio, casos de uso, endpoints y permisos → `VAC-001`…`VAC-004` |
-| CU-09 | Explorar el portal público | T-09 | HU-04 | **PENDIENTE** | `/publico/{empresa_slug}/vacantes` → `POR-001` |
-| CU-10 | Postular con hoja de vida | T-10 | HU-05 | **IMPLEMENTADO** | `POST /publico/postulaciones` acepta CV multipart. Falta validar tamaño/formato en tests |
-| CU-11 | Consultar estado de la postulación | T-11 | HU-09 | **IMPLEMENTADO** | `GET /publico/postulaciones/{codigo}` |
-| CU-12 | Gestionar tablero de candidatos | T-12 | HU-06 | **PENDIENTE** | Catálogos, tablero y acciones → `TAB-001`…`TAB-003`. **Con un fallo abierto: `BUG-001`** |
-| — | Notificaciones y cola asíncrona | T-13 | — | **PENDIENTE** | No existe nada en el código → `NOT-001` (BLOQUEADO) |
+| CU | Caso de uso | Tarea | HU | Endpoints | Código | Tests | Qué falta |
+|---|---|---|---|---|---|---|---|
+| CU-07 | Gestionar departamentos y cargos | T-07 | HU-02 | 8 | **sí** | **0** | `TEST-002` |
+| CU-08 | Gestionar vacantes | T-08 | HU-03 | 6 | **sí** | **0** | `TEST-004` |
+| CU-09 | Explorar el portal público | T-09 | HU-04 | 2 | **sí** | **0** | `TEST-004` |
+| CU-10 | Postular con hoja de vida | T-10 | HU-05 | 1 | sí | **0** | Almacenamiento persistente de CV (el disco de Railway es efímero) |
+| CU-11 | Consultar estado de la postulación | T-11 | HU-09 | 1 | sí | **0** | — |
+| CU-11 | Banco de talentos (postulantes) | T-10 | HU-06 | 2 | **sí** | **0** | Tests |
+| CU-12 | Gestionar tablero de candidatos | T-12 | HU-06 | 5 | **sí** | **0** | `TEST-005` (cierra `CP-S1-21`) · `ARCH-001` · `TAB-004` |
+| — | Catálogo de habilidades | T-08 | — | 3 | **sí** | **0** | Contrato de `DELETE` en `02` |
+| — | Notificaciones y cola asíncrona | T-13 | — | 0 | no | — | `NOT-001` (BLOQUEADO, fuera del Sprint 1) |
 
-**Balance:** de las 6 tareas de backend del Sprint 1, **3 están terminadas** (departamentos
-y cargos, postulación con CV, consulta por código) y **3 no tienen una sola línea**
-(vacantes, portal público, tablero). La T-13 tampoco.
+**Balance:** el flujo de valor del Sprint 1 **está entregado**: se puede crear una vacante,
+publicarla, verla en el portal público, postularse con CV desde web o móvil, consultar el
+estado por código y gestionar a los postulantes en el tablero.
 
-> El flujo de valor prometido está **cortado en el medio**: se puede postular a una vacante
-> que no se puede crear ni publicar, y no hay dónde ver a los postulantes.
+> Lo que falta no es funcionalidad, es lo que la vuelve entregable: **cero pruebas** sobre
+> los 19 endpoints nuevos, `alembic upgrade head` roto, el rol RECLUTADOR sin permisos y el
+> trabajo sin commitear. Ver §2 ter.
 
 ## 2 ter. Verificación ejecutada — 2026-09-07
 
-Resultado real de los comandos del protocolo, sobre el commit `782ac60`. **Cuatro de los
-cinco están en rojo**, y eso bloquea a cualquier agente antes de que empiece.
+Resultado real de los comandos del protocolo, **sobre el árbol de trabajo** (no sobre
+`782ac60`: el árbol está muy por delante del último commit).
+
+**El Sprint 1 quedó funcionalmente terminado mientras se redactaba esta sección.** La API
+pasó de 46 a **65 operaciones**: los 18 endpoints que figuraban como pendientes existen,
+más un `DELETE /habilidades/{id}` que no está en el contrato de `02`. El catálogo de
+permisos pasó de 28 a **43**.
 
 | Comando | Resultado | Tarea |
 |---|---|---|
-| `APP_SECRET_KEY=x PYTHONPATH=src python -c "from ssas.main import app"` | **OK** — 46 operaciones (37 protegidas, 9 públicas) | — |
-| `PYTHONPATH=src pytest -q` | **OK** — 39 passed, 3 skipped | — |
+| `APP_SECRET_KEY=x PYTHONPATH=src python -c "from ssas.main import app"` | **OK** — 65 operaciones (55 protegidas, 10 públicas) | — |
+| `PYTHONPATH=src pytest -q` | **OK** — 39 passed, 3 skipped — **los mismos 39 de antes del sprint** | `TEST-004`…`TEST-006` |
 | `pytest -q` | **FALLA** — 8 errores: `ModuleNotFoundError: No module named 'ssas'` | `TOOL-001` |
-| `ruff check src tests` | **FALLA** — 15 errores preexistentes (14 autocorregibles) | `TOOL-002` |
-| `alembic upgrade head` | **OK en modo SQL** — merge `20260907_0008` creado | `MIG-002` |
-| `alembic heads` | **UNA cabeza** — `20260907_0008` | `MIG-002` |
-| `python scripts/verificar_documentacion.py` | **NO SE PUEDE** — `scripts/` no está versionado | `DOC-003` |
+| `ruff check src tests` | **FALLA** — 15 errores, **8 en archivos del Sprint 1** | `TOOL-002` |
+| `alembic upgrade head` | **FALLA** — `Multiple head revisions are present` | `MIG-002` |
+| `alembic heads` | **DOS cabezas** — `20260825_0002` y `20260907_0007` | `MIG-002` |
+| `git log` | El trabajo del sprint **no está commiteado**: 17 archivos sin versionar | `DOC-003` |
 
-Dos hallazgos más, verificados leyendo y ejecutando el código:
+Cuatro hallazgos más, verificados ejecutando y leyendo el código:
 
-- **El rol RECLUTADOR se aprovisiona con 0 permisos.** `ROLE_DEFINITIONS` le asigna
-  `vacantes:gestionar` y `candidatos:gestionar`; ninguno existe en el catálogo de 28, y el
-  filtro descarta los códigos desconocidos sin avisar. El actor protagonista del Sprint 1
-  no puede hacer nada, y el fallo es silencioso → `SEC-001` (CRÍTICA).
-- **157 archivos de `src/` figuran como modificados por puro final de línea** (CRLF frente
-  a LF). Normalizando los saltos, el árbol local y el de GitHub son idénticos byte a byte.
-  Falta `.gitattributes` → `DOC-003`.
+- **`alembic upgrade head` roto bloquea los permisos nuevos.** Las migraciones `0005`,
+  `0006` y `0007` no se pueden aplicar, así que los 15 permisos nuevos existen en el código
+  y no en la base: los 19 endpoints nuevos están protegidos por permisos que nadie tiene.
+- **El rol RECLUTADOR sigue con 0 permisos.** Las migraciones crearon los granulares
+  (`vacantes:ver|crear|editar|publicar|eliminar`) y `provision_empresa.py` no se tocó:
+  sigue pidiendo `vacantes:gestionar` y `candidatos:gestionar`, que no existen entre los 43.
+  El filtro descarta los códigos desconocidos en silencio → `SEC-001` (CRÍTICA).
+- **19 endpoints nuevos con cero tests.** `CP-S1-21` sigue sin verificarse, y ningún
+  endpoint nuevo tiene prueba de aislamiento entre empresas → Ola 1.
+- **`tablero_router.py` hace 8 llamadas directas a `session.execute`/`session.scalar` y no
+  usa ningún repositorio**, contra la regla 7 de este documento → `ARCH-001`.
+- **`provision_empresa.py` no siembra etapas de reclutamiento.** Una empresa nueva nace sin
+  ninguna, así que su tablero arranca vacío → `TAB-004`.
 
-El plan de ejecución de todo esto está en
-[`04_EJECUCION_MULTIAGENTE_SPRINT1.md`](04_EJECUCION_MULTIAGENTE_SPRINT1.md).
+El plan de ejecución está en
+[`04_EJECUCION_MULTIAGENTE_SPRINT1.md`](04_EJECUCION_MULTIAGENTE_SPRINT1.md) y los textos
+para lanzar cada agente en
+[`PROMPT_INICIO_MULTIAGENTE.md`](PROMPT_INICIO_MULTIAGENTE.md).
 
 ## 3. Arquitectura real
 
@@ -256,13 +274,17 @@ bitacora  <- transversal: todos los módulos generan eventos, ninguno depende de
 | 8 | **CP-S1-21 figura como FALLA** en el reporte de pruebas del perfil (05/09/2026): un usuario de la empresa B accede al tablero de la empresa A sin recibir 404 | Fallo de aislamiento multi-tenant documentado y sin resolver → `BUG-001` (CRÍTICA) |
 | 9 | El diseño de datos del Sprint 1 en el perfil todavía crea `plan_suscripcion` y `suscripcion`, y el código las eliminó | El script del perfil no se puede ejecutar contra el esquema actual → `PERF-001` |
 | 10 | El portal público del perfil es `/publico/{empresa_slug}/vacantes`; el código solo expone `/publico/postulaciones` | La ruta documentada no existe → `POR-001` |
-| 11 | **Resuelto el 2026-09-07.** El grafo tenía dos cabezas (`20260825_0002` y `20260907_0007`); la revisión de merge `20260907_0008` las unifica y `alembic heads` devuelve una sola | `alembic upgrade --sql head` genera el plan sin error; falta ejecutar la migración sobre la base de pruebas separada antes de Railway → `MIG-002` |
+| 11 | **El grafo de Alembic tiene dos cabezas.** `alembic upgrade head` falla con `Multiple head revisions are present`; `alembic heads` devuelve `20260825_0002` y `20260907_0007`, ambas descendientes de `20260825_0001`. Las migraciones de permisos del sprint extendieron una de las dos ramas sin unirlas | **Bloqueador duro.** Un clon nuevo no puede construir el esquema, y ninguna migración nueva se puede añadir sin elegir cabeza. Es más grave que la numeración de la inconsistencia 1 → `MIG-002` (CRÍTICA) |
 | 12 | **El rol RECLUTADOR se aprovisiona con cero permisos.** `ROLE_DEFINITIONS` le pide `vacantes:gestionar` y `candidatos:gestionar`; ninguno existe en el catálogo de 28, y `if code_ in permission_by_code` los descarta en silencio | El actor de CU-08, CU-09 y CU-12 no puede operar, y no hay error visible → `SEC-001` (CRÍTICA) |
 | 13 | El backlog planea permisos granulares (`vacantes:ver|crear|…`) y `provision_empresa.py` espera uno grueso (`vacantes:gestionar`) | Si `VAC-004` y `SEC-001` no usan el mismo vocabulario, el rol vuelve a quedar vacío. `DECISIÓN PENDIENTE` → §6 del documento 04 |
 | 14 | `pytest` a secas falla con 8 errores de colección; sólo funciona con `PYTHONPATH=src`. `pip install -e .` no lo arregla | El paso 8 de este protocolo es inejecutable como está escrito → `TOOL-001` |
 | 15 | `ruff check src tests` devuelve 15 errores preexistentes | Un agente no puede distinguir sus errores de los heredados → `TOOL-002` |
 | 16 | Los documentos `01`, `02`, `03`, `04` y `scripts/` **no están versionados** en git | Un agente que clona el repositorio no ve la documentación que este protocolo le manda leer → `DOC-003` |
 | 17 | 157 archivos de `src/` aparecen modificados sólo por el final de línea (CRLF frente a LF); falta `.gitattributes` | Los diffs de los agentes son ilegibles y cada commit arrastra ruido → `DOC-003` |
+| 18 | **19 endpoints del Sprint 1 con cero tests.** `pytest` devuelve los mismos 39 de antes del sprint | `IMPLEMENTADO` sin `VALIDADO`. `CP-S1-21` sigue sin verificar y ningún endpoint nuevo prueba el aislamiento entre empresas → Ola 1 del documento 04 |
+| 19 | **`tablero_router.py` hace 8 llamadas directas a `session.execute`/`session.scalar`** y no usa ningún repositorio | Contra la regla 7 de este documento: el filtro por `empresa_id` —lo único que separa los datos de dos clientes— vive en el router → `ARCH-001` |
+| 20 | **`provision_empresa.py` no siembra etapas de reclutamiento** (0 menciones de `etapa`) | Una empresa nueva nace sin etapas: su tablero arranca vacío y `PATCH /postulaciones/{id}/etapa` responde 404 para cualquier etapa → `TAB-004` |
+| 21 | `DELETE /api/v1/habilidades/{id}` existe en el código y no en el contrato de `02` | Endpoint sin contrato documentado → `DOC-002` |
 
 ---
 
@@ -285,10 +307,11 @@ bitacora  <- transversal: todos los módulos generan eventos, ninguno depende de
 
 | Documento | Contenido |
 |---|---|
-| `02_API_ENDPOINTS.md` | Contrato de los 46 endpoints + los 18 pendientes |
-| `03_BACKLOG_IMPLEMENTACION.md` | Las 36 tareas, dependencias y criterios de aceptación |
+| `02_API_ENDPOINTS.md` | Contrato de los endpoints. **Desactualizado: documenta 46 y hay 65** → `DOC-002` |
+| `03_BACKLOG_IMPLEMENTACION.md` | Las 41 tareas, dependencias y criterios de aceptación |
 | `04_EJECUCION_MULTIAGENTE_SPRINT1.md` | Olas, reparto de archivos entre agentes, contrato del agente y decisiones pendientes |
-| `tareas_sprint1.json` | Las mismas tareas en formato consumible por un orquestador |
+| `PROMPT_INICIO_MULTIAGENTE.md` | Textos listos para pegarle a cada agente, por ola |
+| `tareas_sprint1.json` | Las tareas en formato consumible por un orquestador |
 | `arquitectura/ARQUITECTURA_BACKEND_FASTAPI.md` | Documento de diseño (entregable del Capítulo 2) |
 | `arquitectura/CONTRATO_OPENAPI_Y_VERSIONADO.md` | Convenciones de OpenAPI y versionado |
 | `guias/GUIA_DESARROLLO.md` | Puesta en marcha y flujo de trabajo |
