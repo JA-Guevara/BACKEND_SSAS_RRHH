@@ -10,6 +10,8 @@ Estados: `IMPLEMENTADO` · `PARCIAL` · `PENDIENTE` · `BLOQUEADO` · `DEPRECADO
 
 ---
 
+
+
 ## Matriz general
 
 | ID | Método | Endpoint | Módulo | PA / CU | Estado | Alcance | Permiso | Task |
