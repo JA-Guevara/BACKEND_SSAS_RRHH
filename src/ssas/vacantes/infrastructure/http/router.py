@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.bitacora.application.events.vacante_events import VacanteEvents
+from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
+from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
+    SqlAlchemyAuditLogRepository,
+)
 from ssas.core.api.openapi import EMPRESA_SCOPE_DESCRIPTION, TAG_VACANTES
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.vacantes.application.use_cases.gestionar_vacantes import GestionarVacantes
@@ -43,6 +49,20 @@ def _service(session: AsyncSession) -> GestionarVacantes:
     return GestionarVacantes(SqlAlchemyVacanteRepository(session))
 
 
+def _audit_context(request: Request, current_user: CurrentUser) -> dict[str, str | None]:
+    return {
+        "empresa_id": current_user.empresa_id,
+        "user_id": current_user.id,
+        "source_ip": get_client_ip(request),
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
+def _events(session: AsyncSession) -> VacanteEvents:
+    repository = SqlAlchemyAuditLogRepository(session)
+    return VacanteEvents(RegisterAuditEvent(repository))
+
+
 def _raise(exc: VacanteError) -> None:
     if isinstance(exc, VacanteNotFoundError):
         code = status.HTTP_404_NOT_FOUND
@@ -79,6 +99,7 @@ async def listar_vacantes(
 )
 async def crear_vacante(
     request: CrearVacanteRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:crear", "platform:vacantes:gestionar")
@@ -86,13 +107,19 @@ async def crear_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await _service(session).crear(
+        vacante = await _service(session).crear(
             _empresa(current_user, empresa_id), current_user.id, request.model_dump()
         )
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="No se pudo crear la vacante") from exc
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).created(
+        record_id=vacante.id,
+        new_data={"titulo": vacante.titulo, "estado": vacante.estado},
+        **_audit_context(http_request, current_user),
+    )
+    return vacante
 
 
 @router.get(
@@ -124,6 +151,7 @@ async def obtener_vacante(
 async def actualizar_vacante(
     vacante_id: str,
     request: ActualizarVacanteRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:editar", "platform:vacantes:gestionar")
@@ -131,15 +159,22 @@ async def actualizar_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await _service(session).actualizar(
+        values = request.model_dump(exclude_unset=True)
+        vacante = await _service(session).actualizar(
             vacante_id,
             _empresa(current_user, empresa_id),
-            request.model_dump(exclude_unset=True),
+            values,
         )
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="No se pudo actualizar la vacante") from exc
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).updated(
+        record_id=vacante.id,
+        new_data={"titulo": values.get("titulo", vacante.titulo), "estado": vacante.estado},
+        **_audit_context(http_request, current_user),
+    )
+    return vacante
 
 
 @router.patch(
@@ -150,6 +185,7 @@ async def actualizar_vacante(
 )
 async def publicar_vacante(
     vacante_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
@@ -157,9 +193,15 @@ async def publicar_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await _service(session).publicar(vacante_id, _empresa(current_user, empresa_id))
+        vacante = await _service(session).publicar(vacante_id, _empresa(current_user, empresa_id))
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).published(
+        record_id=vacante.id,
+        new_data={"titulo": vacante.titulo, "estado": vacante.estado},
+        **_audit_context(http_request, current_user),
+    )
+    return vacante
 
 
 @router.patch(
@@ -170,6 +212,7 @@ async def publicar_vacante(
 )
 async def reanudar_vacante(
     vacante_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
@@ -177,9 +220,15 @@ async def reanudar_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await _service(session).reanudar(vacante_id, _empresa(current_user, empresa_id))
+        vacante = await _service(session).reanudar(vacante_id, _empresa(current_user, empresa_id))
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).resumed(
+        record_id=vacante.id,
+        new_data={"titulo": vacante.titulo, "estado": vacante.estado},
+        **_audit_context(http_request, current_user),
+    )
+    return vacante
 
 
 @router.patch(
@@ -194,6 +243,7 @@ async def reanudar_vacante(
 )
 async def pausar_vacante(
     vacante_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
@@ -201,9 +251,15 @@ async def pausar_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await _service(session).pausar(vacante_id, _empresa(current_user, empresa_id))
+        vacante = await _service(session).pausar(vacante_id, _empresa(current_user, empresa_id))
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).paused(
+        record_id=vacante.id,
+        new_data={"titulo": vacante.titulo, "estado": vacante.estado},
+        **_audit_context(http_request, current_user),
+    )
+    return vacante
 
 
 @router.patch(
@@ -218,6 +274,7 @@ async def pausar_vacante(
 )
 async def cerrar_vacante(
     vacante_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
@@ -225,9 +282,15 @@ async def cerrar_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await _service(session).cerrar(vacante_id, _empresa(current_user, empresa_id))
+        vacante = await _service(session).cerrar(vacante_id, _empresa(current_user, empresa_id))
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).closed(
+        record_id=vacante.id,
+        new_data={"titulo": vacante.titulo, "estado": vacante.estado},
+        **_audit_context(http_request, current_user),
+    )
+    return vacante
 
 
 @router.delete(
@@ -238,6 +301,7 @@ async def cerrar_vacante(
 )
 async def eliminar_vacante(
     vacante_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("vacantes:eliminar", "platform:vacantes:gestionar")
@@ -250,6 +314,10 @@ async def eliminar_vacante(
         raise HTTPException(status_code=409, detail="La vacante tiene postulaciones") from exc
     except VacanteError as exc:
         _raise(exc)
+    await _events(session).deleted(
+        record_id=vacante_id,
+        **_audit_context(http_request, current_user),
+    )
 
 
 @public_router.get(
@@ -263,6 +331,7 @@ async def obtener_empresa_publica(
     session: AsyncSession = Depends(get_session),
 ):
     from sqlalchemy import func, select
+
     from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 
     result = await session.execute(

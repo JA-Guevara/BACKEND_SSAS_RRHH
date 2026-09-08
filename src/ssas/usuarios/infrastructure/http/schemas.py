@@ -23,6 +23,12 @@ class ActualizarUsuarioRequest(BaseModel):
     role_ids: list[str] | None = None
 
 
+class ActualizarMiPerfilRequest(BaseModel):
+    nombre: str | None = Field(default=None, min_length=2, max_length=120)
+    apellido: str | None = Field(default=None, min_length=1, max_length=120)
+    telefono: str | None = Field(default=None, max_length=40)
+
+
 class UsuarioResponse(BaseModel):
     id: str
     empresa_id: str | None

@@ -17,7 +17,11 @@ from ssas.core.api.openapi import (
     TAG_USERS,
 )
 from ssas.core.api.request_metadata import get_client_ip
-from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
+from ssas.core.security.dependencies import (
+    CurrentUser,
+    get_current_user,
+    require_scoped_permission,
+)
 from ssas.infrastructure.database.session import get_session
 from ssas.usuarios.application.use_cases.activar_usuario import ActivarUsuario
 from ssas.usuarios.application.use_cases.actualizar_usuario import ActualizarUsuario
@@ -41,6 +45,7 @@ from ssas.usuarios.domain.exceptions import (
     UsuarioWithoutRoleError,
 )
 from ssas.usuarios.infrastructure.http.schemas import (
+    ActualizarMiPerfilRequest,
     ActualizarUsuarioRequest,
     CambiarPasswordUsuarioRequest,
     CrearUsuarioRequest,
@@ -177,6 +182,63 @@ async def crear_usuario(
         return user
     except UsuarioError as exc:
         _raise_http_usuario_error(exc)
+
+
+@router.get(
+    "/me",
+    response_model=UsuarioResponse,
+    summary="Consultar mi perfil",
+    description=(
+        "Devuelve la información completa del usuario autenticado dentro de su alcance. "
+        "Complementa a `/auth/me` (identidad) con los datos editables del perfil."
+    ),
+)
+async def obtener_mi_perfil(
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await ObtenerUsuario(_repository(session)).execute(
+            user_id=current_user.id,
+            empresa_id=current_user.empresa_id,
+        )
+    except UsuarioError as exc:
+        _raise_http_usuario_error(exc)
+
+
+@router.patch(
+    "/me",
+    response_model=UsuarioResponse,
+    summary="Actualizar mi perfil",
+    description=(
+        "Actualiza solo la información básica del usuario autenticado (nombre, apellido, "
+        "teléfono). No permite cambiar correo, usuario, roles ni estado: son privilegios "
+        "administrativos. La operación queda registrada en bitácora."
+    ),
+)
+async def actualizar_mi_perfil(
+    request: ActualizarMiPerfilRequest,
+    http_request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = request.model_dump(exclude_unset=True, exclude_none=True)
+        if not data:
+            raise HTTPException(status_code=422, detail="No se enviaron campos para actualizar")
+        user = await ActualizarUsuario(_repository(session)).execute(
+            user_id=current_user.id,
+            empresa_id=current_user.empresa_id,
+            values=data,
+        )
+    except UsuarioError as exc:
+        _raise_http_usuario_error(exc)
+    await _events(session).updated(
+        record_id=user.id,
+        new_data=data,
+        **_audit_context(http_request, current_user),
+    )
+    return user
 
 
 @router.patch(

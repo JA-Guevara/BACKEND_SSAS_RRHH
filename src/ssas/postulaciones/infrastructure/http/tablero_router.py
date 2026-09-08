@@ -1,12 +1,18 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.auth.infrastructure.persistence.models.user import UserModel
+from ssas.bitacora.application.events.postulacion_events import PostulacionEvents
+from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
+from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
+    SqlAlchemyAuditLogRepository,
+)
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
@@ -90,6 +96,20 @@ def _empresa(user: CurrentUser, requested: str | None) -> str:
     if requested and requested != user.empresa_id:
         raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
     return user.empresa_id
+
+
+def _audit_context(request: Request, user: CurrentUser) -> dict[str, str | None]:
+    return {
+        "empresa_id": user.empresa_id,
+        "user_id": user.id,
+        "source_ip": get_client_ip(request),
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
+def _events(session: AsyncSession) -> PostulacionEvents:
+    repository = SqlAlchemyAuditLogRepository(session)
+    return PostulacionEvents(RegisterAuditEvent(repository))
 
 
 async def _verificar_postulacion(
@@ -196,6 +216,7 @@ async def motivos(
 async def cambiar_etapa(
     postulacion_id: str,
     request: CambiarEtapaRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None),
     user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
     session: AsyncSession = Depends(get_session),
@@ -208,13 +229,20 @@ async def cambiar_etapa(
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
-    return (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+    item = (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+    await _events(session).etapa_cambiada(
+        record_id=postulacion_id,
+        new_data={"etapa_id": request.etapa_id},
+        **_audit_context(http_request, user),
+    )
+    return item
 
 
 @router.patch("/postulaciones/{postulacion_id}/rechazar", response_model=TableroItem, description="Rechaza una postulación con un motivo de la empresa.")
 async def rechazar(
     postulacion_id: str,
     request: RechazarRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None),
     user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
     session: AsyncSession = Depends(get_session),
@@ -227,7 +255,13 @@ async def rechazar(
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
-    return (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+    item = (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+    await _events(session).rechazada(
+        record_id=postulacion_id,
+        new_data={"motivo_rechazo_id": request.motivo_rechazo_id},
+        **_audit_context(http_request, user),
+    )
+    return item
 
 
 @router.patch(
@@ -240,6 +274,7 @@ async def rechazar(
 async def registrar_puntaje(
     postulacion_id: str,
     request: PuntajeRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None),
     user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
     session: AsyncSession = Depends(get_session),
@@ -249,7 +284,13 @@ async def registrar_puntaje(
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
-    return (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+    item = (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+    await _events(session).puntaje_asignado(
+        record_id=postulacion_id,
+        new_data={"puntaje": float(request.puntaje)},
+        **_audit_context(http_request, user),
+    )
+    return item
 
 
 @router.get(
@@ -296,6 +337,7 @@ async def listar_notas(
 async def crear_nota(
     postulacion_id: str,
     request: NotaRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None),
     user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
     session: AsyncSession = Depends(get_session),
@@ -312,6 +354,11 @@ async def crear_nota(
         select(UserModel.name, UserModel.apellido).where(UserModel.id == user.id)
     )
     nombre, apellido = autor.one()
+    await _events(session).nota_creada(
+        record_id=nota.id,
+        new_data={"postulacion_id": postulacion_id},
+        **_audit_context(http_request, user),
+    )
     return NotaResponse(
         id=nota.id,
         postulacion_id=nota.postulacion_id,

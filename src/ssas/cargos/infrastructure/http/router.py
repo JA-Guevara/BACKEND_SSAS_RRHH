@@ -1,7 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.bitacora.application.events.organizacion_events import OrganizacionEvents
+from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
+from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
+    SqlAlchemyAuditLogRepository,
+)
 from ssas.cargos.application.use_cases.actualizar_cargo import ActualizarCargo
 from ssas.cargos.application.use_cases.crear_cargo import CrearCargo
 from ssas.cargos.application.use_cases.eliminar_cargo import EliminarCargo
@@ -22,6 +27,7 @@ from ssas.cargos.infrastructure.persistence.repositories.cargo_repository import
     SqlAlchemyCargoRepository,
 )
 from ssas.core.api.openapi import AUTHENTICATED_RESPONSES, EMPRESA_SCOPE_DESCRIPTION, TAG_CARGOS
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 
@@ -30,6 +36,20 @@ router = APIRouter(
     tags=[TAG_CARGOS],
     responses=AUTHENTICATED_RESPONSES,
 )
+
+
+def _events(session: AsyncSession) -> OrganizacionEvents:
+    repository = SqlAlchemyAuditLogRepository(session)
+    return OrganizacionEvents(RegisterAuditEvent(repository))
+
+
+def _audit_context(request: Request, current_user: CurrentUser) -> dict[str, str | None]:
+    return {
+        "empresa_id": current_user.empresa_id,
+        "user_id": current_user.id,
+        "source_ip": get_client_ip(request),
+        "user_agent": request.headers.get("user-agent"),
+    }
 
 
 def _target_empresa(current_user: CurrentUser, requested: str | None) -> str:
@@ -102,6 +122,7 @@ async def listar_cargos(
 )
 async def crear_cargo(
     request: CrearCargoRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("cargos:crear", "platform:organizacion:gestionar")
@@ -109,7 +130,7 @@ async def crear_cargo(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await CrearCargo(_repository(session)).execute(
+        cargo = await CrearCargo(_repository(session)).execute(
             empresa_id=_target_empresa(current_user, empresa_id),
             **request.model_dump(),
         )
@@ -117,6 +138,12 @@ async def crear_cargo(
         raise HTTPException(status_code=409, detail="El cargo ya existe") from exc
     except CargoError as exc:
         _raise_http_cargo_error(exc)
+    await _events(session).cargo_creado(
+        record_id=cargo.id,
+        new_data={"nombre": cargo.nombre},
+        **_audit_context(http_request, current_user),
+    )
+    return cargo
 
 
 @router.put(
@@ -136,6 +163,7 @@ async def crear_cargo(
 async def actualizar_cargo(
     cargo_id: str,
     request: ActualizarCargoRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("cargos:editar", "platform:organizacion:gestionar")
@@ -143,7 +171,7 @@ async def actualizar_cargo(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await ActualizarCargo(_repository(session)).execute(
+        cargo = await ActualizarCargo(_repository(session)).execute(
             cargo_id,
             _target_empresa(current_user, empresa_id),
             request.model_dump(exclude_unset=True),
@@ -152,6 +180,12 @@ async def actualizar_cargo(
         raise HTTPException(status_code=409, detail="El cargo ya existe") from exc
     except CargoError as exc:
         _raise_http_cargo_error(exc)
+    await _events(session).cargo_actualizado(
+        record_id=cargo.id,
+        new_data={"nombre": cargo.nombre},
+        **_audit_context(http_request, current_user),
+    )
+    return cargo
 
 
 @router.delete(
@@ -169,6 +203,7 @@ async def actualizar_cargo(
 )
 async def eliminar_cargo(
     cargo_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("cargos:eliminar", "platform:organizacion:gestionar")
@@ -183,3 +218,7 @@ async def eliminar_cargo(
         raise HTTPException(status_code=409, detail="El cargo tiene dependencias") from exc
     except CargoError as exc:
         _raise_http_cargo_error(exc)
+    await _events(session).cargo_eliminado(
+        record_id=cargo_id,
+        **_audit_context(http_request, current_user),
+    )
