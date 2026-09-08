@@ -90,7 +90,11 @@ async def _responsable_vacante(
 
     result = await session.execute(
         select(UserModel.id)
-        .where(UserModel.empresa_id == empresa_id, UserModel.activo.is_(True))
+        .where(
+            UserModel.empresa_id == empresa_id,
+            UserModel.is_active.is_(True),
+            UserModel.eliminado_at.is_(None),
+        )
         .order_by(UserModel.created_at.asc())
         .limit(1)
     )
