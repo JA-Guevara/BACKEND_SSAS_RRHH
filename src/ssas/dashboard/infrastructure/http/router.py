@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.cargos.infrastructure.persistence.models.cargo import CargoModel
+from ssas.core.api.openapi import TAG_DASHBOARD
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.departamentos.infrastructure.persistence.models.departamento import DepartamentoModel
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
@@ -24,8 +25,6 @@ from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento im
 )
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
-
-TAG_DASHBOARD = "Dashboard"
 
 router = APIRouter(prefix="/dashboard", tags=[TAG_DASHBOARD])
 

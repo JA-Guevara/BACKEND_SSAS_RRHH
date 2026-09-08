@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from ssas.auth.infrastructure.http.router import router as auth_router
 from ssas.bitacora.infrastructure.http.router import router as bitacora_router
 from ssas.cargos.infrastructure.http.router import router as cargos_router
+from ssas.dashboard.infrastructure.http.router import router as dashboard_router
 from ssas.departamentos.infrastructure.http.router import router as departamentos_router
 from ssas.habilidades.infrastructure.http.router import router as habilidades_router
 from ssas.modulos.infrastructure.http.router import (
@@ -35,6 +36,7 @@ api_router.include_router(bitacora_router)
 api_router.include_router(departamentos_router)
 api_router.include_router(habilidades_router)
 api_router.include_router(cargos_router)
+api_router.include_router(dashboard_router)
 api_router.include_router(modulos_router)
 api_router.include_router(modulos_empresa_router)
 api_router.include_router(platform_router)

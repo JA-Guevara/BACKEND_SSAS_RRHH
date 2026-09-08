@@ -34,6 +34,8 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "motivo_rechazo",
         "postulacion",
         "postulacion_nota",
+        "modulo",
+        "empresa_modulo",
     }
 
 
@@ -67,6 +69,8 @@ def test_openapi_is_grouped_and_describes_every_business_operation() -> None:
         "Vacantes",
         "Portal público",
         "Postulaciones",
+        "Módulos",
+        "Dashboard",
         "Estado",
     }
 

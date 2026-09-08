@@ -39,6 +39,14 @@ class InitialAdminData(BaseModel):
 class ProvisionEmpresaRequest(BaseModel):
     empresa: EmpresaCreateData
     administrador: InitialAdminData
+    modulos: list[str] | None = Field(
+        default=None,
+        description=(
+            "Códigos de módulo opcionales que la empresa tendrá habilitados. "
+            "Si se omite, se habilitan todos los módulos contratables."
+        ),
+        examples=[["ORGANIZACION", "RECLUTAMIENTO"]],
+    )
 
 
 class EmpresaResponse(BaseModel):

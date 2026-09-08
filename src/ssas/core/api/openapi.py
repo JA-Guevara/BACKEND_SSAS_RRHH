@@ -11,6 +11,7 @@ TAG_VACANTES = "Vacantes"
 TAG_PORTAL_PUBLICO = "Portal público"
 TAG_POSTULACIONES = "Postulaciones"
 TAG_MODULOS = "Módulos"
+TAG_DASHBOARD = "Dashboard"
 TAG_STATUS = "Estado"
 
 EMPRESA_SCOPE_DESCRIPTION = (

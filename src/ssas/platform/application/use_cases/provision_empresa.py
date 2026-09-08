@@ -13,6 +13,8 @@ from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.auth.infrastructure.security.password_hasher import Argon2PasswordHasher
 from ssas.config.settings import settings
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
+from ssas.modulos.infrastructure.persistence.models.empresa_modulo import EmpresaModuloModel
+from ssas.modulos.infrastructure.persistence.models.modulo import ModuloModel
 from ssas.platform.domain.exceptions import (
     PlatformConflictError,
     RolBasePermisoDesconocidoError,
@@ -95,6 +97,7 @@ class ProvisionEmpresa:
         empresa = EmpresaModel(**empresa_data, activo=True)
         self.session.add(empresa)
         await self.session.flush()
+        await self._habilitar_modulos(empresa.id, request.modulos)
         # Un rol de empresa NUNCA puede recibir permisos de plataforma: son operaciones
         # del proveedor SaaS (crear empresas y gestionar administradores globales).
         # Sin este filtro, ADMIN_EMPRESA —que se define con "todos los permisos"— se

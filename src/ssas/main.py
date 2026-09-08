@@ -10,7 +10,9 @@ from ssas.core.api.openapi import (
     TAG_AUTH,
     TAG_CARGOS,
     TAG_COMPANIES,
+    TAG_DASHBOARD,
     TAG_DEPARTAMENTOS,
+    TAG_MODULOS,
     TAG_PORTAL_PUBLICO,
     TAG_POSTULACIONES,
     TAG_ROLES,
@@ -86,6 +88,17 @@ app = FastAPI(
         {
             "name": TAG_POSTULACIONES,
             "description": "Seguimiento y gestión de postulaciones del proceso de reclutamiento.",
+        },
+        {
+            "name": TAG_MODULOS,
+            "description": (
+                "Catálogo de módulos y habilitación por empresa. Un permiso de un módulo "
+                "no habilitado no surte efecto, aunque el rol lo tenga asignado."
+            ),
+        },
+        {
+            "name": TAG_DASHBOARD,
+            "description": "Resumen agregado de la pantalla de inicio según el alcance.",
         },
         {
             "name": TAG_STATUS,
