@@ -57,8 +57,8 @@ pytest && ruff check src tests
 | Capacitación | PENDIENTE | PA-05 | 0 | 0 | Próximo sprint |
 | Inteligencia Artificial | PENDIENTE | PA-06 | 0 | 0 | Próximo sprint |
 | Reportes e Indicadores | PENDIENTE | PA-07 | 0 | 0 | Próximo sprint |
-| Tests | IMPLEMENTADO | — | — | 69 | 14 archivos, 69 pruebas (66 passed, 3 skipped, 0 failed) |
-| Documentación | IMPLEMENTADO | — | — | — | Sincronizado: 86 endpoints y 43 tareas verificadas con 0 fallos |
+| Tests | IMPLEMENTADO | — | — | 71 | 15 archivos, 71 pruebas (68 passed, 3 skipped, 0 failed) |
+| Documentación | IMPLEMENTADO | — | — | — | Sincronizado: 86 endpoints y 44 tareas verificadas con 0 fallos |
 
 **Resumen:** **86 endpoints** en 14 módulos. El alcance funcional del Sprint 1 y la integración completa están operativos.
 
@@ -140,8 +140,11 @@ tener selector propio y el tenant resuelve su empresa dentro de `CompanyScopeCon
 vacía, Organización pasó a pestañas con modales y confirmaciones, los cargos validan
 `salario_min <= salario_max` en la API, y el Portal público separa el fallo de red (con
 reintento) de la ausencia de vacantes. CORS ampliado con regex para subdominios de
-Railway. Resultado: `pytest` 69 passed / 3 skipped, `ruff` y build del frontend en cero
-errores, documentación sincronizada (86/86).
+Railway. Resultado: `pytest` 71 passed / 3 skipped, `ruff` y build del frontend en cero
+errores, documentación sincronizada (86/86). Además, `CORR-002` corrige el perfil público
+de empresa (`GET /publico/{empresa_slug}`), que devolvía 500 por usar `empresa.nombre`
+(inexistente) y pasar `id` como UUID: en producción ese 500 sin cabeceras CORS se mostraba
+al usuario como «No se pudo contactar con el servidor».
 
 ## 3. Arquitectura real
 

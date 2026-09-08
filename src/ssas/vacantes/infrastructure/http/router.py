@@ -377,9 +377,14 @@ async def obtener_empresa_publica(
     empresa = result.scalar_one_or_none()
     if empresa is None or not getattr(empresa, "portal_publico_activo", True):
         raise HTTPException(status_code=404, detail="Empresa no encontrada o portal inactivo")
+    return _to_empresa_publica(empresa)
+
+
+def _to_empresa_publica(empresa) -> EmpresaPublicaResponse:
+    """Serializa el perfil público usando las columnas reales de EmpresaModel."""
     return EmpresaPublicaResponse(
-        id=empresa.id,
-        nombre=empresa.nombre,
+        id=str(empresa.id),
+        nombre=empresa.razon_social,
         nombre_comercial=empresa.nombre_comercial,
         slug=empresa.slug,
         descripcion=empresa.descripcion,

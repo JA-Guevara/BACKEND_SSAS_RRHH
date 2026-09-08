@@ -1527,6 +1527,36 @@ regex para subdominios de Railway.
 
 ---
 
+### TASK CORR-002 — Serialización del perfil público de empresa
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| VALIDADO | ALTA | API | Vacantes / Portal | PA-02 / CU-09 |
+
+**Descripción.** Corrección del endpoint público `GET /publico/{empresa_slug}` (API-053):
+usaba `empresa.nombre` (atributo inexistente en `EmpresaModel`, columna real es
+`razon_social`) y pasaba `id` como `UUID` a un campo `str` de pydantic. Ambos errores
+hacían que el perfil respondiera 500 **solo cuando la empresa existía y el portal estaba
+activo**, que el navegador veía como fallo de red por falta de cabeceras CORS en la
+respuesta 500 («No se pudo contactar con el servidor»).
+
+**Componentes**
+
+- [x] Helper `_to_empresa_publica(empresa)` que serializa desde columnas reales
+- [x] `id` forzado a `str`; `nombre` mapeado a `razon_social`
+- [x] Test de regresión `tests/unit/test_portal_publico.py`
+
+**Criterios de aceptación**
+
+- [x] `GET /publico/conecta` responde 200 con `nombre` = razón social contra la base compartida
+- [x] pytest (71 passed, 3 skipped) · ruff · build del frontend · verificar_documentacion
+
+**Endpoints:** API-053
+
+**Tests requeridos:** Unitarios (`test_portal_publico.py`)
+
+---
+
 ```text
 ==================================================
 PROTOCOLO PARA AGENTES
