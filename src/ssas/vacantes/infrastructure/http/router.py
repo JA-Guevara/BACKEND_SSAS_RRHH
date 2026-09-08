@@ -73,6 +73,37 @@ def _raise(exc: VacanteError) -> None:
     raise HTTPException(status_code=code, detail=str(exc)) from exc
 
 
+async def _responsable_vacante(
+    session: AsyncSession, current_user: CurrentUser, empresa_id: str
+) -> str:
+    """Resuelve el responsable de una vacante nueva.
+
+    El responsable queda siempre a nombre de la empresa donde se publica: si el
+    usuario pertenece a esa empresa se usa él mismo; los usuarios de plataforma
+    operan sobre empresas ajenas y entonces se asigna el primer miembro activo.
+    """
+    if current_user.empresa_id == empresa_id:
+        return current_user.id
+    from sqlalchemy import select
+
+    from ssas.auth.infrastructure.persistence.models.user import UserModel
+
+    result = await session.execute(
+        select(UserModel.id)
+        .where(UserModel.empresa_id == empresa_id, UserModel.activo.is_(True))
+        .order_by(UserModel.created_at.asc())
+        .limit(1)
+    )
+    responsable_id = result.scalar_one_or_none()
+    if responsable_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La empresa seleccionada no tiene usuarios activos para asignar "
+            "como responsable de la vacante. Registra o activa un miembro primero.",
+        )
+    return str(responsable_id)
+
+
 @router.get(
     "",
     response_model=list[VacanteResponse],
@@ -107,8 +138,10 @@ async def crear_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        empresa_id = _empresa(current_user, empresa_id)
+        responsable_id = await _responsable_vacante(session, current_user, empresa_id)
         vacante = await _service(session).crear(
-            _empresa(current_user, empresa_id), current_user.id, request.model_dump()
+            empresa_id, responsable_id, request.model_dump()
         )
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="No se pudo crear la vacante") from exc

@@ -18,6 +18,7 @@ def import_all_models() -> None:
     import ssas.habilidades.infrastructure.persistence.models.habilidad
     import ssas.modulos.infrastructure.persistence.models.empresa_modulo
     import ssas.modulos.infrastructure.persistence.models.modulo
+    import ssas.parametros_legales.infrastructure.persistence.models.parametro_legal
     import ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento
     import ssas.postulaciones.infrastructure.persistence.models.motivo_rechazo
     import ssas.postulaciones.infrastructure.persistence.models.postulacion

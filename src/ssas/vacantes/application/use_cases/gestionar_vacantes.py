@@ -33,7 +33,7 @@ class GestionarVacantes:
             empresa_id, values["cargo_id"], values["departamento_id"], responsable_id
         ):
             raise VacanteReferenceError("Cargo, departamento o responsable no pertenece a la empresa")
-        if "habilidades" in values and values["habilidades"]:
+        if values.get("habilidades"):
             h_ids = [
                 h["habilidad_id"] if isinstance(h, dict) else h.habilidad_id
                 for h in values["habilidades"]
@@ -55,7 +55,7 @@ class GestionarVacantes:
         }
         if not await self.repository.references_belong_to_empresa(empresa_id, **references):
             raise VacanteReferenceError("Cargo, departamento o responsable no pertenece a la empresa")
-        if "habilidades" in values and values["habilidades"]:
+        if values.get("habilidades"):
             h_ids = [
                 h["habilidad_id"] if isinstance(h, dict) else h.habilidad_id
                 for h in values["habilidades"]

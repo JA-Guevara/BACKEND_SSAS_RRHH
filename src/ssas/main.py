@@ -6,10 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ssas.config.settings import settings
 from ssas.core.api.openapi import (
+    CONFIGURACION_DESCRIPTION,
     TAG_AUDIT,
     TAG_AUTH,
     TAG_CARGOS,
     TAG_COMPANIES,
+    TAG_CONFIGURACION,
     TAG_DASHBOARD,
     TAG_DEPARTAMENTOS,
     TAG_MODULOS,
@@ -99,6 +101,10 @@ app = FastAPI(
         {
             "name": TAG_DASHBOARD,
             "description": "Resumen agregado de la pantalla de inicio según el alcance.",
+        },
+        {
+            "name": TAG_CONFIGURACION,
+            "description": CONFIGURACION_DESCRIPTION,
         },
         {
             "name": TAG_STATUS,

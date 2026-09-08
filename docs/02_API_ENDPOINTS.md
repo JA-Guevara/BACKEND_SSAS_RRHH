@@ -76,6 +76,11 @@ Estados: `IMPLEMENTADO` · `PARCIAL` · `PENDIENTE` · `BLOQUEADO` · `DEPRECADO
 | API-060 | POST | `/api/v1/postulantes` | Postulantes | PA-02 / CU-11 | IMPLEMENTADO | empresa + plataforma | `postulantes:gestionar` (empresa) o `platform:postulantes:ver` (plataforma) | PTE-003 |
 | API-061 | PUT | `/api/v1/empresas/{empresa_id}/modulos` | Módulos | PA-01 / CU-01 | IMPLEMENTADO | plataforma | `platform:modulos:gestionar` | EMP-001 |
 | API-062 | PUT | `/api/v1/habilidades/{habilidad_id}` | Habilidades | PA-02 / apoyo CU-08 | IMPLEMENTADO | empresa + plataforma | `habilidades:gestionar` (empresa) o `platform:habilidades:gestionar` (plataforma) | HAB-003 |
+| API-063 | GET | `/api/v1/parametros-legales` | Configuración | PA-01 / CU-01 | IMPLEMENTADO | empresa + plataforma | `empresa:ver` (empresa) o `platform:empresas:ver` (plataforma) | CFG-001 |
+| API-064 | POST | `/api/v1/parametros-legales` | Configuración | PA-01 / CU-01 | IMPLEMENTADO | empresa + plataforma | `empresa:editar` (empresa) o `platform:empresas:editar` (plataforma) | CFG-001 |
+| API-065 | PUT | `/api/v1/parametros-legales/{periodo_id}` | Configuración | PA-01 / CU-01 | IMPLEMENTADO | empresa + plataforma | `empresa:editar` (empresa) o `platform:empresas:editar` (plataforma) | CFG-001 |
+| API-066 | GET | `/api/v1/usuarios/me` | Usuarios | PA-01 / CU-04 | IMPLEMENTADO | autenticado | solo autenticación | USR-001 |
+| API-067 | PATCH | `/api/v1/usuarios/me` | Usuarios | PA-01 / CU-04 | IMPLEMENTADO | autenticado | solo autenticación | USR-001 |
 
 ### Endpoints PENDIENTES — alcance del Sprint 1 aún sin implementar
 

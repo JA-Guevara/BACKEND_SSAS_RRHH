@@ -19,6 +19,9 @@ if TYPE_CHECKING:
         DepartamentoModel,
     )
     from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
+    from ssas.parametros_legales.infrastructure.persistence.models.parametro_legal import (
+        ParametroLegalModel,
+    )
     from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
         EtapaReclutamientoModel,
     )
@@ -99,6 +102,9 @@ class EmpresaModel(Base):
         back_populates="empresa", cascade="all, delete-orphan"
     )
     postulantes: Mapped[list["PostulanteModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    parametros_legales: Mapped[list["ParametroLegalModel"]] = relationship(
         back_populates="empresa", cascade="all, delete-orphan"
     )
 

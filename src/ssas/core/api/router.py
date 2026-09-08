@@ -12,6 +12,9 @@ from ssas.modulos.infrastructure.http.router import (
 from ssas.modulos.infrastructure.http.router import (
 	router as modulos_router,
 )
+from ssas.parametros_legales.infrastructure.http.router import (
+	router as parametros_legales_router,
+)
 from ssas.platform.infrastructure.http.router import router as platform_router
 from ssas.postulaciones.infrastructure.http.router import router as postulaciones_router
 from ssas.postulaciones.infrastructure.http.tablero_router import router as tablero_router
@@ -40,6 +43,7 @@ api_router.include_router(dashboard_router)
 api_router.include_router(modulos_router)
 api_router.include_router(modulos_empresa_router)
 api_router.include_router(platform_router)
+api_router.include_router(parametros_legales_router)
 api_router.include_router(postulaciones_router)
 api_router.include_router(postulantes_router)
 api_router.include_router(tablero_router)

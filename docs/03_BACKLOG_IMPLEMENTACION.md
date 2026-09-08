@@ -1446,6 +1446,43 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 ---
 
+### TASK CFG-001 — Centro de configuración y parámetros legales
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| VALIDADO | ALTA | API | Configuración | PA-01 / CU-01 |
+
+**Descripción.** Centro de configuración empresarial con guardado por sección (PATCH parcial sobre `/empresas/{id}`) y parámetros legales con periodos de vigencia e histórico (sin solapes). Las modificaciones quedan registradas en la bitácora.
+
+**Dependencias:** EMP-001  
+**Endpoints:** API-063, API-064, API-065 → ver `02_API_ENDPOINTS.md`
+
+**Componentes**
+
+- [x] Módulo `ssas/parametros_legales` (hexagonal compacto)
+- [x] Migración alembic `20260908_0012_parametro_legal`
+- [x] Router `/api/v1/parametros-legales` con alcance por empresa
+- [x] Rediseño de `ConfiguracionEmpresaPage` (5 secciones, guardar por sección)
+- [x] `parametrosLegalesApi.ts` y `schema.d.ts` regenerado
+
+**Reglas de negocio**
+
+- No admitir periodos de vigencia superpuestos.
+- Valores porcentuales entre 0 y 100.
+- La edición de un periodo mantiene el historial.
+
+**Criterios de aceptación**
+
+- [x] GET /api/v1/parametros-legales lista los periodos de la empresa
+- [x] POST /api/v1/parametros-legales crea un periodo validando rango y solapes
+- [x] PUT /api/v1/parametros-legales/{periodo_id} actualiza sin solapar
+- [x] Permisos `empresa:editar` / `platform:empresas:editar`
+- [x] pytest tests/unit/test_parametros_legales.py y build del frontend
+
+**Tests requeridos:** Unitarios
+
+---
+
 ```text
 ==================================================
 PROTOCOLO PARA AGENTES

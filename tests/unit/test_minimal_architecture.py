@@ -36,6 +36,7 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "postulacion_nota",
         "modulo",
         "empresa_modulo",
+        "parametro_legal",
     }
 
 
@@ -43,8 +44,8 @@ def test_openapi_does_not_expose_deferred_modules() -> None:
     paths = set(app.openapi()["paths"])
     assert not any("planes" in path for path in paths)
     assert not any("suscripciones" in path for path in paths)
-    assert not any("parametros" in path for path in paths)
     assert not any(path.startswith("/api/v1/platform") for path in paths)
+    assert "/api/v1/parametros-legales" in paths
 
 
 def test_login_examples_are_valid_request_bodies() -> None:
@@ -72,6 +73,7 @@ def test_openapi_is_grouped_and_describes_every_business_operation() -> None:
         "Módulos",
         "Dashboard",
         "Estado",
+        "Configuración",
     }
 
     assert {tag["name"] for tag in schema["tags"]} == expected_tags
