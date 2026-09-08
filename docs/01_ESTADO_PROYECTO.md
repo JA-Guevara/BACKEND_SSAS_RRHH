@@ -2,7 +2,7 @@
 
 > **Este es el primer documento que debe leer cualquier agente.**
 > Sincronizado el **2026-09-07** contra el commit `782ac60`.
-> Verificar con `python scripts/verificar_documentacion.py` antes de confiar en él.
+> Verificar con `python scripts/verificar_documentacion.py` antes de confiar en él. 
 
 ---
 
