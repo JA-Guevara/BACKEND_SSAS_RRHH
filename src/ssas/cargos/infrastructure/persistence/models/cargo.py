@@ -57,6 +57,7 @@ class CargoModel(Base):
         UUID(as_uuid=False), ForeignKey("departamento.id", ondelete="RESTRICT"), nullable=True
     )
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    codigo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
     nivel: Mapped[str | None] = mapped_column(String(80), nullable=True)
     salario_min: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)

@@ -15,6 +15,7 @@ from ssas.vacantes.domain.exceptions import (
 from ssas.vacantes.infrastructure.http.schemas import (
     ActualizarVacanteRequest,
     CrearVacanteRequest,
+    EmpresaPublicaResponse,
     VacantePublicaResponse,
     VacanteResponse,
 )
@@ -73,6 +74,7 @@ async def listar_vacantes(
     "",
     response_model=VacanteResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Crear vacante",
     description="Crea una vacante en la empresa autorizada.",
 )
 async def crear_vacante(
@@ -96,6 +98,7 @@ async def crear_vacante(
 @router.get(
     "/{vacante_id}",
     response_model=VacanteResponse,
+    summary="Obtener vacante",
     description="Obtiene una vacante de la empresa autorizada.",
 )
 async def obtener_vacante(
@@ -115,6 +118,7 @@ async def obtener_vacante(
 @router.put(
     "/{vacante_id}",
     response_model=VacanteResponse,
+    summary="Actualizar vacante",
     description="Actualiza una vacante que todavía está en borrador.",
 )
 async def actualizar_vacante(
@@ -141,6 +145,7 @@ async def actualizar_vacante(
 @router.patch(
     "/{vacante_id}/publicar",
     response_model=VacanteResponse,
+    summary="Publicar vacante",
     description="Publica una vacante en el portal público.",
 )
 async def publicar_vacante(
@@ -153,6 +158,26 @@ async def publicar_vacante(
 ):
     try:
         return await _service(session).publicar(vacante_id, _empresa(current_user, empresa_id))
+    except VacanteError as exc:
+        _raise(exc)
+
+
+@router.patch(
+    "/{vacante_id}/reanudar",
+    response_model=VacanteResponse,
+    summary="Reanudar vacante",
+    description="Reanuda una vacante pausada (PAUSADA -> PUBLICADA).",
+)
+async def reanudar_vacante(
+    vacante_id: str,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await _service(session).reanudar(vacante_id, _empresa(current_user, empresa_id))
     except VacanteError as exc:
         _raise(exc)
 
@@ -208,6 +233,7 @@ async def cerrar_vacante(
 @router.delete(
     "/{vacante_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar vacante",
     description="Elimina una vacante que todavía no tiene publicaciones activas.",
 )
 async def eliminar_vacante(
@@ -224,6 +250,41 @@ async def eliminar_vacante(
         raise HTTPException(status_code=409, detail="La vacante tiene postulaciones") from exc
     except VacanteError as exc:
         _raise(exc)
+
+
+@public_router.get(
+    "/{empresa_slug}",
+    response_model=EmpresaPublicaResponse,
+    summary="Consultar información pública de empresa",
+    description="Devuelve el perfil público de una empresa para su portal de empleo.",
+)
+async def obtener_empresa_publica(
+    empresa_slug: str,
+    session: AsyncSession = Depends(get_session),
+):
+    from sqlalchemy import func, select
+    from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
+
+    result = await session.execute(
+        select(EmpresaModel).where(
+            func.lower(EmpresaModel.slug) == empresa_slug.strip().lower(),
+            EmpresaModel.activo.is_(True),
+            EmpresaModel.eliminado_at.is_(None),
+        )
+    )
+    empresa = result.scalar_one_or_none()
+    if empresa is None or not getattr(empresa, "portal_publico_activo", True):
+        raise HTTPException(status_code=404, detail="Empresa no encontrada o portal inactivo")
+    return EmpresaPublicaResponse(
+        id=empresa.id,
+        nombre=empresa.nombre,
+        nombre_comercial=empresa.nombre_comercial,
+        slug=empresa.slug,
+        descripcion=empresa.descripcion,
+        logo_url=empresa.logo_url,
+        color_primario=empresa.color_primario or "#2563eb",
+        portal_publico_activo=empresa.portal_publico_activo,
+    )
 
 
 @public_router.get(
@@ -256,3 +317,4 @@ async def obtener_vacante_publica(
         return await _service(session).obtener_publica(empresa_slug, vacante_id)
     except VacanteNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Vacante no encontrada") from exc
+

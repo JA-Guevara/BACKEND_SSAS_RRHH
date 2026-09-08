@@ -33,8 +33,12 @@ class DepartamentoRepository(ABC):
         nombre: str,
         descripcion: str | None,
         activo: bool,
+        codigo: str | None = None,
+        departamento_padre_id: str | None = None,
+        responsable_id: str | None = None,
     ) -> Departamento:
         raise NotImplementedError
+
 
     @abstractmethod
     async def update_departamento(

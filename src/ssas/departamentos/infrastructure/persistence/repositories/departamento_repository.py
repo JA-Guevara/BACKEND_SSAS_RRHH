@@ -67,11 +67,17 @@ class SqlAlchemyDepartamentoRepository(DepartamentoRepository):
         nombre: str,
         descripcion: str | None,
         activo: bool,
+        codigo: str | None = None,
+        departamento_padre_id: str | None = None,
+        responsable_id: str | None = None,
     ) -> Departamento:
         model = DepartamentoModel(
             empresa_id=empresa_id,
             nombre=nombre,
+            codigo=codigo.strip().upper() if codigo else None,
             descripcion=descripcion,
+            departamento_padre_id=departamento_padre_id,
+            responsable_id=responsable_id,
             activo=activo,
         )
         self.session.add(model)
@@ -81,13 +87,16 @@ class SqlAlchemyDepartamentoRepository(DepartamentoRepository):
     async def update_departamento(
         self, departamento_id: str, empresa_id: str, values: dict
     ) -> Departamento:
+        clean_values = dict(values)
+        if "codigo" in clean_values and clean_values["codigo"]:
+            clean_values["codigo"] = clean_values["codigo"].strip().upper()
         await self.session.execute(
             update(DepartamentoModel)
             .where(
                 DepartamentoModel.id == departamento_id,
                 DepartamentoModel.empresa_id == empresa_id,
             )
-            .values(**values)
+            .values(**clean_values)
         )
         await self.session.flush()
         departamento = await self.get_by_id(departamento_id, empresa_id)
@@ -110,6 +119,7 @@ class SqlAlchemyDepartamentoRepository(DepartamentoRepository):
             id=model.id,
             empresa_id=model.empresa_id,
             nombre=model.nombre,
+            codigo=model.codigo,
             descripcion=model.descripcion,
             departamento_padre_id=model.departamento_padre_id,
             responsable_id=model.responsable_id,
@@ -117,3 +127,4 @@ class SqlAlchemyDepartamentoRepository(DepartamentoRepository):
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
+

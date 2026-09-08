@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from sqlalchemy import delete, func, select, update
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.cargos.domain.entities.cargo import Cargo
@@ -77,12 +80,20 @@ class SqlAlchemyCargoRepository(CargoRepository):
         departamento_id: str | None,
         descripcion: str | None,
         activo: bool,
+        codigo: str | None = None,
+        nivel: str | None = None,
+        salario_min: Decimal | None = None,
+        salario_max: Decimal | None = None,
     ) -> Cargo:
         model = CargoModel(
             empresa_id=empresa_id,
             departamento_id=departamento_id,
             nombre=nombre,
+            codigo=codigo.strip().upper() if codigo else None,
             descripcion=descripcion,
+            nivel=nivel,
+            salario_min=salario_min,
+            salario_max=salario_max,
             activo=activo,
         )
         self.session.add(model)
@@ -90,13 +101,16 @@ class SqlAlchemyCargoRepository(CargoRepository):
         return self._to_entity(model)
 
     async def update_cargo(self, cargo_id: str, empresa_id: str, values: dict) -> Cargo:
+        clean_values = dict(values)
+        if "codigo" in clean_values and clean_values["codigo"]:
+            clean_values["codigo"] = clean_values["codigo"].strip().upper()
         await self.session.execute(
             update(CargoModel)
             .where(
                 CargoModel.id == cargo_id,
                 CargoModel.empresa_id == empresa_id,
             )
-            .values(**values)
+            .values(**clean_values)
         )
         await self.session.flush()
         cargo = await self.get_by_id(cargo_id, empresa_id)
@@ -120,6 +134,7 @@ class SqlAlchemyCargoRepository(CargoRepository):
             empresa_id=model.empresa_id,
             departamento_id=model.departamento_id,
             nombre=model.nombre,
+            codigo=model.codigo,
             descripcion=model.descripcion,
             nivel=model.nivel,
             salario_min=model.salario_min,
@@ -128,3 +143,4 @@ class SqlAlchemyCargoRepository(CargoRepository):
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
+

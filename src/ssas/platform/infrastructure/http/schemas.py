@@ -13,6 +13,9 @@ class EmpresaCreateData(BaseModel):
     direccion: str | None = None
     ciudad: str | None = Field(default=None, max_length=100)
     logo_url: str | None = None
+    descripcion: str | None = None
+    color_primario: str = Field(default="#2563eb", max_length=20)
+    portal_publico_activo: bool = True
 
 
 class EmpresaUpdateRequest(BaseModel):
@@ -25,6 +28,9 @@ class EmpresaUpdateRequest(BaseModel):
     direccion: str | None = None
     ciudad: str | None = Field(default=None, max_length=100)
     logo_url: str | None = None
+    descripcion: str | None = None
+    color_primario: str | None = Field(default=None, max_length=20)
+    portal_publico_activo: bool | None = None
 
 
 class InitialAdminData(BaseModel):
@@ -60,6 +66,9 @@ class EmpresaResponse(BaseModel):
     direccion: str | None = None
     ciudad: str | None = None
     logo_url: str | None = None
+    descripcion: str | None = None
+    color_primario: str = "#2563eb"
+    portal_publico_activo: bool = True
     activo: bool
     eliminado_at: datetime | None = None
     eliminado_por_id: str | None = None

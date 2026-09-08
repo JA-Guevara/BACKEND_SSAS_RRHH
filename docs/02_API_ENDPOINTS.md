@@ -60,6 +60,22 @@ Estados: `IMPLEMENTADO` · `PARCIAL` · `PENDIENTE` · `BLOQUEADO` · `DEPRECADO
 | API-017 | PATCH | `/api/v1/usuarios/{usuario_id}/desbloquear` | Usuarios | PA-01 / CU-04 | IMPLEMENTADO | empresa + plataforma | `usuarios:desbloquear` (empresa) o `platform:usuarios:gestionar` (plataforma) | USR-001 |
 | API-018 | PUT | `/api/v1/usuarios/{usuario_id}/password` | Usuarios | PA-01 / CU-04 | IMPLEMENTADO | empresa + plataforma | `usuarios:cambiar_password` (empresa) o `platform:usuarios:gestionar` (plataforma) | USR-001 |
 | API-019 | PATCH | `/api/v1/usuarios/{usuario_id}/restaurar` | Usuarios | PA-01 / CU-04 | IMPLEMENTADO | empresa + plataforma | `usuarios:restaurar` (empresa) o `platform:usuarios:gestionar` (plataforma) | USR-001 |
+| API-047 | GET | `/api/v1/dashboard/resumen` | Dashboard | PA-01 / CU-06 | IMPLEMENTADO | empresa + plataforma | `empresa:ver` (empresa) o `platform:empresas:ver` (plataforma) | SYS-001 |
+| API-048 | GET | `/api/v1/empresas/{empresa_id}/modulos` | Módulos | PA-01 / CU-01 | IMPLEMENTADO | empresa + plataforma | `empresa:ver` (empresa) o `platform:modulos:ver` (plataforma) | EMP-001 |
+| API-049 | GET | `/api/v1/modulos` | Módulos | PA-01 / CU-01 | IMPLEMENTADO | autenticado | solo autenticación | EMP-001 |
+| API-050 | GET | `/api/v1/permisos` | Roles | PA-01 / CU-05 | IMPLEMENTADO | empresa + plataforma | `roles:gestionar` (empresa) o `platform:usuarios:gestionar` (plataforma) | ROL-001 |
+| API-051 | GET | `/api/v1/postulaciones/{postulacion_id}/notas` | Tablero | PA-03 / CU-12 | IMPLEMENTADO | empresa + plataforma | `postulaciones:ver` (empresa) o `platform:postulaciones:ver` (plataforma) | TAB-002 |
+| API-052 | GET | `/api/v1/postulantes/{postulante_id}/cv` | Postulantes | PA-02 / CU-11 | IMPLEMENTADO | empresa + plataforma | `postulantes:ver` (empresa) o `platform:postulantes:ver` (plataforma) | PTE-003 |
+| API-053 | GET | `/api/v1/publico/{empresa_slug}` | Portal | PA-02 / CU-09 | IMPLEMENTADO | público | — | POR-001 |
+| API-054 | PATCH | `/api/v1/postulaciones/{postulacion_id}/puntaje` | Tablero | PA-03 / CU-12 | IMPLEMENTADO | empresa + plataforma | `postulaciones:gestionar` (empresa) o `platform:postulaciones:gestionar` (plataforma) | TAB-003 |
+| API-055 | PATCH | `/api/v1/vacantes/{vacante_id}/cerrar` | Vacantes | PA-02 / CU-08 | IMPLEMENTADO | empresa + plataforma | `vacantes:publicar` (empresa) o `platform:vacantes:gestionar` (plataforma) | VAC-003 |
+| API-056 | PATCH | `/api/v1/vacantes/{vacante_id}/pausar` | Vacantes | PA-02 / CU-08 | IMPLEMENTADO | empresa + plataforma | `vacantes:publicar` (empresa) o `platform:vacantes:gestionar` (plataforma) | VAC-003 |
+| API-057 | PATCH | `/api/v1/vacantes/{vacante_id}/reanudar` | Vacantes | PA-02 / CU-08 | IMPLEMENTADO | empresa + plataforma | `vacantes:publicar` (empresa) o `platform:vacantes:gestionar` (plataforma) | VAC-003 |
+| API-058 | POST | `/api/v1/auth/registro-empresa` | Auth | PA-01 / CU-01, CU-03 | IMPLEMENTADO | público | — | AUTH-001 |
+| API-059 | POST | `/api/v1/postulaciones/{postulacion_id}/notas` | Tablero | PA-03 / CU-12 | IMPLEMENTADO | empresa + plataforma | `postulaciones:gestionar` (empresa) o `platform:postulaciones:gestionar` (plataforma) | TAB-003 |
+| API-060 | POST | `/api/v1/postulantes` | Postulantes | PA-02 / CU-11 | IMPLEMENTADO | empresa + plataforma | `postulantes:gestionar` (empresa) o `platform:postulantes:ver` (plataforma) | PTE-003 |
+| API-061 | PUT | `/api/v1/empresas/{empresa_id}/modulos` | Módulos | PA-01 / CU-01 | IMPLEMENTADO | plataforma | `platform:modulos:gestionar` | EMP-001 |
+| API-062 | PUT | `/api/v1/habilidades/{habilidad_id}` | Habilidades | PA-02 / apoyo CU-08 | IMPLEMENTADO | empresa + plataforma | `habilidades:gestionar` (empresa) o `platform:habilidades:gestionar` (plataforma) | HAB-003 |
 
 ### Endpoints PENDIENTES — alcance del Sprint 1 aún sin implementar
 

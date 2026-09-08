@@ -22,6 +22,12 @@ from ssas.platform.domain.exceptions import (
 from ssas.platform.infrastructure.persistence.repositories.platform_repository import (
     PlatformRepository,
 )
+from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
+    EtapaReclutamientoModel,
+)
+from ssas.postulaciones.infrastructure.persistence.models.motivo_rechazo import (
+    MotivoRechazoModel,
+)
 from ssas.roles.infrastructure.persistence.models.permission import PermissionModel
 from ssas.roles.infrastructure.persistence.models.role import RoleModel
 from ssas.roles.infrastructure.persistence.models.role_permission import rol_permiso_table
@@ -46,6 +52,16 @@ ROLE_DEFINITIONS: tuple[tuple[str, str, tuple[str, ...] | None], ...] = (
             "postulantes:ver",
             "postulaciones:ver",
             "postulaciones:gestionar",
+        ),
+    ),
+    (
+        "JEFE_AREA",
+        "Jefe de Área",
+        (
+            "departamentos:ver",
+            "cargos:ver",
+            "vacantes:ver",
+            "postulaciones:ver",
         ),
     ),
     ("EMPLEADO", "Empleado", ()),
@@ -99,6 +115,45 @@ class ProvisionEmpresa:
             )
         await self.session.flush()
 
+    async def _crear_etapas_y_motivos_iniciales(self, empresa_id: str) -> None:
+        """Crea las etapas iniciales de reclutamiento y motivos de rechazo para el tenant."""
+        etapas_base = [
+            ("Postulado", 1, "#64748b", True, False, False),
+            ("Preseleccionado", 2, "#2563eb", False, False, False),
+            ("Entrevista", 3, "#7c3aed", False, False, False),
+            ("Oferta", 4, "#f59e0b", False, False, False),
+            ("Contratado", 5, "#16a34a", False, True, False),
+            ("Descartado", 6, "#dc2626", False, False, True),
+        ]
+        for nombre, orden, color, es_ini, es_con, es_rec in etapas_base:
+            self.session.add(
+                EtapaReclutamientoModel(
+                    empresa_id=empresa_id,
+                    nombre=nombre,
+                    orden=orden,
+                    color=color,
+                    es_inicial=es_ini,
+                    es_contratado=es_con,
+                    es_rechazado=es_rec,
+                )
+            )
+        motivos_base = [
+            "No cumple perfil técnico",
+            "Expectativa salarial fuera de rango",
+            "No se presentó a la entrevista",
+            "Desistimiento del postulante",
+            "Otro",
+        ]
+        for nombre in motivos_base:
+            self.session.add(
+                MotivoRechazoModel(
+                    empresa_id=empresa_id,
+                    nombre=nombre,
+                    activo=True,
+                )
+            )
+        await self.session.flush()
+
     @staticmethod
     def _resolver_permisos(
         rol: str,
@@ -136,6 +191,7 @@ class ProvisionEmpresa:
         self.session.add(empresa)
         await self.session.flush()
         await self._habilitar_modulos(empresa.id, request.modulos)
+        await self._crear_etapas_y_motivos_iniciales(empresa.id)
         # Un rol de empresa NUNCA puede recibir permisos de plataforma: son operaciones
         # del proveedor SaaS (crear empresas y gestionar administradores globales).
         # Sin este filtro, ADMIN_EMPRESA —que se define con "todos los permisos"— se
@@ -174,8 +230,8 @@ class ProvisionEmpresa:
             hashed_password=self.password_hasher.hash(admin_data["password"]),
             telefono=admin_data.get("telefono"),
             is_active=True,
-            email_verified=False,
-            debe_cambiar_password=True,
+            email_verified=True,
+            debe_cambiar_password=False,
         )
         self.session.add(admin)
         await self.session.flush()

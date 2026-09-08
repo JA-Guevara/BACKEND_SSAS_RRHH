@@ -1,6 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+
+from ssas.vacantes.domain.entities.vacante import VacanteHabilidadInfo
 
 
 @dataclass(frozen=True)
@@ -20,3 +22,6 @@ class VacantePublica:
     experiencia_min: int
     fecha_publicacion: datetime
     fecha_cierre: datetime | None
+    cargo_nombre: str | None = None
+    departamento_nombre: str | None = None
+    habilidades: list[VacanteHabilidadInfo] = field(default_factory=list)

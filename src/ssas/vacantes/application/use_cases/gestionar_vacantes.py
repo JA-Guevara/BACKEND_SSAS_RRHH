@@ -33,6 +33,13 @@ class GestionarVacantes:
             empresa_id, values["cargo_id"], values["departamento_id"], responsable_id
         ):
             raise VacanteReferenceError("Cargo, departamento o responsable no pertenece a la empresa")
+        if "habilidades" in values and values["habilidades"]:
+            h_ids = [
+                h["habilidad_id"] if isinstance(h, dict) else h.habilidad_id
+                for h in values["habilidades"]
+            ]
+            if not await self.repository.skills_belong_to_empresa(empresa_id, h_ids):
+                raise VacanteReferenceError("Una o más habilidades no pertenecen a la empresa")
         return await self.repository.create(empresa_id, responsable_id, values)
 
     async def actualizar(
@@ -48,15 +55,37 @@ class GestionarVacantes:
         }
         if not await self.repository.references_belong_to_empresa(empresa_id, **references):
             raise VacanteReferenceError("Cargo, departamento o responsable no pertenece a la empresa")
+        if "habilidades" in values and values["habilidades"]:
+            h_ids = [
+                h["habilidad_id"] if isinstance(h, dict) else h.habilidad_id
+                for h in values["habilidades"]
+            ]
+            if not await self.repository.skills_belong_to_empresa(empresa_id, h_ids):
+                raise VacanteReferenceError("Una o más habilidades no pertenecen a la empresa")
         return await self.repository.update(vacante_id, empresa_id, values)
 
     async def publicar(self, vacante_id: str, empresa_id: str) -> Vacante:
         current = await self.obtener(vacante_id, empresa_id)
-        if current.estado != "BORRADOR":
-            raise VacanteInvalidStateError("Solo se pueden publicar vacantes en borrador")
+        if current.estado not in ("BORRADOR", "PAUSADA"):
+            raise VacanteInvalidStateError(
+                f"Solo se pueden publicar o reanudar vacantes en borrador o pausadas; la vacante está en {current.estado}"
+            )
         if current.fecha_cierre and current.fecha_cierre < datetime.now(UTC):
             raise VacanteInvalidStateError("La fecha de cierre ya vencio")
-        return await self.repository.publish(vacante_id, empresa_id, datetime.now(UTC))
+        fecha_pub = current.fecha_publicacion or datetime.now(UTC)
+        return await self.repository.publish(vacante_id, empresa_id, fecha_pub)
+
+    async def reanudar(self, vacante_id: str, empresa_id: str) -> Vacante:
+        current = await self.obtener(vacante_id, empresa_id)
+        if current.estado != "PAUSADA":
+            raise VacanteInvalidStateError(
+                f"Solo se pueden reanudar vacantes pausadas; la vacante está en {current.estado}"
+            )
+        if current.fecha_cierre and current.fecha_cierre < datetime.now(UTC):
+            raise VacanteInvalidStateError("La fecha de cierre ya vencio")
+        fecha_pub = current.fecha_publicacion or datetime.now(UTC)
+        return await self.repository.publish(vacante_id, empresa_id, fecha_pub)
+
 
     async def pausar(self, vacante_id: str, empresa_id: str) -> Vacante:
         """Retira temporalmente del portal una vacante publicada.

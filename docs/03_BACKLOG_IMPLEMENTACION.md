@@ -667,7 +667,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Portal | PA-02 / CU-09 |
+| IMPLEMENTADO | ALTA | API | Portal | PA-02 / CU-09 |
 
 **Descripción.** Listado y detalle de vacantes publicadas por empresa, sin autenticación, en `/publico/{empresa_slug}/vacantes`. Corresponde a **T-09** (HU-04). Hoy solo existe `/publico/postulaciones`.
 
@@ -763,7 +763,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Tablero | PA-03 / CU-12 |
+| IMPLEMENTADO | ALTA | API | Tablero | PA-03 / CU-12 |
 
 **Descripción.** Las tablas `etapa_reclutamiento` y `motivo_rechazo` están migradas y sin uso. El tablero las necesita para agrupar columnas y para exigir motivo al rechazar.
 
@@ -797,7 +797,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Tablero | PA-03 / CU-12 |
+| IMPLEMENTADO | ALTA | API | Tablero | PA-03 / CU-12 |
 
 **Descripción.** Vista Kanban de las postulaciones de una vacante, agrupadas por etapa y con contador por columna. Corresponde a **T-12** (HU-06).
 
@@ -833,7 +833,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Tablero | PA-03 / CU-12 |
+| IMPLEMENTADO | ALTA | API | Tablero | PA-03 / CU-12 |
 
 **Descripción.** Acciones del tablero: cambiar la etapa de una postulación y rechazarla exigiendo un motivo del catálogo (T-12 / HU-06).
 
@@ -1028,7 +1028,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Vacantes | PA-02 / CU-08 |
+| IMPLEMENTADO | ALTA | API | Vacantes | PA-02 / CU-08 |
 
 **Descripción.** Exponer el CRUD y la publicación siguiendo el patrón de `cargos` y `departamentos` (T-08 / HU-03).
 
@@ -1341,7 +1341,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | MEDIA | API | Postulantes | PA-02 / CU-11 |
+| IMPLEMENTADO | MEDIA | API | Postulantes | PA-02 / CU-11 |
 
 **Descripción.** Consulta del banco de talentos.
 
@@ -1418,7 +1418,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | BAJA | API | Habilidades | PA-02 / apoyo CU-08 |
+| IMPLEMENTADO | BAJA | API | Habilidades | PA-02 / apoyo CU-08 |
 
 **Descripción.** Exponer el catálogo para asociarlo a vacantes.
 

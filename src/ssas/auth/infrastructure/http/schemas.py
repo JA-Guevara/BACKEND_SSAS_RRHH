@@ -118,3 +118,34 @@ class UserSchema(BaseModel):
     must_change_password: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class RegistroEmpresaRequest(BaseModel):
+    razon_social: str = Field(min_length=2, max_length=200)
+    nombre_comercial: str = Field(min_length=2, max_length=200)
+    slug: str = Field(min_length=2, max_length=120, pattern=r"^[a-zA-Z0-9-]+$")
+    nit: str | None = Field(default=None, max_length=30)
+    email: EmailStr | None = None
+    telefono: str | None = Field(default=None, max_length=40)
+    ciudad: str | None = Field(default=None, max_length=100)
+    color_primario: str = Field(default="#2563eb", max_length=20)
+    descripcion: str | None = None
+    admin_nombre: str = Field(min_length=2, max_length=120)
+    admin_apellido: str = Field(min_length=1, max_length=120)
+    admin_email: EmailStr
+    admin_username: str = Field(min_length=3, max_length=80)
+    admin_password: str = Field(min_length=12, max_length=72)
+    admin_telefono: str | None = Field(default=None, max_length=40)
+
+
+class RegistroEmpresaResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    empresa_id: str
+    empresa_nombre: str
+    empresa_slug: str
+    usuario_id: str
+    usuario_email: EmailStr
+    message: str = "Empresa registrada exitosamente"
+

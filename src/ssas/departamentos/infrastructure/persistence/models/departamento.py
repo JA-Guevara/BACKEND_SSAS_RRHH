@@ -30,6 +30,7 @@ class DepartamentoModel(Base):
         UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False
     )
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    codigo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
     departamento_padre_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("departamento.id", ondelete="RESTRICT"), nullable=True

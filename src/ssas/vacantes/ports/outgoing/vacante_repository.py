@@ -42,6 +42,10 @@ class VacanteRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def skills_belong_to_empresa(self, empresa_id: str, habilidad_ids: list[str]) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     async def list_publicadas(
         self, empresa_slug: str, ubicacion: str | None, modalidad: str | None
     ) -> list[VacantePublica]:
@@ -50,3 +54,4 @@ class VacanteRepository(ABC):
     @abstractmethod
     async def get_publicada(self, empresa_slug: str, vacante_id: str) -> VacantePublica | None:
         raise NotImplementedError
+

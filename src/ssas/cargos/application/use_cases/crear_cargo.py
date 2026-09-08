@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from ssas.cargos.domain.exceptions import (
     CargoAlreadyExistsError,
     InvalidDepartamentoForCargoError,
@@ -16,6 +18,10 @@ class CrearCargo:
         departamento_id: str | None = None,
         descripcion: str | None = None,
         activo: bool = True,
+        codigo: str | None = None,
+        nivel: str | None = None,
+        salario_min: Decimal | None = None,
+        salario_max: Decimal | None = None,
     ):
         normalized_nombre = nombre.strip()
         if await self.repository.get_by_nombre(normalized_nombre, empresa_id):
@@ -30,4 +36,9 @@ class CrearCargo:
             departamento_id=departamento_id,
             descripcion=descripcion.strip() if descripcion else None,
             activo=activo,
+            codigo=codigo.strip() if codigo else None,
+            nivel=nivel,
+            salario_min=salario_min,
+            salario_max=salario_max,
         )
+
