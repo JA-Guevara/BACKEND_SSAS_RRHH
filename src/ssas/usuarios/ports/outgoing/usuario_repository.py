@@ -41,6 +41,7 @@ class UsuarioRepository(ABC):
         password_hash: str,
         telefono: str | None,
         role_ids: list[str],
+        email_verificado: bool = True,
     ) -> Usuario:
         raise NotImplementedError
 

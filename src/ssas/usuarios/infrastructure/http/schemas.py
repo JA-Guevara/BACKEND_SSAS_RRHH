@@ -12,6 +12,14 @@ class CrearUsuarioRequest(BaseModel):
     password: str = Field(min_length=12, max_length=72)
     telefono: str | None = Field(default=None, max_length=40)
     role_ids: list[str] = Field(min_length=1)
+    email_verificado: bool = Field(
+        default=True,
+        description=(
+            "Marca el correo como verificado. Por omisión es verdadero porque la cuenta "
+            "la crea un administrador con contraseña provisional; ponlo en falso para "
+            "obligar al titular a verificar su correo antes de poder iniciar sesión."
+        ),
+    )
 
 
 class ActualizarUsuarioRequest(BaseModel):

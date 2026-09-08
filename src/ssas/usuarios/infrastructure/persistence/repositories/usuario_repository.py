@@ -98,6 +98,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         password_hash: str,
         telefono: str | None,
         role_ids: list[str],
+        email_verificado: bool = True,
     ) -> Usuario:
         user_id = str(uuid4())
         self.session.add(
@@ -111,7 +112,11 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
                 hashed_password=password_hash,
                 telefono=telefono,
                 is_active=True,
-                email_verified=False,
+                # Lo crea un administrador que ya conoce al titular y le fija una
+                # contraseña provisional: exigir además verificación de correo dejaba
+                # la cuenta inutilizable si el envío de correo no está operativo.
+                # La seguridad la cubre `debe_cambiar_password`.
+                email_verified=email_verificado,
                 debe_cambiar_password=True,
             )
         )
