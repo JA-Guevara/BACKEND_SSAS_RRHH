@@ -61,6 +61,44 @@ class ProvisionEmpresa:
         self.repository = PlatformRepository(session)
         self.password_hasher = Argon2PasswordHasher()
 
+    async def _habilitar_modulos(self, empresa_id: str, solicitados: list[str] | None) -> None:
+        """Deja registrada la habilitación de los módulos contratables.
+
+        Los módulos núcleo no se registran: están siempre disponibles. Sin lista
+        explícita se habilitan todos, que es lo que espera quien da de alta una
+        empresa sin pensar todavía en el alcance funcional.
+        """
+        catalogo = (
+            (
+                await self.session.execute(
+                    select(ModuloModel).where(
+                        ModuloModel.activo.is_(True), ModuloModel.es_core.is_(False)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not catalogo:
+            return
+        codigos = {modulo.codigo for modulo in catalogo}
+        if solicitados is not None:
+            desconocidos = sorted(set(solicitados) - codigos)
+            if desconocidos:
+                raise PlatformConflictError(f"Módulos inexistentes: {', '.join(desconocidos)}")
+        ahora = datetime.now(UTC)
+        for modulo in catalogo:
+            habilitado = solicitados is None or modulo.codigo in solicitados
+            self.session.add(
+                EmpresaModuloModel(
+                    empresa_id=empresa_id,
+                    modulo_id=modulo.id,
+                    habilitado=habilitado,
+                    fecha_habilitacion=ahora if habilitado else None,
+                )
+            )
+        await self.session.flush()
+
     @staticmethod
     def _resolver_permisos(
         rol: str,
