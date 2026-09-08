@@ -42,6 +42,7 @@ class EtapaReclutamientoModel(Base):
     nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     orden: Mapped[int] = mapped_column(Integer, nullable=False)
     color: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     es_inicial: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     es_contratado: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     es_rechazado: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")

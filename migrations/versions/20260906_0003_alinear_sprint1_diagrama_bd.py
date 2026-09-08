@@ -221,6 +221,13 @@ def upgrade() -> None:
         )
         """
     )
+    # En una instalacion vacia solo existen las etapas globales de la migracion
+    # anterior. Sin empresas ni postulaciones no tienen un propietario posible.
+    op.execute(
+        "DELETE FROM etapa_reclutamiento er WHERE er.empresa_id IS NULL "
+        "AND NOT EXISTS (SELECT 1 FROM empresa) "
+        "AND NOT EXISTS (SELECT 1 FROM postulacion p WHERE p.etapa_id = er.id)"
+    )
     op.alter_column("etapa_reclutamiento", "empresa_id", nullable=False)
     op.create_foreign_key(
         "fk_etapa_reclutamiento_empresa_id_empresa",

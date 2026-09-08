@@ -7,7 +7,7 @@ completas es la de las cinco últimas entradas de bitácora.
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -185,20 +185,29 @@ async def _resumen_plataforma(session: AsyncSession) -> ResumenPlataforma:
     ),
 )
 async def resumen_dashboard(
+    empresa_id: str | None = Query(default=None),
     user: CurrentUser = Depends(
         require_scoped_permission("empresa:ver", "platform:empresas:ver")
     ),
     session: AsyncSession = Depends(get_session),
 ) -> ResumenDashboardResponse:
-    if user.es_plataforma:
+    if not user.es_plataforma and empresa_id and empresa_id != user.empresa_id:
+        raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
+    if user.es_plataforma and empresa_id is None:
         return ResumenDashboardResponse(
             alcance="PLATAFORMA",
             plataforma=await _resumen_plataforma(session),
             bitacora_reciente=await _bitacora_reciente(session, None),
         )
+    empresa = empresa_id if user.es_plataforma else user.empresa_id
+    exists = await session.scalar(select(EmpresaModel.id).where(
+        EmpresaModel.id == empresa, EmpresaModel.eliminado_at.is_(None)
+    ))
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
     return ResumenDashboardResponse(
         alcance="EMPRESA",
-        empresa_id=user.empresa_id,
-        empresa=await _resumen_empresa(session, user.empresa_id),
-        bitacora_reciente=await _bitacora_reciente(session, user.empresa_id),
+        empresa_id=empresa,
+        empresa=await _resumen_empresa(session, empresa),
+        bitacora_reciente=await _bitacora_reciente(session, empresa),
     )

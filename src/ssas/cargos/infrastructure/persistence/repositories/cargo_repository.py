@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select, update
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.cargos.domain.entities.cargo import Cargo
@@ -102,7 +101,7 @@ class SqlAlchemyCargoRepository(CargoRepository):
 
     async def update_cargo(self, cargo_id: str, empresa_id: str, values: dict) -> Cargo:
         clean_values = dict(values)
-        if "codigo" in clean_values and clean_values["codigo"]:
+        if clean_values.get("codigo"):
             clean_values["codigo"] = clean_values["codigo"].strip().upper()
         await self.session.execute(
             update(CargoModel)

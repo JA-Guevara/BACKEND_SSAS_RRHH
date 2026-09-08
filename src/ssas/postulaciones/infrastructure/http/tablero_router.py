@@ -201,10 +201,12 @@ async def cambiar_etapa(
     session: AsyncSession = Depends(get_session),
 ):
     empresa = _empresa(user, empresa_id)
-    valid = await session.scalar(select(EtapaReclutamientoModel.id).where(EtapaReclutamientoModel.id == request.etapa_id, EtapaReclutamientoModel.empresa_id == empresa))
+    valid = await session.scalar(select(EtapaReclutamientoModel).where(EtapaReclutamientoModel.id == request.etapa_id, EtapaReclutamientoModel.empresa_id == empresa, EtapaReclutamientoModel.activo.is_(True)))
     if valid is None:
         raise HTTPException(status_code=404, detail="Etapa no encontrada")
-    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(etapa_id=request.etapa_id, fecha_ultimo_cambio=datetime.now(UTC)))
+    if valid.es_rechazado:
+        raise HTTPException(status_code=409, detail="Usa rechazar con un motivo para esta etapa")
+    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(etapa_id=request.etapa_id, estado="CONTRATADA" if valid.es_contratado else "ACTIVA", motivo_rechazo_id=None, fecha_ultimo_cambio=datetime.now(UTC)))
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
@@ -220,10 +222,17 @@ async def rechazar(
     session: AsyncSession = Depends(get_session),
 ):
     empresa = _empresa(user, empresa_id)
-    valid = await session.scalar(select(MotivoRechazoModel.id).where(MotivoRechazoModel.id == request.motivo_rechazo_id, MotivoRechazoModel.empresa_id == empresa))
+    valid = await session.scalar(select(MotivoRechazoModel.id).where(MotivoRechazoModel.id == request.motivo_rechazo_id, MotivoRechazoModel.empresa_id == empresa, MotivoRechazoModel.activo.is_(True)))
     if valid is None:
         raise HTTPException(status_code=404, detail="Motivo de rechazo no encontrado")
-    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(motivo_rechazo_id=request.motivo_rechazo_id, estado="DESCARTADA", fecha_ultimo_cambio=datetime.now(UTC)))
+    etapa = await session.scalar(select(EtapaReclutamientoModel.id).where(
+        EtapaReclutamientoModel.empresa_id == empresa,
+        EtapaReclutamientoModel.es_rechazado.is_(True),
+        EtapaReclutamientoModel.activo.is_(True),
+    ).order_by(EtapaReclutamientoModel.orden).limit(1))
+    if etapa is None:
+        raise HTTPException(status_code=409, detail="La empresa necesita una etapa de rechazo activa")
+    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(etapa_id=etapa, motivo_rechazo_id=request.motivo_rechazo_id, estado="DESCARTADA", fecha_ultimo_cambio=datetime.now(UTC)))
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")

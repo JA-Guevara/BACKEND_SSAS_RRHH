@@ -2,7 +2,9 @@ import os
 
 import pytest
 from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -43,7 +45,7 @@ async def test_minimal_schema_is_applied() -> None:
                     "to_regclass('public.bitacora')"
                 )
             )
-        assert revision == "20260825_0002"
+        assert revision == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
         assert all(tables.one())
     finally:
         await engine.dispose()

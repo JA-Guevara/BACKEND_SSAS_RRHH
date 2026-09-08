@@ -81,3 +81,5 @@ Index(
     func.lower(CargoModel.nombre),
     unique=True,
 )
+
+Index("uq_cargo_empresa_codigo_ci", CargoModel.empresa_id, func.lower(CargoModel.codigo), unique=True)

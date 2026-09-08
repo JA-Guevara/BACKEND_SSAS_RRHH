@@ -10,6 +10,8 @@ from ssas.cargos.infrastructure.persistence.models.cargo import CargoModel
 from ssas.departamentos.infrastructure.persistence.models.departamento import DepartamentoModel
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
+from ssas.roles.infrastructure.persistence.models.role import RoleModel
+from ssas.roles.infrastructure.persistence.models.user_role import usuario_rol_table
 from ssas.vacantes.domain.entities.vacante import Vacante, VacanteHabilidadInfo
 from ssas.vacantes.domain.entities.vacante_publica import VacantePublica
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
@@ -28,6 +30,7 @@ def condiciones_vacante_vigente() -> list[Any]:
     """
     return [
         EmpresaModel.activo.is_(True),
+        EmpresaModel.portal_publico_activo.is_(True),
         EmpresaModel.eliminado_at.is_(None),
         (VacanteModel.fecha_cierre.is_(None) | (VacanteModel.fecha_cierre >= func.now())),
     ]
@@ -36,6 +39,25 @@ def condiciones_vacante_vigente() -> list[Any]:
 class SqlAlchemyVacanteRepository(VacanteRepository):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def responsable_empresarial(self, empresa_id: str) -> str | None:
+        """Selecciona un administrador activo de la empresa para altas de plataforma."""
+        result = await self.session.execute(
+            select(UserModel.id)
+            .join(usuario_rol_table, usuario_rol_table.c.usuario_id == UserModel.id)
+            .join(RoleModel, RoleModel.id == usuario_rol_table.c.rol_id)
+            .where(
+                UserModel.empresa_id == empresa_id,
+                UserModel.is_active.is_(True),
+                UserModel.eliminado_at.is_(None),
+                RoleModel.empresa_id == empresa_id,
+                RoleModel.codigo == "ADMIN_EMPRESA",
+                RoleModel.is_active.is_(True),
+            )
+            .order_by(UserModel.created_at, UserModel.id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     def _query_options(self):
         return [
@@ -168,6 +190,7 @@ class SqlAlchemyVacanteRepository(VacanteRepository):
             .where(
                 CargoModel.id == cargo_id,
                 CargoModel.empresa_id == empresa_id,
+                CargoModel.departamento_id == departamento_id,
                 DepartamentoModel.empresa_id == empresa_id,
                 UserModel.empresa_id == empresa_id,
             )

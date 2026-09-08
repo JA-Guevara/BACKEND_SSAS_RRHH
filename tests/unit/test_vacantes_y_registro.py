@@ -142,8 +142,8 @@ def test_schemas_serialize_skills_and_names():
         requisitos=None,
         beneficios=None,
         cantidad_vacantes=1,
-        salario_min=Decimal("3000"),
-        salario_max=Decimal("4000"),
+        salario_min=Decimal(3000),
+        salario_max=Decimal(4000),
         mostrar_salario=True,
         modalidad="REMOTO",
         ubicacion=None,
@@ -218,8 +218,8 @@ async def test_crear_departamento_y_cargo_con_codigo():
         departamento_id="d1",
         codigo="dev-sr",
         nivel="Senior",
-        salario_min=Decimal("4000"),
-        salario_max=Decimal("6000"),
+        salario_min=Decimal(4000),
+        salario_max=Decimal(6000),
     )
     cargo_repo.create_cargo.assert_called_once_with(
         empresa_id="emp-1",
@@ -229,8 +229,8 @@ async def test_crear_departamento_y_cargo_con_codigo():
         activo=True,
         codigo="dev-sr",
         nivel="Senior",
-        salario_min=Decimal("4000"),
-        salario_max=Decimal("6000"),
+        salario_min=Decimal(4000),
+        salario_max=Decimal(6000),
     )
 
 

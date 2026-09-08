@@ -64,3 +64,10 @@ Index(
     func.lower(DepartamentoModel.nombre),
     unique=True,
 )
+
+Index(
+    "uq_departamento_empresa_codigo_ci",
+    DepartamentoModel.empresa_id,
+    func.lower(DepartamentoModel.codigo),
+    unique=True,
+)

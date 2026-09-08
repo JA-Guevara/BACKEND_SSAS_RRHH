@@ -86,8 +86,18 @@ async def crear_vacante(
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        target_empresa = _empresa(current_user, empresa_id)
+        responsable_id = current_user.id
+        if current_user.es_plataforma:
+            responsable_id = await SqlAlchemyVacanteRepository(session).responsable_empresarial(
+                target_empresa
+            )
+            if responsable_id is None:
+                raise VacanteReferenceError(
+                    "La empresa necesita un administrador empresarial activo como responsable"
+                )
         return await _service(session).crear(
-            _empresa(current_user, empresa_id), current_user.id, request.model_dump()
+            target_empresa, responsable_id, request.model_dump()
         )
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="No se pudo crear la vacante") from exc
@@ -263,6 +273,7 @@ async def obtener_empresa_publica(
     session: AsyncSession = Depends(get_session),
 ):
     from sqlalchemy import func, select
+
     from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 
     result = await session.execute(
@@ -277,7 +288,7 @@ async def obtener_empresa_publica(
         raise HTTPException(status_code=404, detail="Empresa no encontrada o portal inactivo")
     return EmpresaPublicaResponse(
         id=empresa.id,
-        nombre=empresa.nombre,
+        nombre=empresa.razon_social,
         nombre_comercial=empresa.nombre_comercial,
         slug=empresa.slug,
         descripcion=empresa.descripcion,
@@ -299,6 +310,7 @@ async def listar_vacantes_publicas(
     modalidad: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ):
+    await obtener_empresa_publica(empresa_slug, session)
     return await _service(session).listar_publicas(empresa_slug, ubicacion, modalidad)
 
 
