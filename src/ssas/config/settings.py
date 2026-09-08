@@ -16,7 +16,11 @@ class Settings(BaseSettings):
     app_max_login_attempts: int = Field(default=5, ge=1, le=20)
     app_login_lock_minutes: int = Field(default=15, ge=1, le=1440)
     app_frontend_url: str = "http://localhost:3000"
-    app_cors_origins: str = "http://localhost:3000"
+    app_cors_origins: str = (
+        "http://localhost:3000,http://localhost:5173,"
+        "https://frontendssasrrhh-production.up.railway.app"
+    )
+    app_cors_origin_regex: str = ""
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_username: str | None = None
@@ -57,6 +61,11 @@ class Settings(BaseSettings):
             for origin in self.app_cors_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        # Subdominios de despliegue de Railway (producción y previews).
+        return self.app_cors_origin_regex or r"^https://[a-z0-9-]+\.up\.railway\.app$"
 
     model_config = SettingsConfigDict(
         env_file=".env",

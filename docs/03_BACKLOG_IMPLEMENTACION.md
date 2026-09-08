@@ -1483,6 +1483,50 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 ---
 
+### TASK CORR-001 — Empresa activa única, Habilidades y Portal público
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| VALIDADO | ALTA | UI + API | Nuclear (todos) | — |
+
+**Descripción.** Corrección integral detectada en la auditoría sistémica: un único
+selector de empresa activa en el encabezado (se elimina el duplicado del sidebar y el
+tenant resuelve su empresa dentro del contexto), Habilidades con `empresa_id` en todas
+las operaciones y estados error/vacío separados, rediseño de Organización con pestañas y
+modales, validación salarial de cargos en API y formularios, y Portal público que
+distingue el fallo de red de la ausencia de vacantes con reintento. CORS ampliado con
+regex para subdominios de Railway.
+
+**Componentes**
+
+- [x] `CompanyScopeContext` como única fuente de la empresa activa (plataforma y tenant)
+- [x] Selector único en `AppLayout`; sin selectores locales en Habilidades/Organización/Vacantes
+- [x] `habilidadesApi` con `empresa_id` en GET/POST/PUT y guard cuando no hay empresa
+- [x] `HabilidadesPage` con estados carga/error/vacío/datos (`DataTable`)
+- [x] Organización con pestañas Departamentos/Cargos, modales y confirmaciones
+- [x] Validación `salario_min <= salario_max` en `CrearCargoRequest`/`ActualizarCargoRequest`
+- [x] Portal: error de red con reintento vs "no hay vacantes"; 404 de slug genérico
+- [x] Dev: `.env` con `VITE_API_URL` vacío para usar el proxy local (`localhost:8000`)
+
+**Reglas de negocio**
+
+- La empresa activa es una sola en toda la sesión; el tenant no la puede cambiar.
+- El backend resuelve la empresa del token; el frontend nunca inventa `empresa_id`.
+- El Portal jamás muestra "no hay vacantes" cuando la API falló.
+
+**Endpoints:** API-P07, API-P08, API-P18, API-P19, API-053 → ver `02_API_ENDPOINTS.md`
+
+**Criterios de aceptación**
+
+- [x] Sin "Debe indicar empresa_id" navegando con empresa activa o sin ella (estado guiado)
+- [x] GET/POST/PUT `/api/v1/habilidades` llevan `empresa_id` y mantienen el aislamiento
+- [x] El Portal nunca muestra "No hay vacantes" cuando la API falla
+- [x] pytest (69 passed, 3 skipped) · ruff · build del frontend · verificar_documentacion
+
+**Tests requeridos:** `test_cargos_schemas.py`, `test_habilidades_alcance.py` y CORS en `test_database_settings.py`
+
+---
+
 ```text
 ==================================================
 PROTOCOLO PARA AGENTES

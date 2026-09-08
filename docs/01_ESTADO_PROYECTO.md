@@ -1,7 +1,7 @@
 # 01 — ESTADO DEL PROYECTO
 
 > **Este es el primer documento que debe leer cualquier agente.**
-> Sincronizado el **2026-09-07** contra el commit `782ac60`.
+> Sincronizado el **2026-09-08** contra el commit `782ac60`.
 > Verificar con `python scripts/verificar_documentacion.py` antes de confiar en él.
 
 ---
@@ -57,10 +57,10 @@ pytest && ruff check src tests
 | Capacitación | PENDIENTE | PA-05 | 0 | 0 | Próximo sprint |
 | Inteligencia Artificial | PENDIENTE | PA-06 | 0 | 0 | Próximo sprint |
 | Reportes e Indicadores | PENDIENTE | PA-07 | 0 | 0 | Próximo sprint |
-| Tests | IMPLEMENTADO | — | — | 54 | 12 archivos, 54 pruebas (51 passed, 3 skipped, 0 failed) |
-| Documentación | IMPLEMENTADO | — | — | — | Sincronizado: 81 endpoints y 41 tareas verificadas con 0 fallos |
+| Tests | IMPLEMENTADO | — | — | 69 | 14 archivos, 69 pruebas (66 passed, 3 skipped, 0 failed) |
+| Documentación | IMPLEMENTADO | — | — | — | Sincronizado: 86 endpoints y 43 tareas verificadas con 0 fallos |
 
-**Resumen:** **81 endpoints** en 13 módulos. El alcance funcional del Sprint 1 y la integración completa están operativos.
+**Resumen:** **86 endpoints** en 14 módulos. El alcance funcional del Sprint 1 y la integración completa están operativos.
 
 ---
 
@@ -130,6 +130,18 @@ El plan de ejecución está en
 [`04_EJECUCION_MULTIAGENTE_SPRINT1.md`](04_EJECUCION_MULTIAGENTE_SPRINT1.md) y los textos
 para lanzar cada agente en
 [`PROMPT_INICIO_MULTIAGENTE.md`](PROMPT_INICIO_MULTIAGENTE.md).
+
+## 2 quater. Corrección integral de alcance, Habilidades y Portal — 2026-09-08
+
+Corrección sistémica tras la auditoría de `05_AUDITORIA_SISTEMICA_Y_CORRECCION_INTEGRAL.md`
+(`CORR-001`): un único selector de empresa activa en el encabezado (el sidebar dejó de
+tener selector propio y el tenant resuelve su empresa dentro de `CompanyScopeContext`),
+`/api/v1/habilidades` opera siempre con `empresa_id` y la UI distingue error de lista
+vacía, Organización pasó a pestañas con modales y confirmaciones, los cargos validan
+`salario_min <= salario_max` en la API, y el Portal público separa el fallo de red (con
+reintento) de la ausencia de vacantes. CORS ampliado con regex para subdominios de
+Railway. Resultado: `pytest` 69 passed / 3 skipped, `ruff` y build del frontend en cero
+errores, documentación sincronizada (86/86).
 
 ## 3. Arquitectura real
 
