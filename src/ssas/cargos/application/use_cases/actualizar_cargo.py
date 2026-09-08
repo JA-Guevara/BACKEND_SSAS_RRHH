@@ -21,7 +21,7 @@ class ActualizarCargo:
             existing = await self.repository.get_by_nombre(values["nombre"], empresa_id)
             if existing and existing.id != cargo_id:
                 raise CargoAlreadyExistsError("Ya existe un cargo con ese nombre")
-        if "departamento_id" in values and values["departamento_id"]:
+        if values.get("departamento_id"):
             if not await self.repository.departamento_exists(values["departamento_id"], empresa_id):
                 raise InvalidDepartamentoForCargoError("El departamento no existe en la empresa")
         if "descripcion" in values and values["descripcion"] is not None:

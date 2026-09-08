@@ -33,6 +33,7 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "etapa_reclutamiento",
         "motivo_rechazo",
         "postulacion",
+        "postulacion_nota",
     }
 
 

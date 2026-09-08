@@ -16,16 +16,19 @@ def import_all_models() -> None:
     import ssas.departamentos.infrastructure.persistence.models.departamento
     import ssas.empresas.infrastructure.persistence.models.empresa
     import ssas.habilidades.infrastructure.persistence.models.habilidad
-    import ssas.postulantes.infrastructure.persistence.models.postulante
+    import ssas.modulos.infrastructure.persistence.models.empresa_modulo
+    import ssas.modulos.infrastructure.persistence.models.modulo
     import ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento
     import ssas.postulaciones.infrastructure.persistence.models.motivo_rechazo
     import ssas.postulaciones.infrastructure.persistence.models.postulacion
+    import ssas.postulaciones.infrastructure.persistence.models.postulacion_nota
+    import ssas.postulantes.infrastructure.persistence.models.postulante
 
     # platform ya no define modelos propios: sus administradores son filas de
     # 'usuario' con empresa_id NULL y sus eventos filas de 'bitacora'.
     import ssas.roles.infrastructure.persistence.models.permission
     import ssas.roles.infrastructure.persistence.models.role
     import ssas.roles.infrastructure.persistence.models.role_permission
-    import ssas.roles.infrastructure.persistence.models.user_role  # noqa: F401
+    import ssas.roles.infrastructure.persistence.models.user_role
     import ssas.vacantes.infrastructure.persistence.models.vacante
     import ssas.vacantes.infrastructure.persistence.models.vacante_habilidad  # noqa: F401

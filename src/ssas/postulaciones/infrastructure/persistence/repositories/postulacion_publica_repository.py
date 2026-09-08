@@ -1,6 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 from ssas.postulaciones.domain.entities.postulacion_publica import (
     DatosPostulantePublico,
     PostulacionCreada,
@@ -17,6 +18,9 @@ from ssas.postulaciones.ports.outgoing.postulacion_publica_repository import (
 )
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
+from ssas.vacantes.infrastructure.persistence.repositories.vacante_repository import (
+    condiciones_vacante_vigente,
+)
 
 
 class SqlAlchemyPostulacionPublicaRepository(PostulacionPublicaRepository):
@@ -24,8 +28,15 @@ class SqlAlchemyPostulacionPublicaRepository(PostulacionPublicaRepository):
         self.session = session
 
     async def get_vacante(self, vacante_id: str) -> VacantePublica | None:
+        """Devuelve la vacante solo si es postulable de cara al público.
+
+        Sin el JOIN con ``empresa`` una postulación pública podía entrar en una empresa
+        suspendida o borrada lógicamente, o en una vacante ya vencida.
+        """
         result = await self.session.execute(
-            select(VacanteModel).where(VacanteModel.id == vacante_id)
+            select(VacanteModel)
+            .join(EmpresaModel, EmpresaModel.id == VacanteModel.empresa_id)
+            .where(VacanteModel.id == vacante_id, *condiciones_vacante_vigente())
         )
         model = result.scalar_one_or_none()
         if model is None:

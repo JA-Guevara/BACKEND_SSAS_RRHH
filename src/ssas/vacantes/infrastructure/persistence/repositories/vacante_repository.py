@@ -14,6 +14,20 @@ from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 from ssas.vacantes.ports.outgoing.vacante_repository import VacanteRepository
 
 
+def condiciones_vacante_vigente() -> list[Any]:
+    """Condiciones que una vacante debe cumplir para operar de cara al público.
+
+    Exige empresa viva (activa y sin borrado lógico) y vacante no vencida. Se comparte
+    con el portal de postulaciones para que listar, consultar y postular apliquen
+    exactamente el mismo criterio: la consulta debe hacerse con JOIN a ``empresa``.
+    """
+    return [
+        EmpresaModel.activo.is_(True),
+        EmpresaModel.eliminado_at.is_(None),
+        (VacanteModel.fecha_cierre.is_(None) | (VacanteModel.fecha_cierre >= func.now())),
+    ]
+
+
 class SqlAlchemyVacanteRepository(VacanteRepository):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -60,6 +74,18 @@ class SqlAlchemyVacanteRepository(VacanteRepository):
             update(VacanteModel)
             .where(VacanteModel.id == vacante_id, VacanteModel.empresa_id == empresa_id)
             .values(estado="PUBLICADA", fecha_publicacion=fecha_publicacion)
+        )
+        await self.session.flush()
+        model = await self.get_by_id(vacante_id, empresa_id)
+        if model is None:
+            raise ValueError("Vacante no encontrada")
+        return model
+
+    async def cambiar_estado(self, vacante_id: str, empresa_id: str, estado: str) -> Vacante:
+        await self.session.execute(
+            update(VacanteModel)
+            .where(VacanteModel.id == vacante_id, VacanteModel.empresa_id == empresa_id)
+            .values(estado=estado)
         )
         await self.session.flush()
         model = await self.get_by_id(vacante_id, empresa_id)
@@ -122,9 +148,8 @@ class SqlAlchemyVacanteRepository(VacanteRepository):
     def _public_conditions(empresa_slug: str) -> list[Any]:
         return [
             func.lower(EmpresaModel.slug) == empresa_slug.strip().lower(),
-            EmpresaModel.activo.is_(True),
             VacanteModel.estado == "PUBLICADA",
-            (VacanteModel.fecha_cierre.is_(None) | (VacanteModel.fecha_cierre >= func.now())),
+            *condiciones_vacante_vigente(),
         ]
 
     @staticmethod

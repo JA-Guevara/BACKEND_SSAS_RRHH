@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
+from ssas.modulos.infrastructure.persistence.models.empresa_modulo import EmpresaModuloModel
+from ssas.modulos.infrastructure.persistence.models.modulo import ModuloModel
 from ssas.roles.infrastructure.persistence.models.permission import PermissionModel
 from ssas.roles.infrastructure.persistence.models.role import RoleModel
 from ssas.roles.infrastructure.persistence.models.role_permission import rol_permiso_table
@@ -20,9 +22,11 @@ class SqlAlchemyAuthorizationRepository(AuthorizationRepository):
         """Permisos efectivos del usuario, resueltos en cada petición.
 
         Con ``empresa_id`` se exige que el usuario, sus roles y la empresa activa
-        coincidan. Con ``empresa_id = None`` (administrador de plataforma) se usan
-        únicamente los roles globales (``rol.empresa_id IS NULL``); no hay empresa
-        que validar porque no pertenece a ninguna.
+        coincidan, y además que el módulo al que pertenece el permiso esté habilitado
+        para esa empresa: un permiso de un módulo no contratado no existe, aunque el
+        rol lo tenga asignado. Con ``empresa_id = None`` (administrador de plataforma)
+        se usan únicamente los roles globales (``rol.empresa_id IS NULL``); no hay
+        empresa ni módulos que validar porque no pertenece a ninguna.
         """
         condiciones = [
             UserModel.id == user_id,
@@ -51,13 +55,33 @@ class SqlAlchemyAuthorizationRepository(AuthorizationRepository):
                 RoleModel.empresa_id.is_(None),
             ]
         else:
-            statement = statement.join(EmpresaModel, EmpresaModel.id == UserModel.empresa_id)
+            statement = (
+                statement.join(EmpresaModel, EmpresaModel.id == UserModel.empresa_id)
+                .outerjoin(ModuloModel, ModuloModel.codigo == PermissionModel.modulo)
+                .outerjoin(
+                    EmpresaModuloModel,
+                    and_(
+                        EmpresaModuloModel.modulo_id == ModuloModel.id,
+                        EmpresaModuloModel.empresa_id == empresa_id,
+                    ),
+                )
+            )
             condiciones += [
                 UserModel.empresa_id == empresa_id,
                 EmpresaModel.id == empresa_id,
                 EmpresaModel.activo.is_(True),
                 EmpresaModel.eliminado_at.is_(None),
                 RoleModel.empresa_id == empresa_id,
+                # Un permiso cuyo módulo no está en el catálogo no se filtra: el
+                # catálogo describe lo contratable, no lo que la aplicación puede hacer.
+                or_(
+                    ModuloModel.id.is_(None),
+                    ModuloModel.es_core.is_(True),
+                    and_(
+                        ModuloModel.activo.is_(True),
+                        EmpresaModuloModel.habilitado.is_(True),
+                    ),
+                ),
             ]
 
         result = await self.session.execute(statement.where(*condiciones))

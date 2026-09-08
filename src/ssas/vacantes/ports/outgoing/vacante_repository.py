@@ -28,6 +28,10 @@ class VacanteRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def cambiar_estado(self, vacante_id: str, empresa_id: str, estado: str) -> Vacante:
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete(self, vacante_id: str, empresa_id: str) -> None:
         raise NotImplementedError
 

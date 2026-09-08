@@ -157,6 +157,54 @@ async def publicar_vacante(
         _raise(exc)
 
 
+@router.patch(
+    "/{vacante_id}/pausar",
+    response_model=VacanteResponse,
+    summary="Pausar vacante",
+    description=(
+        "Retira temporalmente del portal público una vacante publicada "
+        "(PUBLICADA -> PAUSADA). Devuelve 409 si la vacante está en otro estado."
+    ),
+    responses={409: {"description": "La vacante no está publicada."}},
+)
+async def pausar_vacante(
+    vacante_id: str,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await _service(session).pausar(vacante_id, _empresa(current_user, empresa_id))
+    except VacanteError as exc:
+        _raise(exc)
+
+
+@router.patch(
+    "/{vacante_id}/cerrar",
+    response_model=VacanteResponse,
+    summary="Cerrar vacante",
+    description=(
+        "Cierra el proceso de una vacante publicada o pausada "
+        "(PUBLICADA|PAUSADA -> CERRADA). Devuelve 409 si la vacante está en otro estado."
+    ),
+    responses={409: {"description": "La vacante no está publicada ni pausada."}},
+)
+async def cerrar_vacante(
+    vacante_id: str,
+    empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("vacantes:publicar", "platform:vacantes:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await _service(session).cerrar(vacante_id, _empresa(current_user, empresa_id))
+    except VacanteError as exc:
+        _raise(exc)
+
+
 @router.delete(
     "/{vacante_id}",
     status_code=status.HTTP_204_NO_CONTENT,

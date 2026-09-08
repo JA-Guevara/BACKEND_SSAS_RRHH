@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.bitacora.application.events.role_events import RoleEvents
@@ -13,6 +15,7 @@ from ssas.core.api.openapi import (
 )
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
+from ssas.modulos.application.module_access import get_modulos_habilitados
 from ssas.roles.application.use_cases.assign_permissions import AssignPermissions
 from ssas.roles.application.use_cases.create_role import CreateRole
 from ssas.roles.application.use_cases.delete_role import DeleteRole
@@ -30,6 +33,7 @@ from ssas.roles.infrastructure.http.schemas import (
     RoleSchema,
     UpdateRoleRequest,
 )
+from ssas.roles.infrastructure.persistence.models.permission import PermissionModel
 from ssas.roles.infrastructure.persistence.repositories.permission_repository import (
     PermissionRepository,
 )
@@ -38,6 +42,8 @@ from ssas.roles.infrastructure.persistence.repositories.role_repository import (
 )
 
 router = APIRouter(prefix="/roles", tags=[TAG_ROLES], responses=AUTHENTICATED_RESPONSES)
+
+PREFIJO_PLATAFORMA = "platform:"
 
 
 def _repository(session: AsyncSession, empresa_id: str | None) -> SqlAlchemyRoleRepository:
@@ -246,3 +252,48 @@ async def assign_permissions(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PermissionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+permisos_router = APIRouter(
+    prefix="/permisos", tags=[TAG_ROLES], responses=AUTHENTICATED_RESPONSES
+)
+
+
+class PermisoSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    codigo: str = Field(validation_alias="name")
+    modulo: str
+    recurso: str = Field(validation_alias="resource")
+    operacion: str = Field(validation_alias="action")
+    descripcion: str | None = Field(default=None, validation_alias="description")
+
+
+@permisos_router.get(
+    "",
+    response_model=list[PermisoSchema],
+    summary="Catálogo de permisos asignables",
+    description=(
+        "Permisos que el alcance actual puede asignar a un rol. Un administrador de "
+        "empresa nunca ve los permisos `platform:*` ni los de módulos que su empresa "
+        "no tiene habilitados."
+    ),
+)
+async def list_permisos(
+    current_user: CurrentUser = Depends(
+        require_scoped_permission("roles:gestionar", "platform:usuarios:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(PermissionModel).order_by(
+        PermissionModel.modulo, PermissionModel.resource, PermissionModel.action
+    )
+    if not current_user.es_plataforma:
+        habilitados = await get_modulos_habilitados(session, current_user.empresa_id)
+        statement = statement.where(
+            PermissionModel.modulo.in_(habilitados),
+            ~PermissionModel.name.startswith(PREFIJO_PLATAFORMA),
+        )
+    result = await session.execute(statement)
+    return result.scalars().all()

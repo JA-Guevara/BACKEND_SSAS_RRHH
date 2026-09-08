@@ -105,6 +105,14 @@ class UserSchema(BaseModel):
     empresa_id: str | None = None
     username: str | None = None
     roles: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(
+        default_factory=list,
+        description="Permisos efectivos ya filtrados por los módulos habilitados de la empresa.",
+    )
+    modulos: list[str] = Field(
+        default_factory=list,
+        description="Códigos de módulo disponibles para la empresa. Vacío para plataforma.",
+    )
     is_active: bool
     email_verified: bool
     must_change_password: bool = False

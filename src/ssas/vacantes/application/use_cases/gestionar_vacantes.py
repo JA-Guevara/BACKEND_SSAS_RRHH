@@ -10,6 +10,8 @@ from ssas.vacantes.domain.exceptions import (
 )
 from ssas.vacantes.ports.outgoing.vacante_repository import VacanteRepository
 
+ESTADOS_CERRABLES = ("PUBLICADA", "PAUSADA")
+
 
 class GestionarVacantes:
     def __init__(self, repository: VacanteRepository) -> None:
@@ -55,6 +57,29 @@ class GestionarVacantes:
         if current.fecha_cierre and current.fecha_cierre < datetime.now(UTC):
             raise VacanteInvalidStateError("La fecha de cierre ya vencio")
         return await self.repository.publish(vacante_id, empresa_id, datetime.now(UTC))
+
+    async def pausar(self, vacante_id: str, empresa_id: str) -> Vacante:
+        """Retira temporalmente del portal una vacante publicada.
+
+        Solo PUBLICADA -> PAUSADA: pausar un borrador o una vacante cerrada no
+        significa nada y dejaría el tablero con estados imposibles.
+        """
+        current = await self.obtener(vacante_id, empresa_id)
+        if current.estado != "PUBLICADA":
+            raise VacanteInvalidStateError(
+                f"Solo se pueden pausar vacantes publicadas; la vacante está en {current.estado}"
+            )
+        return await self.repository.cambiar_estado(vacante_id, empresa_id, "PAUSADA")
+
+    async def cerrar(self, vacante_id: str, empresa_id: str) -> Vacante:
+        """Cierra el proceso de una vacante publicada o pausada."""
+        current = await self.obtener(vacante_id, empresa_id)
+        if current.estado not in ESTADOS_CERRABLES:
+            raise VacanteInvalidStateError(
+                "Solo se pueden cerrar vacantes publicadas o pausadas; la vacante está en "
+                f"{current.estado}"
+            )
+        return await self.repository.cambiar_estado(vacante_id, empresa_id, "CERRADA")
 
     async def eliminar(self, vacante_id: str, empresa_id: str) -> None:
         current = await self.obtener(vacante_id, empresa_id)

@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
@@ -12,6 +14,9 @@ from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento im
 )
 from ssas.postulaciones.infrastructure.persistence.models.motivo_rechazo import MotivoRechazoModel
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
+from ssas.postulaciones.infrastructure.persistence.models.postulacion_nota import (
+    PostulacionNotaModel,
+)
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
@@ -28,6 +33,7 @@ class TableroItem(BaseModel):
     etapa_id: str
     estado: str
     motivo_rechazo: str | None
+    puntaje_manual: Decimal | None
     codigo_seguimiento: str
     fecha_postulacion: datetime
 
@@ -57,6 +63,23 @@ class RechazarRequest(BaseModel):
     motivo_rechazo_id: str
 
 
+class PuntajeRequest(BaseModel):
+    puntaje: Decimal = Field(ge=0, le=100, description="Puntaje manual de 0 a 100.")
+
+
+class NotaRequest(BaseModel):
+    contenido: str = Field(min_length=1, max_length=4000)
+
+
+class NotaResponse(BaseModel):
+    id: str
+    postulacion_id: str
+    usuario_id: str
+    autor: str
+    contenido: str
+    created_at: datetime
+
+
 def _empresa(user: CurrentUser, requested: str | None) -> str:
     if user.es_plataforma:
         if requested is None:
@@ -67,6 +90,24 @@ def _empresa(user: CurrentUser, requested: str | None) -> str:
     if requested and requested != user.empresa_id:
         raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
     return user.empresa_id
+
+
+async def _verificar_postulacion(
+    session: AsyncSession, postulacion_id: str, empresa_id: str
+) -> None:
+    """Confirma que la postulación pertenece a la empresa autorizada.
+
+    ``postulacion`` no tiene ``empresa_id``: la pertenencia se resuelve siempre por
+    ``vacante.empresa_id``. Sin esta comprobación, cualquier usuario podría leer o
+    escribir notas de otra empresa conociendo un identificador.
+    """
+    encontrada = await session.scalar(
+        select(PostulacionModel.id)
+        .join(VacanteModel, VacanteModel.id == PostulacionModel.vacante_id)
+        .where(PostulacionModel.id == postulacion_id, VacanteModel.empresa_id == empresa_id)
+    )
+    if encontrada is None:
+        raise HTTPException(status_code=404, detail="Postulacion no encontrada")
 
 
 async def _items(
@@ -100,6 +141,7 @@ async def _items(
             etapa_id=etapa.id,
             estado=postulacion.estado,
             motivo_rechazo=motivo.nombre if motivo else None,
+            puntaje_manual=postulacion.puntaje_manual,
             codigo_seguimiento=postulacion.codigo_seguimiento,
             fecha_postulacion=postulacion.fecha_postulacion,
         )
@@ -186,3 +228,95 @@ async def rechazar(
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
     return (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+
+
+@router.patch(
+    "/postulaciones/{postulacion_id}/puntaje",
+    response_model=TableroItem,
+    summary="Registrar puntaje de postulación",
+    description="Registra el puntaje manual (0 a 100) de una postulación de la empresa autorizada.",
+    responses={404: {"description": "La postulación no existe en la empresa autorizada."}},
+)
+async def registrar_puntaje(
+    postulacion_id: str,
+    request: PuntajeRequest,
+    empresa_id: str | None = Query(default=None),
+    user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    empresa = _empresa(user, empresa_id)
+    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(puntaje_manual=request.puntaje, fecha_ultimo_cambio=datetime.now(UTC)))
+    await session.flush()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Postulacion no encontrada")
+    return (await _items(session, empresa, postulacion_id=postulacion_id))[0]
+
+
+@router.get(
+    "/postulaciones/{postulacion_id}/notas",
+    response_model=list[NotaResponse],
+    summary="Listar notas internas",
+    description="Lista las notas internas de una postulación de la empresa autorizada.",
+    responses={404: {"description": "La postulación no existe en la empresa autorizada."}},
+)
+async def listar_notas(
+    postulacion_id: str,
+    empresa_id: str | None = Query(default=None),
+    user: CurrentUser = Depends(require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")),
+    session: AsyncSession = Depends(get_session),
+):
+    await _verificar_postulacion(session, postulacion_id, _empresa(user, empresa_id))
+    result = await session.execute(
+        select(PostulacionNotaModel, UserModel.name, UserModel.apellido)
+        .join(UserModel, UserModel.id == PostulacionNotaModel.usuario_id)
+        .where(PostulacionNotaModel.postulacion_id == postulacion_id)
+        .order_by(PostulacionNotaModel.created_at.desc())
+    )
+    return [
+        NotaResponse(
+            id=nota.id,
+            postulacion_id=nota.postulacion_id,
+            usuario_id=nota.usuario_id,
+            autor=f"{nombre} {apellido}".strip(),
+            contenido=nota.contenido,
+            created_at=nota.created_at,
+        )
+        for nota, nombre, apellido in result.all()
+    ]
+
+
+@router.post(
+    "/postulaciones/{postulacion_id}/notas",
+    response_model=NotaResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Agregar nota interna",
+    description="Agrega una nota interna a una postulación de la empresa autorizada.",
+    responses={404: {"description": "La postulación no existe en la empresa autorizada."}},
+)
+async def crear_nota(
+    postulacion_id: str,
+    request: NotaRequest,
+    empresa_id: str | None = Query(default=None),
+    user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    await _verificar_postulacion(session, postulacion_id, _empresa(user, empresa_id))
+    nota = PostulacionNotaModel(
+        postulacion_id=postulacion_id,
+        usuario_id=user.id,
+        contenido=request.contenido.strip(),
+    )
+    session.add(nota)
+    await session.flush()
+    autor = await session.execute(
+        select(UserModel.name, UserModel.apellido).where(UserModel.id == user.id)
+    )
+    nombre, apellido = autor.one()
+    return NotaResponse(
+        id=nota.id,
+        postulacion_id=nota.postulacion_id,
+        usuario_id=nota.usuario_id,
+        autor=f"{nombre} {apellido}".strip(),
+        contenido=nota.contenido,
+        created_at=nota.created_at,
+    )

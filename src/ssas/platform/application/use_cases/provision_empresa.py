@@ -13,7 +13,10 @@ from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.auth.infrastructure.security.password_hasher import Argon2PasswordHasher
 from ssas.config.settings import settings
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
-from ssas.platform.domain.exceptions import PlatformConflictError
+from ssas.platform.domain.exceptions import (
+    PlatformConflictError,
+    RolBasePermisoDesconocidoError,
+)
 from ssas.platform.infrastructure.persistence.repositories.platform_repository import (
     PlatformRepository,
 )
@@ -29,7 +32,20 @@ ROLE_DEFINITIONS: tuple[tuple[str, str, tuple[str, ...] | None], ...] = (
         "Recursos Humanos",
         ("usuarios:ver", "usuarios:crear", "usuarios:editar", "bitacora:ver"),
     ),
-    ("RECLUTADOR", "Reclutador", ("vacantes:gestionar", "candidatos:gestionar")),
+    (
+        "RECLUTADOR",
+        "Reclutador",
+        (
+            "vacantes:ver",
+            "vacantes:crear",
+            "vacantes:editar",
+            "vacantes:publicar",
+            "habilidades:ver",
+            "postulantes:ver",
+            "postulaciones:ver",
+            "postulaciones:gestionar",
+        ),
+    ),
     ("EMPLEADO", "Empleado", ()),
 )
 
@@ -42,6 +58,25 @@ class ProvisionEmpresa:
         self.session = session
         self.repository = PlatformRepository(session)
         self.password_hasher = Argon2PasswordHasher()
+
+    @staticmethod
+    def _resolver_permisos(
+        rol: str,
+        codigos: tuple[str, ...],
+        permisos_por_codigo: dict[str, PermissionModel],
+    ) -> list[PermissionModel]:
+        """Traduce los códigos de un rol base a filas del catálogo de permisos.
+
+        Falla en voz alta si algún código no existe: descartarlo en silencio deja el
+        rol sin permisos y el error solo se descubre en producción.
+        """
+        desconocidos = sorted(set(codigos) - set(permisos_por_codigo))
+        if desconocidos:
+            raise RolBasePermisoDesconocidoError(
+                f"El rol base '{rol}' referencia permisos inexistentes en el catálogo: "
+                f"{', '.join(desconocidos)}"
+            )
+        return [permisos_por_codigo[codigo] for codigo in codigos]
 
     async def execute(self, request) -> tuple[EmpresaModel, UserModel, str]:
         empresa_data = request.empresa.model_dump()
@@ -81,11 +116,7 @@ class ProvisionEmpresa:
             selected = (
                 permissions
                 if permission_codes is None
-                else [
-                    permission_by_code[code_]
-                    for code_ in permission_codes
-                    if code_ in permission_by_code
-                ]
+                else self._resolver_permisos(code, permission_codes, permission_by_code)
             )
             if selected:
                 await self.session.execute(

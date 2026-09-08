@@ -75,6 +75,42 @@ async def crear_habilidad(
     return model
 
 
+@router.put(
+    "/{habilidad_id}",
+    response_model=HabilidadResponse,
+    summary="Actualizar habilidad",
+    description="Actualiza una habilidad de la empresa autorizada.",
+    responses={
+        404: {"description": "La habilidad no existe en la empresa autorizada."},
+        409: {"description": "Ya existe otra habilidad con ese nombre en la empresa."},
+    },
+)
+async def actualizar_habilidad(
+    habilidad_id: str,
+    request: HabilidadRequest,
+    empresa_id: str | None = Query(default=None),
+    user: CurrentUser = Depends(
+        require_scoped_permission("habilidades:gestionar", "platform:habilidades:gestionar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    model = await session.scalar(
+        select(HabilidadModel).where(
+            HabilidadModel.id == habilidad_id,
+            HabilidadModel.empresa_id == _empresa(user, empresa_id),
+        )
+    )
+    if model is None:
+        raise HTTPException(status_code=404, detail="Habilidad no encontrada")
+    for campo, valor in request.model_dump().items():
+        setattr(model, campo, valor)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="La habilidad ya existe") from exc
+    return model
+
+
 @router.delete(
     "/{habilidad_id}",
     status_code=status.HTTP_204_NO_CONTENT,
