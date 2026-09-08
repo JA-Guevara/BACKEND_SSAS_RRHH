@@ -9,6 +9,7 @@ from ssas.auth.domain.exceptions import EmailDeliveryError
 from ssas.auth.infrastructure.email.smtp_sender import SMTPEmailSender
 from ssas.config.settings import settings
 from ssas.core.api.openapi import AUTHENTICATED_RESPONSES, TAG_COMPANIES
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_empresa_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.platform.application.services import empresa_payload, page_payload
@@ -44,7 +45,7 @@ def _repo(session: AsyncSession) -> PlatformRepository:
 
 def _request_data(request: Request) -> dict[str, str | None]:
     return {
-        "ip_origen": request.client.host if request.client else None,
+        "ip_origen": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
     }
 

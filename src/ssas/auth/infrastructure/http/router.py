@@ -54,6 +54,7 @@ from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository 
 )
 from ssas.config.settings import settings
 from ssas.core.api.openapi import AUTHENTICATED_RESPONSES, TAG_AUTH
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser
 from ssas.core.security.dependencies import get_current_user as get_authenticated_user
 from ssas.infrastructure.database.session import AsyncSessionLocal, get_session
@@ -105,7 +106,7 @@ def _events(session: AsyncSession) -> AuthEvents:
 
 def _request_context(request: Request) -> dict[str, str | None]:
     return {
-        "source_ip": request.client.host if request.client else None,
+        "source_ip": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
     }
 

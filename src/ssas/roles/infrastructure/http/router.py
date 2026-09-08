@@ -13,6 +13,7 @@ from ssas.core.api.openapi import (
     EMPRESA_SCOPE_DESCRIPTION,
     TAG_ROLES,
 )
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.modulos.application.module_access import get_modulos_habilitados
@@ -62,7 +63,7 @@ def _audit_context(request: Request, current_user: CurrentUser) -> dict[str, str
     return {
         "empresa_id": current_user.empresa_id,
         "user_id": current_user.id,
-        "source_ip": request.client.host if request.client else None,
+        "source_ip": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
     }
 
