@@ -24,6 +24,7 @@ class CrearUsuario:
         password: str,
         role_ids: list[str],
         telefono: str | None = None,
+        email_verificado: bool = True,
     ) -> Usuario:
         normalized_email = email.strip().lower()
         normalized_username = username.strip().lower()
@@ -46,4 +47,5 @@ class CrearUsuario:
             password_hash=self.password_hasher.hash(password),
             telefono=telefono.strip() if telefono else None,
             role_ids=role_ids,
+            email_verificado=email_verificado,
         )

@@ -10,7 +10,15 @@ TAG_CARGOS = "Cargos"
 TAG_VACANTES = "Vacantes"
 TAG_PORTAL_PUBLICO = "Portal público"
 TAG_POSTULACIONES = "Postulaciones"
+TAG_MODULOS = "Módulos"
+TAG_DASHBOARD = "Dashboard"
 TAG_STATUS = "Estado"
+TAG_CONFIGURACION = "Configuración"
+
+CONFIGURACION_DESCRIPTION = (
+    "Parámetros operativos y parámetros legales de la empresa: periodos de vigencia con "
+    "validez histórica, sin permitir fechas superpuestas."
+)
 
 EMPRESA_SCOPE_DESCRIPTION = (
     "Identificador de empresa. Los administradores de plataforma pueden indicarlo para "

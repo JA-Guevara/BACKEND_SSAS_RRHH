@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from decimal import Decimal
 
 from ssas.cargos.domain.entities.cargo import Cargo
 
@@ -41,8 +42,13 @@ class CargoRepository(ABC):
         departamento_id: str | None,
         descripcion: str | None,
         activo: bool,
+        codigo: str | None = None,
+        nivel: str | None = None,
+        salario_min: Decimal | None = None,
+        salario_max: Decimal | None = None,
     ) -> Cargo:
         raise NotImplementedError
+
 
     @abstractmethod
     async def update_cargo(self, cargo_id: str, empresa_id: str, values: dict) -> Cargo:

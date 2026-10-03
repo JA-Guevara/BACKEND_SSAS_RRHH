@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from ssas.postulaciones.infrastructure.persistence.models.motivo_rechazo import (
         MotivoRechazoModel,
     )
+    from ssas.postulaciones.infrastructure.persistence.models.postulacion_nota import (
+        PostulacionNotaModel,
+    )
     from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
     from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
@@ -98,4 +101,7 @@ class PostulacionModel(Base):
     etapa: Mapped[EtapaReclutamientoModel] = relationship(back_populates="postulaciones")
     motivo_rechazo: Mapped[MotivoRechazoModel | None] = relationship(
         back_populates="postulaciones"
+    )
+    notas_internas: Mapped[list[PostulacionNotaModel]] = relationship(
+        back_populates="postulacion", cascade="all, delete-orphan"
     )

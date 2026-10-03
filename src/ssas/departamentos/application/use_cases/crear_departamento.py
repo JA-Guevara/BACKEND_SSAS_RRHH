@@ -12,6 +12,9 @@ class CrearDepartamento:
         nombre: str,
         descripcion: str | None = None,
         activo: bool = True,
+        codigo: str | None = None,
+        departamento_padre_id: str | None = None,
+        responsable_id: str | None = None,
     ):
         normalized_nombre = nombre.strip()
         if await self.repository.get_by_nombre(normalized_nombre, empresa_id):
@@ -21,4 +24,8 @@ class CrearDepartamento:
             nombre=normalized_nombre,
             descripcion=descripcion.strip() if descripcion else None,
             activo=activo,
+            codigo=codigo.strip() if codigo else None,
+            departamento_padre_id=departamento_padre_id,
+            responsable_id=responsable_id,
         )
+

@@ -28,6 +28,10 @@ class VacanteRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def cambiar_estado(self, vacante_id: str, empresa_id: str, estado: str) -> Vacante:
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete(self, vacante_id: str, empresa_id: str) -> None:
         raise NotImplementedError
 
@@ -35,6 +39,10 @@ class VacanteRepository(ABC):
     async def references_belong_to_empresa(
         self, empresa_id: str, cargo_id: str, departamento_id: str, responsable_id: str
     ) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def skills_belong_to_empresa(self, empresa_id: str, habilidad_ids: list[str]) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -46,3 +54,4 @@ class VacanteRepository(ABC):
     @abstractmethod
     async def get_publicada(self, empresa_slug: str, vacante_id: str) -> VacantePublica | None:
         raise NotImplementedError
+

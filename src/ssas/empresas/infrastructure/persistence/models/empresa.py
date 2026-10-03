@@ -19,6 +19,9 @@ if TYPE_CHECKING:
         DepartamentoModel,
     )
     from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
+    from ssas.parametros_legales.infrastructure.persistence.models.parametro_legal import (
+        ParametroLegalModel,
+    )
     from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
         EtapaReclutamientoModel,
     )
@@ -49,6 +52,9 @@ class EmpresaModel(Base):
     direccion: Mapped[str | None] = mapped_column(Text, nullable=True)
     ciudad: Mapped[str | None] = mapped_column(String(100), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color_primario: Mapped[str] = mapped_column(String(20), nullable=False, server_default="#2563eb")
+    portal_publico_activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     eliminado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     eliminado_por_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
@@ -96,6 +102,9 @@ class EmpresaModel(Base):
         back_populates="empresa", cascade="all, delete-orphan"
     )
     postulantes: Mapped[list["PostulanteModel"]] = relationship(
+        back_populates="empresa", cascade="all, delete-orphan"
+    )
+    parametros_legales: Mapped[list["ParametroLegalModel"]] = relationship(
         back_populates="empresa", cascade="all, delete-orphan"
     )
 

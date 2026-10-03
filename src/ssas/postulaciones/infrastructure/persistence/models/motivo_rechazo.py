@@ -37,5 +37,5 @@ class MotivoRechazoModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    empresa: Mapped["EmpresaModel"] = relationship(back_populates="motivos_rechazo")
-    postulaciones: Mapped[list["PostulacionModel"]] = relationship(back_populates="motivo_rechazo")
+    empresa: Mapped[EmpresaModel] = relationship(back_populates="motivos_rechazo")
+    postulaciones: Mapped[list[PostulacionModel]] = relationship(back_populates="motivo_rechazo")

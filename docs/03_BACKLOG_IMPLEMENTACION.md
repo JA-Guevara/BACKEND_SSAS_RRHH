@@ -667,7 +667,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Portal | PA-02 / CU-09 |
+| IMPLEMENTADO | ALTA | API | Portal | PA-02 / CU-09 |
 
 **Descripción.** Listado y detalle de vacantes publicadas por empresa, sin autenticación, en `/publico/{empresa_slug}/vacantes`. Corresponde a **T-09** (HU-04). Hoy solo existe `/publico/postulaciones`.
 
@@ -763,7 +763,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Tablero | PA-03 / CU-12 |
+| IMPLEMENTADO | ALTA | API | Tablero | PA-03 / CU-12 |
 
 **Descripción.** Las tablas `etapa_reclutamiento` y `motivo_rechazo` están migradas y sin uso. El tablero las necesita para agrupar columnas y para exigir motivo al rechazar.
 
@@ -797,7 +797,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Tablero | PA-03 / CU-12 |
+| IMPLEMENTADO | ALTA | API | Tablero | PA-03 / CU-12 |
 
 **Descripción.** Vista Kanban de las postulaciones de una vacante, agrupadas por etapa y con contador por columna. Corresponde a **T-12** (HU-06).
 
@@ -833,7 +833,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Tablero | PA-03 / CU-12 |
+| IMPLEMENTADO | ALTA | API | Tablero | PA-03 / CU-12 |
 
 **Descripción.** Acciones del tablero: cambiar la etapa de una postulación y rechazarla exigiendo un motivo del catálogo (T-12 / HU-06).
 
@@ -1028,7 +1028,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | ALTA | API | Vacantes | PA-02 / CU-08 |
+| IMPLEMENTADO | ALTA | API | Vacantes | PA-02 / CU-08 |
 
 **Descripción.** Exponer el CRUD y la publicación siguiendo el patrón de `cargos` y `departamentos` (T-08 / HU-03).
 
@@ -1341,7 +1341,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | MEDIA | API | Postulantes | PA-02 / CU-11 |
+| IMPLEMENTADO | MEDIA | API | Postulantes | PA-02 / CU-11 |
 
 **Descripción.** Consulta del banco de talentos.
 
@@ -1418,7 +1418,7 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 
 | Estado | Prioridad | Tipo | Módulo | PA / CU |
 |---|---|---|---|---|
-| PENDIENTE | BAJA | API | Habilidades | PA-02 / apoyo CU-08 |
+| IMPLEMENTADO | BAJA | API | Habilidades | PA-02 / apoyo CU-08 |
 
 **Descripción.** Exponer el catálogo para asociarlo a vacantes.
 
@@ -1443,6 +1443,117 @@ migraciones ni pruebas de integración hasta recibir una `DATABASE_URL` de test 
 **Tests requeridos:** API
 
 **Al terminar:** archivos modificados · resultado · fecha · agente
+
+---
+
+### TASK CFG-001 — Centro de configuración y parámetros legales
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| VALIDADO | ALTA | API | Configuración | PA-01 / CU-01 |
+
+**Descripción.** Centro de configuración empresarial con guardado por sección (PATCH parcial sobre `/empresas/{id}`) y parámetros legales con periodos de vigencia e histórico (sin solapes). Las modificaciones quedan registradas en la bitácora.
+
+**Dependencias:** EMP-001  
+**Endpoints:** API-063, API-064, API-065 → ver `02_API_ENDPOINTS.md`
+
+**Componentes**
+
+- [x] Módulo `ssas/parametros_legales` (hexagonal compacto)
+- [x] Migración alembic `20260908_0012_parametro_legal`
+- [x] Router `/api/v1/parametros-legales` con alcance por empresa
+- [x] Rediseño de `ConfiguracionEmpresaPage` (5 secciones, guardar por sección)
+- [x] `parametrosLegalesApi.ts` y `schema.d.ts` regenerado
+
+**Reglas de negocio**
+
+- No admitir periodos de vigencia superpuestos.
+- Valores porcentuales entre 0 y 100.
+- La edición de un periodo mantiene el historial.
+
+**Criterios de aceptación**
+
+- [x] GET /api/v1/parametros-legales lista los periodos de la empresa
+- [x] POST /api/v1/parametros-legales crea un periodo validando rango y solapes
+- [x] PUT /api/v1/parametros-legales/{periodo_id} actualiza sin solapar
+- [x] Permisos `empresa:editar` / `platform:empresas:editar`
+- [x] pytest tests/unit/test_parametros_legales.py y build del frontend
+
+**Tests requeridos:** Unitarios
+
+---
+
+### TASK CORR-001 — Empresa activa única, Habilidades y Portal público
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| VALIDADO | ALTA | UI + API | Nuclear (todos) | — |
+
+**Descripción.** Corrección integral detectada en la auditoría sistémica: un único
+selector de empresa activa en el encabezado (se elimina el duplicado del sidebar y el
+tenant resuelve su empresa dentro del contexto), Habilidades con `empresa_id` en todas
+las operaciones y estados error/vacío separados, rediseño de Organización con pestañas y
+modales, validación salarial de cargos en API y formularios, y Portal público que
+distingue el fallo de red de la ausencia de vacantes con reintento. CORS ampliado con
+regex para subdominios de Railway.
+
+**Componentes**
+
+- [x] `CompanyScopeContext` como única fuente de la empresa activa (plataforma y tenant)
+- [x] Selector único en `AppLayout`; sin selectores locales en Habilidades/Organización/Vacantes
+- [x] `habilidadesApi` con `empresa_id` en GET/POST/PUT y guard cuando no hay empresa
+- [x] `HabilidadesPage` con estados carga/error/vacío/datos (`DataTable`)
+- [x] Organización con pestañas Departamentos/Cargos, modales y confirmaciones
+- [x] Validación `salario_min <= salario_max` en `CrearCargoRequest`/`ActualizarCargoRequest`
+- [x] Portal: error de red con reintento vs "no hay vacantes"; 404 de slug genérico
+- [x] Dev: `.env` con `VITE_API_URL` vacío para usar el proxy local (`localhost:8000`)
+
+**Reglas de negocio**
+
+- La empresa activa es una sola en toda la sesión; el tenant no la puede cambiar.
+- El backend resuelve la empresa del token; el frontend nunca inventa `empresa_id`.
+- El Portal jamás muestra "no hay vacantes" cuando la API falló.
+
+**Endpoints:** API-P07, API-P08, API-P18, API-P19, API-053 → ver `02_API_ENDPOINTS.md`
+
+**Criterios de aceptación**
+
+- [x] Sin "Debe indicar empresa_id" navegando con empresa activa o sin ella (estado guiado)
+- [x] GET/POST/PUT `/api/v1/habilidades` llevan `empresa_id` y mantienen el aislamiento
+- [x] El Portal nunca muestra "No hay vacantes" cuando la API falla
+- [x] pytest (69 passed, 3 skipped) · ruff · build del frontend · verificar_documentacion
+
+**Tests requeridos:** `test_cargos_schemas.py`, `test_habilidades_alcance.py` y CORS en `test_database_settings.py`
+
+---
+
+### TASK CORR-002 — Serialización del perfil público de empresa
+
+| Estado | Prioridad | Tipo | Módulo | PA / CU |
+|---|---|---|---|---|
+| VALIDADO | ALTA | API | Vacantes / Portal | PA-02 / CU-09 |
+
+**Descripción.** Corrección del endpoint público `GET /publico/{empresa_slug}` (API-053):
+usaba `empresa.nombre` (atributo inexistente en `EmpresaModel`, columna real es
+`razon_social`) y pasaba `id` como `UUID` a un campo `str` de pydantic. Ambos errores
+hacían que el perfil respondiera 500 **solo cuando la empresa existía y el portal estaba
+activo**, que el navegador veía como fallo de red por falta de cabeceras CORS en la
+respuesta 500 («No se pudo contactar con el servidor»).
+
+**Componentes**
+
+- [x] Helper `_to_empresa_publica(empresa)` que serializa desde columnas reales
+- [x] `id` forzado a `str`; `nombre` mapeado a `razon_social`
+- [x] Test de regresión `tests/unit/test_portal_publico.py`
+
+**Criterios de aceptación**
+
+- [x] `GET /publico/conecta` responde 200 con `nombre` = razón social contra la base compartida
+- [x] pytest (71 passed, 3 skipped) · ruff · build del frontend · verificar_documentacion
+
+**Endpoints:** API-053
+
+**Tests requeridos:** Unitarios (`test_portal_publico.py`)
 
 ---
 

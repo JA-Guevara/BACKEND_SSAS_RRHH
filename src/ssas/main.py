@@ -6,13 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ssas.config.settings import settings
 from ssas.core.api.openapi import (
+    CONFIGURACION_DESCRIPTION,
     TAG_AUDIT,
     TAG_AUTH,
     TAG_CARGOS,
     TAG_COMPANIES,
+    TAG_CONFIGURACION,
+    TAG_DASHBOARD,
     TAG_DEPARTAMENTOS,
-    TAG_POSTULACIONES,
+    TAG_MODULOS,
     TAG_PORTAL_PUBLICO,
+    TAG_POSTULACIONES,
     TAG_ROLES,
     TAG_STATUS,
     TAG_USERS,
@@ -88,6 +92,21 @@ app = FastAPI(
             "description": "Seguimiento y gestión de postulaciones del proceso de reclutamiento.",
         },
         {
+            "name": TAG_MODULOS,
+            "description": (
+                "Catálogo de módulos y habilitación por empresa. Un permiso de un módulo "
+                "no habilitado no surte efecto, aunque el rol lo tenga asignado."
+            ),
+        },
+        {
+            "name": TAG_DASHBOARD,
+            "description": "Resumen agregado de la pantalla de inicio según el alcance.",
+        },
+        {
+            "name": TAG_CONFIGURACION,
+            "description": CONFIGURACION_DESCRIPTION,
+        },
+        {
             "name": TAG_STATUS,
             "description": "Estado operativo de la API.",
         },
@@ -98,6 +117,7 @@ app.add_middleware(EmpresaContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

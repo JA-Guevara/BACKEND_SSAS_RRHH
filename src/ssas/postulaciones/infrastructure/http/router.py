@@ -1,11 +1,18 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from pydantic import EmailStr
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.bitacora.application.events.postulacion_events import PostulacionEvents
+from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
+from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
+    SqlAlchemyAuditLogRepository,
+)
 from ssas.core.api.openapi import TAG_PORTAL_PUBLICO
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.application.use_cases.consultar_postulacion_publica import (
     ConsultarPostulacionPublica,
@@ -33,6 +40,7 @@ from ssas.postulaciones.infrastructure.persistence.repositories.postulacion_publ
     SqlAlchemyPostulacionPublicaRepository,
 )
 from ssas.postulaciones.infrastructure.storage.local_cv_storage import LocalCvStorage
+from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
 NivelEducativo = Literal["SECUNDARIA", "TECNICO", "LICENCIATURA", "MAESTRIA", "DOCTORADO"]
 
@@ -41,6 +49,11 @@ router = APIRouter(prefix="/publico/postulaciones", tags=[TAG_PORTAL_PUBLICO])
 
 def _repository(session: AsyncSession) -> SqlAlchemyPostulacionPublicaRepository:
     return SqlAlchemyPostulacionPublicaRepository(session)
+
+
+def _events(session: AsyncSession) -> PostulacionEvents:
+    repository = SqlAlchemyAuditLogRepository(session)
+    return PostulacionEvents(RegisterAuditEvent(repository))
 
 
 def _raise_http_postulacion_error(exc: PostulacionError) -> None:
@@ -85,6 +98,7 @@ async def crear_postulacion_publica(
     anios_experiencia: Annotated[int, Form(ge=0)],
     cv: Annotated[UploadFile, File(description="Archivo CV en PDF o DOCX, maximo 5 MB.")],
     linkedin: Annotated[str | None, Form()] = None,
+    http_request: Request = None,
     session: AsyncSession = Depends(get_session),
 ) -> PostulacionPublicaResponse:
     try:
@@ -109,6 +123,23 @@ async def crear_postulacion_publica(
                 filename=cv.filename or "",
                 content_type=cv.content_type,
                 content=cv_content,
+            ),
+        )
+        empresa_id = await session.scalar(
+            select(VacanteModel.empresa_id).where(VacanteModel.id == vacante_id)
+        )
+        await _events(session).publica_creada(
+            empresa_id=empresa_id,
+            record_id=result.id,
+            new_data={
+                "codigo_seguimiento": result.codigo_seguimiento,
+                "vacante_id": vacante_id,
+                "email": str(email),
+            },
+            actor_label=f"{nombres.strip()} {apellidos.strip()}",
+            source_ip=get_client_ip(http_request) if http_request is not None else None,
+            user_agent=(
+                http_request.headers.get("user-agent") if http_request is not None else None
             ),
         )
         return PostulacionPublicaResponse(

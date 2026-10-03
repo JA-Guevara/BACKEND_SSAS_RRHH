@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.bitacora.application.events.organizacion_events import OrganizacionEvents
+from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
+from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
+    SqlAlchemyAuditLogRepository,
+)
 from ssas.core.api.openapi import AUTHENTICATED_RESPONSES, EMPRESA_SCOPE_DESCRIPTION
+from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.departamentos.application.use_cases.actualizar_departamento import (
     ActualizarDepartamento,
@@ -51,6 +57,20 @@ def _repository(session: AsyncSession) -> SqlAlchemyDepartamentoRepository:
     return SqlAlchemyDepartamentoRepository(session)
 
 
+def _events(session: AsyncSession) -> OrganizacionEvents:
+    repository = SqlAlchemyAuditLogRepository(session)
+    return OrganizacionEvents(RegisterAuditEvent(repository))
+
+
+def _audit_context(request: Request, current_user: CurrentUser) -> dict[str, str | None]:
+    return {
+        "empresa_id": current_user.empresa_id,
+        "user_id": current_user.id,
+        "source_ip": get_client_ip(request),
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
 def _raise_http_departamento_error(exc: DepartamentoError) -> None:
     if isinstance(exc, DepartamentoNotFoundError):
         code = status.HTTP_404_NOT_FOUND
@@ -96,6 +116,7 @@ async def listar_departamentos(
 )
 async def crear_departamento(
     request: CrearDepartamentoRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("departamentos:crear", "platform:organizacion:gestionar")
@@ -103,7 +124,7 @@ async def crear_departamento(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await CrearDepartamento(_repository(session)).execute(
+        departamento = await CrearDepartamento(_repository(session)).execute(
             empresa_id=_target_empresa(current_user, empresa_id),
             **request.model_dump(),
         )
@@ -111,6 +132,12 @@ async def crear_departamento(
         raise HTTPException(status_code=409, detail="El departamento ya existe") from exc
     except DepartamentoError as exc:
         _raise_http_departamento_error(exc)
+    await _events(session).departamento_creado(
+        record_id=departamento.id,
+        new_data={"nombre": departamento.nombre},
+        **_audit_context(http_request, current_user),
+    )
+    return departamento
 
 
 @router.put(
@@ -129,6 +156,7 @@ async def crear_departamento(
 async def actualizar_departamento(
     departamento_id: str,
     request: ActualizarDepartamentoRequest,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("departamentos:editar", "platform:organizacion:gestionar")
@@ -136,7 +164,7 @@ async def actualizar_departamento(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await ActualizarDepartamento(_repository(session)).execute(
+        departamento = await ActualizarDepartamento(_repository(session)).execute(
             departamento_id,
             _target_empresa(current_user, empresa_id),
             request.model_dump(exclude_unset=True),
@@ -145,6 +173,12 @@ async def actualizar_departamento(
         raise HTTPException(status_code=409, detail="El departamento ya existe") from exc
     except DepartamentoError as exc:
         _raise_http_departamento_error(exc)
+    await _events(session).departamento_actualizado(
+        record_id=departamento.id,
+        new_data={"nombre": departamento.nombre},
+        **_audit_context(http_request, current_user),
+    )
+    return departamento
 
 
 @router.delete(
@@ -162,6 +196,7 @@ async def actualizar_departamento(
 )
 async def eliminar_departamento(
     departamento_id: str,
+    http_request: Request,
     empresa_id: str | None = Query(default=None, description=EMPRESA_SCOPE_DESCRIPTION),
     current_user: CurrentUser = Depends(
         require_scoped_permission("departamentos:eliminar", "platform:organizacion:gestionar")
@@ -176,3 +211,7 @@ async def eliminar_departamento(
         raise HTTPException(status_code=409, detail="El departamento tiene dependencias") from exc
     except DepartamentoError as exc:
         _raise_http_departamento_error(exc)
+    await _events(session).departamento_eliminado(
+        record_id=departamento_id,
+        **_audit_context(http_request, current_user),
+    )

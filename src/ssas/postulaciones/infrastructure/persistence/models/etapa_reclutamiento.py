@@ -52,5 +52,5 @@ class EtapaReclutamientoModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    empresa: Mapped["EmpresaModel"] = relationship(back_populates="etapas_reclutamiento")
-    postulaciones: Mapped[list["PostulacionModel"]] = relationship(back_populates="etapa")
+    empresa: Mapped[EmpresaModel] = relationship(back_populates="etapas_reclutamiento")
+    postulaciones: Mapped[list[PostulacionModel]] = relationship(back_populates="etapa")

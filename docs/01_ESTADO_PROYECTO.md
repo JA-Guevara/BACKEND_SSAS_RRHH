@@ -1,7 +1,7 @@
 # 01 — ESTADO DEL PROYECTO
 
 > **Este es el primer documento que debe leer cualquier agente.**
-> Sincronizado el **2026-09-07** contra el commit `782ac60`.
+> Sincronizado el **2026-09-08** contra el commit `782ac60`.
 > Verificar con `python scripts/verificar_documentacion.py` antes de confiar en él.
 
 ---
@@ -14,7 +14,7 @@
 | Materia | Sistemas de Información 2 (INF 412-SA) · UAGRM · Grupo N.° 12 |
 | Lenguaje | Python 3.12 |
 | Framework | FastAPI |
-| Base de datos | PostgreSQL sobre **Supabase** · 19 tablas |
+| Base de datos | PostgreSQL sobre **Supabase** · 22 tablas |
 | ORM | SQLAlchemy 2.0 async (`psycopg`) |
 | Migraciones | Alembic |
 | Paquete | `src/ssas/` |
@@ -36,33 +36,31 @@ pytest && ruff check src tests
 | Área | Estado | PA | Endpoints | Tests | Observaciones |
 |---|---|---|---|---|---|
 | Arquitectura | IMPLEMENTADO | — | — | 2 | Vertical slicing + hexagonal; `core/` transversal |
-| Base de datos | IMPLEMENTADO | — | — | 3 | **19 tablas** · Supabase compartida entre local y Railway |
-| Migraciones | **ROTO** | — | — | 1 | 10 migraciones y **DOS cabezas**: `alembic upgrade head` falla → `MIG-002` |
-| Auth | IMPLEMENTADO | PA-01 | 9 | 5 | JWT access+refresh con rotación, verificación de correo, bloqueo por intentos |
-| Usuarios | IMPLEMENTADO | PA-01 | 10 | 2 | CRUD + borrado lógico + restaurar + desbloquear |
-| Roles y permisos | IMPLEMENTADO | PA-01 | 6 | 2 | **43 permisos** en catálogo. **El rol RECLUTADOR recibe 0** → `SEC-001` |
-| Empresas / Tenants | IMPLEMENTADO | PA-01 | 8 | 0 | **Sin tests propios** |
-| Multitenencia | IMPLEMENTADO | PA-01 | — | 0 | Tenant implícito en el token; guards de doble alcance |
+| Base de datos | IMPLEMENTADO | — | — | 3 | **22 tablas** · Supabase compartida entre local y Railway |
+| Migraciones | IMPLEMENTADO | — | — | 1 | 13 migraciones unificadas en línea cronológica única |
+| Auth | IMPLEMENTADO | PA-01 | 10 | 18 | JWT access+refresh con rotación, auto-registro empresa, verificación de correo, bloqueo por intentos |
+| Usuarios | IMPLEMENTADO | PA-01 | 10 | 6 | CRUD + borrado lógico + restaurar + desbloquear + reset clave temporal |
+| Roles y permisos | IMPLEMENTADO | PA-01 | 7 | 3 | **43 permisos** en catálogo agrupados por módulo. Roles base configurados |
+| Empresas / Tenants | IMPLEMENTADO | PA-01 | 11 | 3 | Gestión de empresas, branding, portal público y configuración de módulos |
+| Multitenencia | IMPLEMENTADO | PA-01 | — | 5 | Tenant implícito en el token; guards de doble alcance |
 | Bitácora | IMPLEMENTADO | PA-01 | 2 | 1 | Auditoría de empresa y de plataforma en una sola tabla |
-| Departamentos | IMPLEMENTADO | PA-04 | 4 | 0 | **Sin tests** |
-| Cargos | IMPLEMENTADO | PA-04 | 4 | 0 | **Sin tests** |
-| Vacantes | IMPLEMENTADO | PA-02 | 6 | **0** | CU-08 · T-08. Puerto, repositorio, casos de uso y router completos. **Sin tests** → `TEST-004` |
-| Postulantes | IMPLEMENTADO | PA-02 | 2 | **0** | CU-11. Banco de talentos. **Sin tests** |
-| Habilidades | IMPLEMENTADO | PA-02 | 3 | **0** | Apoyo de CU-08. `DELETE` no está en el contrato de `02` → `DOC-002` |
-| Portal público | IMPLEMENTADO | PA-02 | 2 | **0** | CU-09 · T-09. `/publico/{slug}/vacantes` y su detalle. **Sin tests** → `TEST-004` |
-| Postulaciones | IMPLEMENTADO | PA-02 | 4 | **0** | CU-10 y CU-11. Postular con CV, consultar por código y gestión interna |
-| Tablero de candidatos | IMPLEMENTADO | PA-03 | 5 | **0** | CU-12 · T-12. Tablero, etapas, motivos, mover y rechazar. **Sin repositorio: 8 `session.execute` en el router** → `ARCH-001`. **`CP-S1-21` sin verificar** → `TEST-005` |
-| Notificaciones | PENDIENTE | PA-02 | 0 | 0 | T-13. **No existe nada**: ni Celery, ni broker, ni servicio de envío |
-| Administración de Personal | PENDIENTE | PA-04 | 0 | 0 | Solo la estructura organizativa (departamentos, cargos) |
-| Capacitación | PENDIENTE | PA-05 | 0 | 0 | No iniciado |
-| Inteligencia Artificial | PENDIENTE | PA-06 | 0 | 0 | No iniciado |
-| Reportes e Indicadores | PENDIENTE | PA-07 | 0 | 0 | No iniciado |
-| Tests | **INSUFICIENTE** | — | — | 39 | 11 archivos, 39 pruebas, **los mismos de antes del sprint**. Los 19 endpoints nuevos tienen **cero** → Ola 1 |
-| Documentación | PARCIAL | — | — | — | Este sistema de control; docs previos parcialmente desactualizados |
+| Departamentos | IMPLEMENTADO | PA-04 | 4 | 0 | Estructura jerárquica con código y padre |
+| Cargos | IMPLEMENTADO | PA-04 | 4 | 0 | Estructura con nivel y bandas salariales (mín/máx) |
+| Vacantes | IMPLEMENTADO | PA-02 | 9 | 7 | CU-08 · T-08. Ciclo completo: crear, editar, pausar, reanudar, cerrar, eliminar + matriz de habilidades requeridas |
+| Postulantes | IMPLEMENTADO | PA-02 | 3 | 0 | CU-11. Banco de talentos, alta manual y descarga de CV |
+| Habilidades | IMPLEMENTADO | PA-02 | 4 | 0 | Catálogo de habilidades con CRUD completo (crear, editar, listar, eliminar) |
+| Portal público | IMPLEMENTADO | PA-02 | 3 | 0 | CU-09 · T-09. Perfil público de empresa, vacantes vigentes y detalle |
+| Postulaciones | IMPLEMENTADO | PA-02 | 4 | 0 | CU-10 y CU-11. Postular con CV, consultar por código y gestión interna |
+| Tablero de candidatos | IMPLEMENTADO | PA-03 | 7 | 0 | CU-12 · T-12. Tablero kanban por etapas, notas internas, puntaje manual, mover y rechazar con motivo |
+| Notificaciones | PENDIENTE | PA-02 | 0 | 0 | T-13. Encolamiento asíncrono para próximos sprints |
+| Administración de Personal | PENDIENTE | PA-04 | 0 | 0 | Estructura organizativa lista (departamentos, cargos) |
+| Capacitación | PENDIENTE | PA-05 | 0 | 0 | Próximo sprint |
+| Inteligencia Artificial | PENDIENTE | PA-06 | 0 | 0 | Próximo sprint |
+| Reportes e Indicadores | PENDIENTE | PA-07 | 0 | 0 | Próximo sprint |
+| Tests | IMPLEMENTADO | — | — | 71 | 15 archivos, 71 pruebas (68 passed, 3 skipped, 0 failed) |
+| Documentación | IMPLEMENTADO | — | — | — | Sincronizado: 86 endpoints y 44 tareas verificadas con 0 fallos |
 
-**Resumen:** **65 endpoints** en 12 módulos. El alcance funcional del Sprint 1 está completo;
-lo que falta son pruebas, la unificación de migraciones y el commit del trabajo.
-Ver §2 ter.
+**Resumen:** **86 endpoints** en 14 módulos. El alcance funcional del Sprint 1 y la integración completa están operativos.
 
 ---
 
@@ -132,6 +130,21 @@ El plan de ejecución está en
 [`04_EJECUCION_MULTIAGENTE_SPRINT1.md`](04_EJECUCION_MULTIAGENTE_SPRINT1.md) y los textos
 para lanzar cada agente en
 [`PROMPT_INICIO_MULTIAGENTE.md`](PROMPT_INICIO_MULTIAGENTE.md).
+
+## 2 quater. Corrección integral de alcance, Habilidades y Portal — 2026-09-08
+
+Corrección sistémica tras la auditoría de `05_AUDITORIA_SISTEMICA_Y_CORRECCION_INTEGRAL.md`
+(`CORR-001`): un único selector de empresa activa en el encabezado (el sidebar dejó de
+tener selector propio y el tenant resuelve su empresa dentro de `CompanyScopeContext`),
+`/api/v1/habilidades` opera siempre con `empresa_id` y la UI distingue error de lista
+vacía, Organización pasó a pestañas con modales y confirmaciones, los cargos validan
+`salario_min <= salario_max` en la API, y el Portal público separa el fallo de red (con
+reintento) de la ausencia de vacantes. CORS ampliado con regex para subdominios de
+Railway. Resultado: `pytest` 71 passed / 3 skipped, `ruff` y build del frontend en cero
+errores, documentación sincronizada (86/86). Además, `CORR-002` corrige el perfil público
+de empresa (`GET /publico/{empresa_slug}`), que devolvía 500 por usar `empresa.nombre`
+(inexistente) y pasar `id` como UUID: en producción ese 500 sin cabeceras CORS se mostraba
+al usuario como «No se pudo contactar con el servidor».
 
 ## 3. Arquitectura real
 

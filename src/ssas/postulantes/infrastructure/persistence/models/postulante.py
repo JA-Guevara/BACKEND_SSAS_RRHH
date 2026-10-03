@@ -78,8 +78,8 @@ class PostulanteModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    empresa: Mapped["EmpresaModel"] = relationship(back_populates="postulantes")
-    postulaciones: Mapped[list["PostulacionModel"]] = relationship(back_populates="postulante")
+    empresa: Mapped[EmpresaModel] = relationship(back_populates="postulantes")
+    postulaciones: Mapped[list[PostulacionModel]] = relationship(back_populates="postulante")
 
 
 Index(
