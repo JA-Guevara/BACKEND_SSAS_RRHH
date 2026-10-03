@@ -1,8 +1,13 @@
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
 
 from ssas.suscripciones.application.reconciliation import derived_status
-from ssas.suscripciones.infrastructure.http.router import _map_status
+from ssas.suscripciones.infrastructure.http import router as subscriptions_router
+from ssas.suscripciones.infrastructure.http.router import _claim_stripe_event, _map_status
 
 
 def subscription(**overrides):
@@ -42,3 +47,98 @@ def test_future_active_subscription_is_unchanged() -> None:
     today = datetime.now(UTC).date()
     item = subscription(fecha_fin=today + timedelta(days=30))
     assert derived_status(item, today=today, now=datetime.now(UTC), grace_days=3) == "ACTIVA"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("previous_status", "inserted", "expected_attempts", "duplicate"),
+    [
+        ("PROCESANDO", True, 1, False),
+        ("PROCESADO", False, 1, True),
+        ("FALLIDO", False, 2, False),
+        ("PROCESANDO", False, 2, False),
+    ],
+)
+async def test_stripe_event_claim_only_skips_processed_events(
+    previous_status: str, inserted: bool, expected_attempts: int, duplicate: bool
+) -> None:
+    log = SimpleNamespace(
+        estado_procesamiento=previous_status,
+        intentos=1,
+        fecha_procesamiento=datetime.now(UTC),
+        error="fallo anterior",
+    )
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[
+        SimpleNamespace(rowcount=int(inserted)),
+        SimpleNamespace(scalar_one=lambda: log),
+    ]))
+
+    result = await _claim_stripe_event(session, {"id": "evt_test", "type": "invoice.paid"})
+
+    assert (result is None) is duplicate
+    assert log.intentos == expected_attempts
+    if not duplicate:
+        assert log.estado_procesamiento == "PROCESANDO"
+        assert log.fecha_procesamiento is None
+        assert log.error is None
+    assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_stripe_webhook_can_succeed_on_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    event = {
+        "id": "evt_retry",
+        "type": "checkout.session.completed",
+        "data": {"object": {
+            "metadata": {"empresa_id": "company-a", "plan_id": "plan-a"},
+            "customer": "cus_test",
+            "subscription": "sub_test",
+        }},
+    }
+    log = SimpleNamespace(estado_procesamiento="PROCESANDO", error=None, fecha_procesamiento=None)
+    item = SimpleNamespace(
+        id="subscription-a", empresa_id="company-a", plan_id="old-plan",
+        stripe_customer_id=None, stripe_subscription_id=None, estado="PENDIENTE"
+    )
+
+    @asynccontextmanager
+    async def nested():
+        yield
+
+    session = SimpleNamespace(begin_nested=nested, commit=AsyncMock())
+    request = SimpleNamespace(body=AsyncMock(return_value=b"payload"))
+    target = AsyncMock(side_effect=[RuntimeError("temporary failure"), item])
+    sync_modules = AsyncMock()
+    audit = AsyncMock()
+
+    async def claim(_session, _event):
+        if log.estado_procesamiento == "FALLIDO":
+            log.estado_procesamiento = "PROCESANDO"
+            log.error = None
+        return log
+
+    monkeypatch.setattr(subscriptions_router, "_stripe_ready", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        subscriptions_router.stripe,
+        "Webhook",
+        SimpleNamespace(construct_event=lambda *_args: event),
+        raising=False,
+    )
+    monkeypatch.setattr(subscriptions_router, "_claim_stripe_event", claim)
+    monkeypatch.setattr(subscriptions_router, "_target_subscription", target)
+    monkeypatch.setattr(subscriptions_router, "_sync_modules", sync_modules)
+    monkeypatch.setattr(subscriptions_router, "_audit", audit)
+
+    with pytest.raises(RuntimeError, match="temporary failure"):
+        await subscriptions_router.stripe_webhook(request, "signature", session)
+    assert log.estado_procesamiento == "FALLIDO"
+    session.commit.assert_awaited_once()
+
+    result = await subscriptions_router.stripe_webhook(request, "signature", session)
+    assert result == {"received": True}
+    assert log.estado_procesamiento == "PROCESADO"
+    assert log.error is None
+    assert item.plan_id == "plan-a"
+    assert item.estado == "ACTIVA"
+    sync_modules.assert_awaited_once()
+    audit.assert_awaited_once()

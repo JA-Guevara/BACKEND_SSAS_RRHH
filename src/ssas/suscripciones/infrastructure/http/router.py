@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
@@ -179,29 +180,50 @@ def _map_status(value: str) -> str:
     return {"active": "ACTIVA", "trialing": "PRUEBA", "past_due": "PAGO_FALLIDO", "unpaid": "PAGO_FALLIDO", "canceled": "CANCELADA", "incomplete": "PENDIENTE", "incomplete_expired": "VENCIDA", "paused": "SUSPENDIDA"}.get(value, "PENDIENTE")
 
 
+async def _claim_stripe_event(session: AsyncSession, event: dict) -> StripeEventoModel | None:
+    statement = insert(StripeEventoModel).values(
+        stripe_event_id=event["id"], tipo=event["type"], estado_procesamiento="PROCESANDO"
+    ).on_conflict_do_nothing(index_elements=[StripeEventoModel.stripe_event_id])
+    inserted = (await session.execute(statement)).rowcount == 1
+    log = (await session.execute(
+        select(StripeEventoModel)
+        .where(StripeEventoModel.stripe_event_id == event["id"])
+        .with_for_update()
+    )).scalar_one()
+    if log.estado_procesamiento == "PROCESADO":
+        return None
+    if not inserted:
+        log.intentos += 1
+    log.estado_procesamiento = "PROCESANDO"
+    log.fecha_procesamiento = None
+    log.error = None
+    return log
+
+
 @webhook_router.post("/stripe", summary="Recibir webhook Stripe", description="Verifica la firma y procesa eventos de suscripción de forma idempotente.")
 async def stripe_webhook(request: Request, stripe_signature: str = Header(alias="Stripe-Signature"), session: AsyncSession = Depends(get_session)):
     _stripe_ready(webhook=True); payload = await request.body()
     try: event = stripe.Webhook.construct_event(payload, stripe_signature, settings.stripe_webhook_secret)
     except (ValueError, stripe.error.SignatureVerificationError) as exc: raise HTTPException(400, "Firma Stripe inválida") from exc
-    if await session.scalar(select(StripeEventoModel.id).where(StripeEventoModel.stripe_event_id == event["id"])): return {"received": True, "duplicate": True}
-    log = StripeEventoModel(stripe_event_id=event["id"], tipo=event["type"], estado_procesamiento="PROCESANDO"); session.add(log)
+    log = await _claim_stripe_event(session, event)
+    if log is None: return {"received": True, "duplicate": True}
     obj = event["data"]["object"]; event_type = event["type"]
     try:
-        item = None
-        if event_type == "checkout.session.completed":
-            empresa_id = obj.get("metadata", {}).get("empresa_id") or obj.get("client_reference_id")
-            item = await _target_subscription(session, empresa_id); item.plan_id = obj["metadata"]["plan_id"]
-            item.stripe_customer_id, item.stripe_subscription_id = obj.get("customer"), obj.get("subscription"); item.estado = "ACTIVA"
-        elif event_type.startswith("customer.subscription."):
-            item = (await session.execute(select(SuscripcionModel).where((SuscripcionModel.stripe_subscription_id == obj.get("id")) | (SuscripcionModel.stripe_customer_id == obj.get("customer"))))).scalar_one_or_none()
-            if item: item.stripe_subscription_id = obj.get("id"); item.estado = _map_status(obj.get("status", "")); item.cancelar_al_fin_periodo = bool(obj.get("cancel_at_period_end")); item.fecha_proximo_cobro = datetime.fromtimestamp(obj["current_period_end"], UTC) if obj.get("current_period_end") else None
-        elif event_type in {"invoice.paid", "invoice.payment_failed"}:
-            item = (await session.execute(select(SuscripcionModel).where(SuscripcionModel.stripe_customer_id == obj.get("customer")))).scalar_one_or_none()
-            if item: item.estado = "ACTIVA" if event_type == "invoice.paid" else "PAGO_FALLIDO"; item.fecha_ultimo_pago = datetime.now(UTC) if event_type == "invoice.paid" else item.fecha_ultimo_pago
-        if item:
-            await _sync_modules(session, item.empresa_id, item.plan_id)
-            await _audit(session, None, "SUBSCRIPTION_UPDATED", f"Stripe procesó {event_type}", item.id, item.empresa_id, {"estado": item.estado})
+        async with session.begin_nested():
+            item = None
+            if event_type == "checkout.session.completed":
+                empresa_id = obj.get("metadata", {}).get("empresa_id") or obj.get("client_reference_id")
+                item = await _target_subscription(session, empresa_id); item.plan_id = obj["metadata"]["plan_id"]
+                item.stripe_customer_id, item.stripe_subscription_id = obj.get("customer"), obj.get("subscription"); item.estado = "ACTIVA"
+            elif event_type.startswith("customer.subscription."):
+                item = (await session.execute(select(SuscripcionModel).where((SuscripcionModel.stripe_subscription_id == obj.get("id")) | (SuscripcionModel.stripe_customer_id == obj.get("customer"))))).scalar_one_or_none()
+                if item: item.stripe_subscription_id = obj.get("id"); item.estado = _map_status(obj.get("status", "")); item.cancelar_al_fin_periodo = bool(obj.get("cancel_at_period_end")); item.fecha_proximo_cobro = datetime.fromtimestamp(obj["current_period_end"], UTC) if obj.get("current_period_end") else None
+            elif event_type in {"invoice.paid", "invoice.payment_failed"}:
+                item = (await session.execute(select(SuscripcionModel).where(SuscripcionModel.stripe_customer_id == obj.get("customer")))).scalar_one_or_none()
+                if item: item.estado = "ACTIVA" if event_type == "invoice.paid" else "PAGO_FALLIDO"; item.fecha_ultimo_pago = datetime.now(UTC) if event_type == "invoice.paid" else item.fecha_ultimo_pago
+            if item:
+                await _sync_modules(session, item.empresa_id, item.plan_id)
+                await _audit(session, None, "SUBSCRIPTION_UPDATED", f"Stripe procesó {event_type}", item.id, item.empresa_id, {"estado": item.estado})
         log.estado_procesamiento = "PROCESADO"; log.fecha_procesamiento = datetime.now(UTC)
     except Exception as exc:
         log.estado_procesamiento = "FALLIDO"; log.error = str(exc)[:2000]; log.fecha_procesamiento = datetime.now(UTC)

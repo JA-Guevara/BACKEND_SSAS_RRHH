@@ -7,6 +7,7 @@ class Base(DeclarativeBase):
 
 def import_all_models() -> None:
     """Carga los modelos ORM para registrar relaciones y metadata en una Base única."""
+    import ssas.analisis_cv.infrastructure.persistence.models.analisis_cv
     import ssas.auth.infrastructure.persistence.models.email_verification_token
     import ssas.auth.infrastructure.persistence.models.password_reset_token
     import ssas.auth.infrastructure.persistence.models.refresh_token
@@ -14,8 +15,11 @@ def import_all_models() -> None:
     import ssas.bitacora.infrastructure.persistence.models.audit_log
     import ssas.cargos.infrastructure.persistence.models.cargo
     import ssas.departamentos.infrastructure.persistence.models.departamento
+    import ssas.empleados.infrastructure.persistence.models.empleado
     import ssas.empresas.infrastructure.persistence.models.empresa
     import ssas.empresas.infrastructure.persistence.models.suscripcion
+    import ssas.entrevistas.infrastructure.persistence.models.entrevista
+    import ssas.evaluaciones.infrastructure.persistence.models.evaluacion
     import ssas.habilidades.infrastructure.persistence.models.habilidad
     import ssas.modulos.infrastructure.persistence.models.empresa_modulo
     import ssas.modulos.infrastructure.persistence.models.modulo
@@ -25,6 +29,7 @@ def import_all_models() -> None:
     import ssas.postulaciones.infrastructure.persistence.models.postulacion
     import ssas.postulaciones.infrastructure.persistence.models.postulacion_nota
     import ssas.postulantes.infrastructure.persistence.models.postulante
+    import ssas.postulantes.infrastructure.persistence.models.postulante_habilidad
     import ssas.reportes.infrastructure.persistence.models.reporte
     import ssas.respaldos.infrastructure.persistence.models.respaldo
 

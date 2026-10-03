@@ -1,9 +1,12 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
+from ssas.analisis_cv.domain.analysis import AnalisisCvError
 from ssas.config.settings import settings
 from ssas.core.api.openapi import (
     CONFIGURACION_DESCRIPTION,
@@ -28,6 +31,7 @@ from ssas.core.api.openapi import (
 from ssas.core.api.router import api_router
 from ssas.core.tenancy.middleware import EmpresaContextMiddleware
 from ssas.infrastructure.database.session import dispose_engine
+from ssas.postulaciones.domain.seleccion import SeleccionError
 
 API_V1_PREFIX = "/api/v1"
 
@@ -54,6 +58,12 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=[
+        {"name": "Ayuda", "description": "Guías locales de uso visibles según los permisos de la cuenta."},
+        {"name": "Importación", "description": "Carga CSV de catálogos de una empresa con vista previa y confirmación."},
+        {
+            "name": "Selección",
+            "description": "Entrevistas, evaluaciones, IA y contratación por empresa.",
+        },
         {
             "name": TAG_AUTH,
             "description": "Inicio y cierre de sesión, tokens, contraseñas y correo.",
@@ -138,6 +148,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(api_router, prefix=API_V1_PREFIX)
+
+
+@app.exception_handler(SeleccionError)
+@app.exception_handler(AnalisisCvError)
+async def selection_error(_: Request, exc: SeleccionError):
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error(_: Request, exc: IntegrityError):
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": "La operación entra en conflicto con otro registro. Revisa los datos e intenta nuevamente."
+        },
+    )
 
 
 @app.get("/", include_in_schema=False)

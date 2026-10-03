@@ -6,6 +6,7 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from openpyxl import Workbook
+from pydantic import ValidationError
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen.canvas import Canvas
 from sqlalchemy import select, text
@@ -20,10 +21,16 @@ from ssas.core.api.openapi import TAG_REPORTES
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
+from ssas.reportes.infrastructure.http.ai_provider import (
+    GeminiReportInterpreter,
+    ReportInterpretationError,
+)
 from ssas.reportes.infrastructure.http.schemas import (
     ActualizarReporte,
     CrearReporte,
     EnviarReporteRequest,
+    InterpretarReporteRequest,
+    InterpretarReporteResponse,
     ReporteConfig,
     ReporteResponse,
     VistaPrevia,
@@ -58,6 +65,11 @@ FROM_SQL = {
     "postulaciones": "postulacion po JOIN postulante p ON p.id=po.postulante_id JOIN vacante v ON v.id=po.vacante_id",
 }
 TENANT_COLUMN = {"vacantes": "v.empresa_id", "usuarios": "u.empresa_id", "postulaciones": "po.empresa_id"}
+FIELD_ALIASES = {
+    "vacantes": {"fecha": "fecha_publicacion", "nombre": "titulo", "cargo": "titulo", "ciudad": "ubicacion"},
+    "usuarios": {"nombre": "nombres", "apellido": "apellidos", "usuario": "username", "fecha": "ultimo_acceso"},
+    "postulaciones": {"fecha": "fecha_postulacion", "nombre": "postulante", "candidato": "postulante", "cargo": "vacante"},
+}
 
 
 async def _audit(session: AsyncSession, request: Request, user: CurrentUser, empresa_id: str, action: str, description: str, record_id: str | None = None, new_data: dict | None = None) -> None:
@@ -86,6 +98,11 @@ def _validate(config: ReporteConfig) -> dict[str, str]:
     if invalid:
         raise HTTPException(422, f"Campos no permitidos: {', '.join(sorted(invalid))}")
     return columns
+
+
+def _report_field(source: str, field: str) -> str:
+    code = field.strip().lower().replace(" ", "_")
+    return FIELD_ALIASES[source].get(code, code)
 
 
 async def _rows(session: AsyncSession, empresa_id: str, config: ReporteConfig) -> list[dict]:
@@ -125,6 +142,53 @@ def _serialize(model: ReporteDefinicionModel) -> ReporteResponse:
 async def catalogo(_: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar"))):
     """Lista las fuentes y columnas que pueden utilizarse sin aceptar SQL libre."""
     return [{"codigo": code, "nombre": code.replace("_", " ").title(), "columnas": list(cols)} for code, cols in SOURCES.items()]
+
+
+@router.post("/interpretar", response_model=InterpretarReporteResponse)
+async def interpretar(
+    body: InterpretarReporteRequest,
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission(
+        "reportes:ejecutar", "platform:reportes:gestionar"
+    )),
+):
+    """Interpreta texto; no envía filas ni el catálogo al proveedor de IA."""
+    _empresa(user, empresa_id)
+    if not body.texto.strip():
+        raise HTTPException(422, "Escribe una consulta para el reporte")
+    try:
+        result = await GeminiReportInterpreter(settings).interpret(body.texto.strip())
+    except ReportInterpretationError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    if result.necesita_aclaracion:
+        return InterpretarReporteResponse(
+            config=None, aclaracion=result.aclaracion or "Aclara qué reporte necesitas"
+        )
+    source = result.fuente.strip().lower()
+    source = {"vacante": "vacantes", "usuario": "usuarios", "postulacion": "postulaciones"}.get(source, source)
+    if source not in SOURCES:
+        return InterpretarReporteResponse(
+            config=None, aclaracion="No pude identificar una fuente de reporte disponible"
+        )
+    try:
+        config = ReporteConfig(
+            fuente=source,
+            columnas=[_report_field(source, field) for field in result.columnas]
+            or list(SOURCES[source])[:5],
+            filtros=[{
+                **item.model_dump(), "campo": _report_field(source, item.campo)
+            } for item in result.filtros],
+            orden=[{
+                **item.model_dump(), "campo": _report_field(source, item.campo)
+            } for item in result.orden],
+        )
+        _validate(config)
+    except (ValidationError, HTTPException):
+        return InterpretarReporteResponse(
+            config=None,
+            aclaracion="No pude relacionar todos los campos con el catálogo. Reformula la consulta",
+        )
+    return InterpretarReporteResponse(config=config)
 
 
 @router.get("", response_model=list[ReporteResponse])

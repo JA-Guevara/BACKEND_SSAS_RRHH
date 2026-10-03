@@ -77,7 +77,11 @@ class PostulacionModel(Base):
     motivo_rechazo_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("motivo_rechazo.id", ondelete="SET NULL"), nullable=True
     )
-    empleado_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    empleado_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("empleado.id", name="fk_postulacion_empleado_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     puntaje_ia: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     puntaje_manual: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     notas: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -99,9 +103,7 @@ class PostulacionModel(Base):
     vacante: Mapped[VacanteModel] = relationship(back_populates="postulaciones")
     postulante: Mapped[PostulanteModel] = relationship(back_populates="postulaciones")
     etapa: Mapped[EtapaReclutamientoModel] = relationship(back_populates="postulaciones")
-    motivo_rechazo: Mapped[MotivoRechazoModel | None] = relationship(
-        back_populates="postulaciones"
-    )
+    motivo_rechazo: Mapped[MotivoRechazoModel | None] = relationship(back_populates="postulaciones")
     notas_internas: Mapped[list[PostulacionNotaModel]] = relationship(
         back_populates="postulacion", cascade="all, delete-orphan"
     )

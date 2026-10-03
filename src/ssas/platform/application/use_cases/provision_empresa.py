@@ -43,7 +43,26 @@ ROLE_DEFINITIONS: tuple[tuple[str, str, tuple[str, ...] | None], ...] = (
     (
         "RRHH",
         "Recursos Humanos",
-        ("usuarios:ver", "usuarios:crear", "usuarios:editar", "bitacora:ver"),
+        (
+            "usuarios:ver",
+            "usuarios:crear",
+            "usuarios:editar",
+            "bitacora:ver",
+            "vacantes:ver",
+            "habilidades:ver",
+            "postulantes:ver",
+            "postulantes:gestionar",
+            "postulaciones:ver",
+            "postulaciones:gestionar",
+            "entrevistas:ver",
+            "entrevistas:gestionar",
+            "entrevistas:registrar_resultado",
+            "evaluaciones:ver",
+            "evaluaciones:gestionar",
+            "postulaciones:analizar_cv",
+            "postulaciones:contratar",
+            "empleados:ver",
+        ),
     ),
     (
         "RECLUTADOR",
@@ -57,6 +76,13 @@ ROLE_DEFINITIONS: tuple[tuple[str, str, tuple[str, ...] | None], ...] = (
             "postulantes:ver",
             "postulaciones:ver",
             "postulaciones:gestionar",
+            "entrevistas:ver",
+            "entrevistas:gestionar",
+            "entrevistas:registrar_resultado",
+            "evaluaciones:ver",
+            "evaluaciones:gestionar",
+            "postulaciones:analizar_cv",
+            "postulantes:gestionar",
         ),
     ),
     (
@@ -67,6 +93,10 @@ ROLE_DEFINITIONS: tuple[tuple[str, str, tuple[str, ...] | None], ...] = (
             "cargos:ver",
             "vacantes:ver",
             "postulaciones:ver",
+            "entrevistas:ver",
+            "entrevistas:registrar_resultado",
+            "evaluaciones:ver",
+            "evaluaciones:gestionar",
         ),
     ),
     ("EMPLEADO", "Empleado", ()),
@@ -90,11 +120,7 @@ class ProvisionEmpresa:
         empresa sin pensar todavía en el alcance funcional.
         """
         catalogo_completo = (
-            (
-                await self.session.execute(
-                    select(ModuloModel).where(ModuloModel.activo.is_(True))
-                )
-            )
+            (await self.session.execute(select(ModuloModel).where(ModuloModel.activo.is_(True))))
             .scalars()
             .all()
         )

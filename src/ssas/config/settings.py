@@ -1,6 +1,6 @@
 import os
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     app_max_login_attempts: int = Field(default=5, ge=1, le=20)
     app_login_lock_minutes: int = Field(default=15, ge=1, le=1440)
     app_frontend_url: str = "http://localhost:3000"
-    app_cors_origins: str = (
-        "http://localhost:3000,http://localhost:5173,"
-    )
+    app_cors_origins: str = "http://localhost:3000,http://localhost:5173,"
     app_cors_origin_regex: str = ""
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -46,6 +44,19 @@ class Settings(BaseSettings):
     db_echo: bool = False
     db_pool_size: int = Field(default=5, ge=1)
     db_max_overflow: int = Field(default=10, ge=0)
+    openai_api_key: SecretStr | None = None
+    ia_model: str = Field(default="gpt-4o-mini", min_length=1, max_length=120)
+    gemini_api_key: SecretStr | None = None
+    gemini_report_model: str = Field(default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$")
+    help_ai_enabled: bool = False
+    help_ai_timeout_seconds: float = Field(default=10, gt=0, le=30)
+    ia_timeout_seconds: float = Field(default=60, gt=0, le=300)
+    ia_max_cv_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=20 * 1024 * 1024)
+    ia_max_cv_text_chars: int = Field(default=60000, ge=100, le=200000)
+    ia_extraction_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    ia_max_output_tokens: int = Field(default=4000, ge=500, le=16000)
+    ia_max_concurrent_analyses: int = Field(default=2, ge=1, le=32)
+    cv_storage_directory: str = "uploads/cv"
     db_pool_recycle_seconds: int = Field(default=1800, ge=30)
 
     @field_validator("app_secret_key")

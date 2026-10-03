@@ -35,6 +35,9 @@ dist/
 # Local uploads
 uploads/
 
+# Local test artifacts and demo session tokens
+tmp/
+
 # OS
 .DS_Store
 Thumbs.db

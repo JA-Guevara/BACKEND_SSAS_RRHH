@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +50,14 @@ class CrearPostulanteRequest(BaseModel):
     cv_url: str | None = None
     fuente: Fuente = "OTRO"
 
+    @field_validator("cv_url")
+    @classmethod
+    def reject_unowned_cv(cls, value):
+        if value and value.strip():
+            raise ValueError(
+                "El CV debe adjuntarse mediante una postulación, no por una ruta externa"
+            )
+
 
 def _empresa(user: CurrentUser, requested: str | None) -> str:
     if user.es_plataforma:
@@ -63,18 +71,52 @@ def _empresa(user: CurrentUser, requested: str | None) -> str:
     return user.empresa_id
 
 
-@router.get("", response_model=list[PostulanteResponse], description="Lista postulantes de la empresa autorizada.")
+@router.get(
+    "",
+    response_model=list[PostulanteResponse],
+    description="Lista postulantes de la empresa autorizada.",
+)
 async def listar_postulantes(
     empresa_id: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=120),
+    en_banco_talento: bool | None = None,
+    experiencia_min: int | None = Query(default=None, ge=0),
+    habilidad_id: str | None = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     user: CurrentUser = Depends(
         require_scoped_permission("postulantes:ver", "platform:postulantes:ver")
     ),
     session: AsyncSession = Depends(get_session),
 ):
+    from sqlalchemy import or_
+
+    from ssas.postulantes.infrastructure.persistence.models.postulante_habilidad import (
+        PostulanteHabilidadModel,
+    )
+
+    query = select(PostulanteModel).where(PostulanteModel.empresa_id == _empresa(user, empresa_id))
+    if q:
+        term = f"%{q.strip()}%"
+        query = query.where(
+            or_(PostulanteModel.nombres.ilike(term), PostulanteModel.apellidos.ilike(term))
+        )
+    if en_banco_talento is not None:
+        query = query.where(PostulanteModel.en_banco_talento == en_banco_talento)
+    if experiencia_min is not None:
+        query = query.where(PostulanteModel.anios_experiencia >= experiencia_min)
+    if habilidad_id:
+        query = query.where(
+            PostulanteModel.id.in_(
+                select(PostulanteHabilidadModel.postulante_id).where(
+                    PostulanteHabilidadModel.habilidad_id == habilidad_id
+                )
+            )
+        )
     result = await session.execute(
-        select(PostulanteModel)
-        .where(PostulanteModel.empresa_id == _empresa(user, empresa_id))
-        .order_by(PostulanteModel.created_at.desc())
+        query.order_by(PostulanteModel.created_at.desc(), PostulanteModel.id)
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()
 
@@ -94,7 +136,7 @@ async def crear_postulante(
     request: CrearPostulanteRequest,
     empresa_id: str | None = Query(default=None),
     user: CurrentUser = Depends(
-        require_scoped_permission("postulantes:gestionar", "platform:postulantes:ver")
+        require_scoped_permission("postulantes:gestionar", "platform:postulantes:gestionar")
     ),
     session: AsyncSession = Depends(get_session),
 ):
@@ -115,7 +157,11 @@ async def crear_postulante(
     return model
 
 
-@router.get("/{postulante_id}", response_model=PostulanteResponse, description="Obtiene un postulante sin salir de su empresa.")
+@router.get(
+    "/{postulante_id}",
+    response_model=PostulanteResponse,
+    description="Obtiene un postulante sin salir de su empresa.",
+)
 async def obtener_postulante(
     postulante_id: str,
     empresa_id: str | None = Query(default=None),
@@ -169,6 +215,22 @@ async def descargar_cv(
     if fila.cv_url is None:
         raise HTTPException(status_code=404, detail="El postulante no tiene un CV registrado")
     cv_url = fila.cv_url
+
+    from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
+    from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
+
+    codes = (
+        await session.scalars(
+            select(PostulacionModel.codigo_seguimiento)
+            .join(VacanteModel)
+            .where(
+                PostulacionModel.postulante_id == postulante_id,
+                VacanteModel.empresa_id == _empresa(user, empresa_id),
+            )
+        )
+    ).all()
+    if not LocalCvStorage.owns_cv(cv_url, codes):
+        raise HTTPException(404, "El CV no tiene un vínculo verificable con este postulante")
 
     almacen = LocalCvStorage()
     archivo = almacen.resolve_cv(cv_url)

@@ -58,6 +58,15 @@ class VistaPrevia(BaseModel):
     per_page: int
 
 
+class InterpretarReporteRequest(BaseModel):
+    texto: str = Field(min_length=3, max_length=500)
+
+
+class InterpretarReporteResponse(BaseModel):
+    config: ReporteConfig | None
+    aclaracion: str | None = None
+
+
 class EnviarReporteRequest(ReporteConfig):
     destinatarios: list[str] = Field(min_length=1, max_length=10)
     formato: Literal["xlsx", "html", "pdf"]

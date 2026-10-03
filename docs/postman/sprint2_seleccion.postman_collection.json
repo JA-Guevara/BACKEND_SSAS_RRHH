@@ -1,0 +1,589 @@
+{
+  "info": {
+    "name": "Sprint2 seleccion local",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Solo backend local desechable. Configurar variables con cargar_sprint2_demo. Mutaciones requieren allow_writes=true. Resultado requiere entrevista ya iniciada."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8012/api/v1"
+    },
+    {
+      "key": "allow_writes",
+      "value": "false"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "empresa_slug",
+      "value": ""
+    },
+    {
+      "key": "empresa_id",
+      "value": ""
+    },
+    {
+      "key": "vacante_id",
+      "value": ""
+    },
+    {
+      "key": "postulacion_id",
+      "value": ""
+    },
+    {
+      "key": "postulacion_2_id",
+      "value": ""
+    },
+    {
+      "key": "postulante_id",
+      "value": ""
+    },
+    {
+      "key": "entrevistador_id",
+      "value": ""
+    },
+    {
+      "key": "entrevista_id",
+      "value": ""
+    },
+    {
+      "key": "evaluacion_id",
+      "value": ""
+    },
+    {
+      "key": "empleado_id",
+      "value": ""
+    },
+    {
+      "key": "fecha_entrevista",
+      "value": ""
+    },
+    {
+      "key": "fecha_ingreso",
+      "value": ""
+    },
+    {
+      "key": "codigo_empleado",
+      "value": "DEMO-POSTMAN-001"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const base = pm.variables.get('base_url');",
+          "if (!/^http:\\/\\/(127\\.0\\.0\\.1|localhost):\\d+\\/api\\/v1$/.test(base || '')) { throw new Error('Only local disposable backend URLs are allowed'); }",
+          "if (pm.request.method !== 'GET' && pm.variables.get('allow_writes') !== 'true') { throw new Error('Set allow_writes=true only for the disposable local demo'); }"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Agenda",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/entrevistas?limit=10"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Opciones",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/entrevistas/opciones"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Programar entrevista",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/entrevistas",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"postulacion_id\": \"{{postulacion_id}}\",\n  \"entrevistador_id\": \"{{entrevistador_id}}\",\n  \"tipo\": \"TELEFONICA\",\n  \"modalidad\": \"TELEFONICA\",\n  \"fecha_hora\": \"{{fecha_entrevista}}\",\n  \"duracion_min\": 45,\n  \"enlace_reunion\": \"\",\n  \"lugar\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.collectionVariables.set('entrevista_id', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Detalle entrevista",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/entrevistas/{{entrevista_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Confirmar entrevista",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/entrevistas/{{entrevista_id}}/estado",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estado\": \"CONFIRMADA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resultado (despues de la fecha)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/entrevistas/{{entrevista_id}}/resultado",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"puntaje\": 90,\n  \"observaciones\": \"Evaluacion de demostracion\",\n  \"recomendacion\": \"APTO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Evaluaciones",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/postulaciones/{{postulacion_id}}/evaluaciones"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registrar evaluacion",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/postulaciones/{{postulacion_id}}/evaluaciones",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tipo\": \"TECNICA\",\n  \"nombre\": \"Postman SQL\",\n  \"puntaje\": 18,\n  \"puntaje_maximo\": 20,\n  \"aprobado\": true,\n  \"observaciones\": \"Demostracion sintetica\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.collectionVariables.set('evaluacion_id', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Corregir evaluacion",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/evaluaciones/{{evaluacion_id}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tipo\": \"TECNICA\",\n  \"nombre\": \"Postman SQL\",\n  \"puntaje\": 19,\n  \"puntaje_maximo\": 20,\n  \"aprobado\": true,\n  \"observaciones\": \"Correccion\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analisis persistidos (sin proveedor)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/postulaciones/{{postulacion_id}}/analisis-cv"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ranking IA",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/vacantes/{{vacante_id}}/ranking?orden=ia&limit=10"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ranking evaluaciones",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/vacantes/{{vacante_id}}/ranking?orden=evaluaciones&limit=10"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comparar finalistas",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/vacantes/{{vacante_id}}/comparar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"postulacion_ids\": [\n    \"{{postulacion_id}}\",\n    \"{{postulacion_2_id}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Historial",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/postulaciones/{{postulacion_id}}/historial"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Banco talentos",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/postulantes/{{postulante_id}}/banco-talento",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"en_banco_talento\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contratar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/postulaciones/{{postulacion_id}}/contratar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"codigo\": \"{{codigo_empleado}}\",\n  \"apellido_paterno\": \"Demo\",\n  \"apellido_materno\": \"\",\n  \"ci_expedido\": \"LP\",\n  \"fecha_ingreso\": \"{{fecha_ingreso}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.collectionVariables.set('empleado_id', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reintentar contratar (mismo codigo)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/postulaciones/{{postulacion_id}}/contratar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"codigo\": \"{{codigo_empleado}}\",\n  \"apellido_paterno\": \"Demo\",\n  \"apellido_materno\": \"\",\n  \"ci_expedido\": \"LP\",\n  \"fecha_ingreso\": \"{{fecha_ingreso}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.test('Mismo empleado', () => pm.expect(pm.response.json().id).to.eql(pm.variables.get('empleado_id')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Empleados",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/empleados"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Empleado",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/empleados/{{empleado_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

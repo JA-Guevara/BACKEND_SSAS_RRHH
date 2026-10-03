@@ -12,7 +12,23 @@ CONTENT_TYPE_POR_DEFECTO = "application/octet-stream"
 
 
 class LocalCvStorage(CvStorage):
-    def __init__(self, base_dir: str | Path = "uploads/cv") -> None:
+    @staticmethod
+    def owns_cv(cv_url: str, tracking_codes: list[str]) -> bool:
+        """Los archivos del portal se vinculan por el código único de postulación."""
+        filename = Path(cv_url).name
+        return (
+            any(
+                filename == re.sub(r"[^A-Z0-9-]", "_", code.upper()) + Path(filename).suffix.lower()
+                for code in tracking_codes
+            )
+            and Path(filename).suffix.lower() in CONTENT_TYPES
+        )
+
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        if base_dir is None:
+            from ssas.config.settings import settings
+
+            base_dir = settings.cv_storage_directory
         self.base_dir = Path(base_dir)
 
     async def save_cv(self, cv: CvAdjunto, codigo_seguimiento: str) -> str:

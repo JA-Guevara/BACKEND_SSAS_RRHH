@@ -40,6 +40,7 @@ class TableroItem(BaseModel):
     estado: str
     motivo_rechazo: str | None
     puntaje_manual: Decimal | None
+    puntaje_ia: Decimal | None = None
     codigo_seguimiento: str
     fecha_postulacion: datetime
 
@@ -100,7 +101,7 @@ def _empresa(user: CurrentUser, requested: str | None) -> str:
 
 def _audit_context(request: Request, user: CurrentUser) -> dict[str, str | None]:
     return {
-        "empresa_id": user.empresa_id,
+        "empresa_id": user.empresa_id or request.query_params.get("empresa_id"),
         "user_id": user.id,
         "source_ip": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
@@ -162,6 +163,7 @@ async def _items(
             estado=postulacion.estado,
             motivo_rechazo=motivo.nombre if motivo else None,
             puntaje_manual=postulacion.puntaje_manual,
+            puntaje_ia=postulacion.puntaje_ia,
             codigo_seguimiento=postulacion.codigo_seguimiento,
             fecha_postulacion=postulacion.fecha_postulacion,
         )
@@ -169,66 +171,140 @@ async def _items(
     ]
 
 
-@router.get("/vacantes/{vacante_id}/tablero", response_model=list[TableroItem], description="Lista candidatos de una vacante dentro de la empresa autorizada.")
+@router.get(
+    "/vacantes/{vacante_id}/tablero",
+    response_model=list[TableroItem],
+    description="Lista candidatos de una vacante dentro de la empresa autorizada.",
+)
 async def tablero(
     vacante_id: str,
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     empresa = _empresa(user, empresa_id)
-    exists = await session.scalar(select(VacanteModel.id).where(VacanteModel.id == vacante_id, VacanteModel.empresa_id == empresa))
+    exists = await session.scalar(
+        select(VacanteModel.id).where(
+            VacanteModel.id == vacante_id, VacanteModel.empresa_id == empresa
+        )
+    )
     if exists is None:
         raise HTTPException(status_code=404, detail="Vacante no encontrada")
     return await _items(session, empresa, vacante_id)
 
 
-@router.get("/postulaciones", response_model=list[TableroItem], description="Lista postulaciones de la empresa autorizada.")
+@router.get(
+    "/postulaciones",
+    response_model=list[TableroItem],
+    description="Lista postulaciones de la empresa autorizada.",
+)
 async def postulaciones(
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     return await _items(session, _empresa(user, empresa_id))
 
 
-@router.get("/etapas-reclutamiento", response_model=list[EtapaResponse], description="Lista las etapas de reclutamiento de la empresa.")
+@router.get(
+    "/etapas-reclutamiento",
+    response_model=list[EtapaResponse],
+    description="Lista las etapas de reclutamiento de la empresa.",
+)
 async def etapas(
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(select(EtapaReclutamientoModel).where(EtapaReclutamientoModel.empresa_id == _empresa(user, empresa_id)).order_by(EtapaReclutamientoModel.orden))
+    result = await session.execute(
+        select(EtapaReclutamientoModel)
+        .where(EtapaReclutamientoModel.empresa_id == _empresa(user, empresa_id))
+        .order_by(EtapaReclutamientoModel.orden)
+    )
     return result.scalars().all()
 
 
-@router.get("/motivos-rechazo", response_model=list[MotivoResponse], description="Lista los motivos de rechazo de la empresa.")
+@router.get(
+    "/motivos-rechazo",
+    response_model=list[MotivoResponse],
+    description="Lista los motivos de rechazo de la empresa.",
+)
 async def motivos(
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(select(MotivoRechazoModel).where(MotivoRechazoModel.empresa_id == _empresa(user, empresa_id), MotivoRechazoModel.activo.is_(True)).order_by(MotivoRechazoModel.nombre))
+    result = await session.execute(
+        select(MotivoRechazoModel)
+        .where(
+            MotivoRechazoModel.empresa_id == _empresa(user, empresa_id),
+            MotivoRechazoModel.activo.is_(True),
+        )
+        .order_by(MotivoRechazoModel.nombre)
+    )
     return result.scalars().all()
 
 
-@router.patch("/postulaciones/{postulacion_id}/etapa", response_model=TableroItem, description="Mueve una postulación a otra etapa de la empresa.")
+@router.patch(
+    "/postulaciones/{postulacion_id}/etapa",
+    response_model=TableroItem,
+    description="Mueve una postulación a otra etapa de la empresa.",
+)
 async def cambiar_etapa(
     postulacion_id: str,
     request: CambiarEtapaRequest,
     http_request: Request,
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     empresa = _empresa(user, empresa_id)
-    valid = await session.scalar(select(EtapaReclutamientoModel.id).where(EtapaReclutamientoModel.id == request.etapa_id, EtapaReclutamientoModel.empresa_id == empresa))
+    valid = await session.scalar(
+        select(EtapaReclutamientoModel).where(
+            EtapaReclutamientoModel.id == request.etapa_id,
+            EtapaReclutamientoModel.empresa_id == empresa,
+        )
+    )
     if valid is None:
         raise HTTPException(status_code=404, detail="Etapa no encontrada")
-    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(etapa_id=request.etapa_id, fecha_ultimo_cambio=datetime.now(UTC)))
+    if valid.es_contratado:
+        raise HTTPException(
+            409, "Usa la acción Contratar para crear el empleado y pasar a esa etapa"
+        )
+    if valid.es_rechazado:
+        raise HTTPException(409, "Usa la acción Rechazar e indica el motivo")
+    result = await session.execute(
+        update(PostulacionModel)
+        .where(
+            PostulacionModel.id == postulacion_id,
+            PostulacionModel.estado.in_(["ACTIVA", "DESCARTADA"]),
+            PostulacionModel.vacante_id.in_(
+                select(VacanteModel.id).where(VacanteModel.empresa_id == empresa)
+            ),
+        )
+        .values(
+            etapa_id=request.etapa_id,
+            estado="ACTIVA",
+            motivo_rechazo_id=None,
+            fecha_ultimo_cambio=datetime.now(UTC),
+        )
+    )
     await session.flush()
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Postulacion no encontrada")
+        raise HTTPException(
+            status_code=409,
+            detail="La postulación no existe en la empresa o no permite cambiar de etapa",
+        )
     item = (await _items(session, empresa, postulacion_id=postulacion_id))[0]
     await _events(session).etapa_cambiada(
         record_id=postulacion_id,
@@ -238,20 +314,57 @@ async def cambiar_etapa(
     return item
 
 
-@router.patch("/postulaciones/{postulacion_id}/rechazar", response_model=TableroItem, description="Rechaza una postulación con un motivo de la empresa.")
+@router.patch(
+    "/postulaciones/{postulacion_id}/rechazar",
+    response_model=TableroItem,
+    description="Rechaza una postulación con un motivo de la empresa.",
+)
 async def rechazar(
     postulacion_id: str,
     request: RechazarRequest,
     http_request: Request,
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     empresa = _empresa(user, empresa_id)
-    valid = await session.scalar(select(MotivoRechazoModel.id).where(MotivoRechazoModel.id == request.motivo_rechazo_id, MotivoRechazoModel.empresa_id == empresa))
+    valid = await session.scalar(
+        select(MotivoRechazoModel.id).where(
+            MotivoRechazoModel.id == request.motivo_rechazo_id,
+            MotivoRechazoModel.empresa_id == empresa,
+            MotivoRechazoModel.activo.is_(True),
+        )
+    )
     if valid is None:
         raise HTTPException(status_code=404, detail="Motivo de rechazo no encontrado")
-    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(motivo_rechazo_id=request.motivo_rechazo_id, estado="DESCARTADA", fecha_ultimo_cambio=datetime.now(UTC)))
+    etapa_rechazo = await session.scalar(
+        select(EtapaReclutamientoModel.id)
+        .where(
+            EtapaReclutamientoModel.empresa_id == empresa,
+            EtapaReclutamientoModel.es_rechazado.is_(True),
+        )
+        .order_by(EtapaReclutamientoModel.orden)
+    )
+    if etapa_rechazo is None:
+        raise HTTPException(409, "Configura una etapa de rechazo para la empresa")
+    result = await session.execute(
+        update(PostulacionModel)
+        .where(
+            PostulacionModel.id == postulacion_id,
+            PostulacionModel.estado.in_(["ACTIVA", "DESCARTADA"]),
+            PostulacionModel.vacante_id.in_(
+                select(VacanteModel.id).where(VacanteModel.empresa_id == empresa)
+            ),
+        )
+        .values(
+            etapa_id=etapa_rechazo,
+            motivo_rechazo_id=request.motivo_rechazo_id,
+            estado="DESCARTADA",
+            fecha_ultimo_cambio=datetime.now(UTC),
+        )
+    )
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
@@ -276,11 +389,22 @@ async def registrar_puntaje(
     request: PuntajeRequest,
     http_request: Request,
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     empresa = _empresa(user, empresa_id)
-    result = await session.execute(update(PostulacionModel).where(PostulacionModel.id == postulacion_id, PostulacionModel.vacante_id.in_(select(VacanteModel.id).where(VacanteModel.empresa_id == empresa))).values(puntaje_manual=request.puntaje, fecha_ultimo_cambio=datetime.now(UTC)))
+    result = await session.execute(
+        update(PostulacionModel)
+        .where(
+            PostulacionModel.id == postulacion_id,
+            PostulacionModel.vacante_id.in_(
+                select(VacanteModel.id).where(VacanteModel.empresa_id == empresa)
+            ),
+        )
+        .values(puntaje_manual=request.puntaje, fecha_ultimo_cambio=datetime.now(UTC))
+    )
     await session.flush()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Postulacion no encontrada")
@@ -303,7 +427,9 @@ async def registrar_puntaje(
 async def listar_notas(
     postulacion_id: str,
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:ver", "platform:postulaciones:ver")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     await _verificar_postulacion(session, postulacion_id, _empresa(user, empresa_id))
@@ -339,7 +465,9 @@ async def crear_nota(
     request: NotaRequest,
     http_request: Request,
     empresa_id: str | None = Query(default=None),
-    user: CurrentUser = Depends(require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")),
+    user: CurrentUser = Depends(
+        require_scoped_permission("postulaciones:gestionar", "platform:postulaciones:gestionar")
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     await _verificar_postulacion(session, postulacion_id, _empresa(user, empresa_id))

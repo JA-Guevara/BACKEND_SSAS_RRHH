@@ -45,6 +45,11 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "respaldo",
         "plan_modulo",
         "stripe_evento",
+        "entrevista",
+        "evaluacion",
+        "analisis_cv",
+        "empleado",
+        "postulante_habilidad",
     }
 
 
@@ -86,6 +91,9 @@ def test_openapi_is_grouped_and_describes_every_business_operation() -> None:
         "Reportes",
         "Backup / Restore",
         "Planes y suscripciones",
+        "Selección",
+        "Ayuda",
+        "Importación",
     }
 
     assert {tag["name"] for tag in schema["tags"]} == expected_tags
