@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -7,6 +8,8 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from ssas.config.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class ReportInterpretationError(Exception):
@@ -36,38 +39,35 @@ class InterpretedReport(BaseModel):
 
 
 REPORT_SCHEMA = {
-    "type": "object",
+    "type": "OBJECT",
     "properties": {
-        "fuente": {"type": "string"},
-        "columnas": {"type": "array", "items": {"type": "string"}},
-        "filtros": {"type": "array", "items": {
-            "type": "object",
+        "fuente": {"type": "STRING"},
+        "columnas": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "filtros": {"type": "ARRAY", "items": {
+            "type": "OBJECT",
             "properties": {
-                "campo": {"type": "string"},
-                "operador": {"type": "string", "enum": [
+                "campo": {"type": "STRING"},
+                "operador": {"type": "STRING", "enum": [
                     "igual", "contiene", "mayor_igual", "menor_igual"
                 ]},
-                "valor": {"type": "string"},
+                "valor": {"type": "STRING"},
             },
             "required": ["campo", "operador", "valor"],
-            "additionalProperties": False,
         }},
-        "orden": {"type": "array", "items": {
-            "type": "object",
+        "orden": {"type": "ARRAY", "items": {
+            "type": "OBJECT",
             "properties": {
-                "campo": {"type": "string"},
-                "direccion": {"type": "string", "enum": ["asc", "desc"]},
+                "campo": {"type": "STRING"},
+                "direccion": {"type": "STRING", "enum": ["asc", "desc"]},
             },
             "required": ["campo", "direccion"],
-            "additionalProperties": False,
         }},
-        "necesita_aclaracion": {"type": "boolean"},
-        "aclaracion": {"type": "string"},
+        "necesita_aclaracion": {"type": "BOOLEAN"},
+        "aclaracion": {"type": "STRING"},
     },
     "required": [
         "fuente", "columnas", "filtros", "orden", "necesita_aclaracion", "aclaracion"
     ],
-    "additionalProperties": False,
 }
 
 
@@ -89,6 +89,13 @@ class GeminiReportInterpreter:
                 "mayor_igual primer día 00:00:00 y menor_igual último día 23:59:59. "
                 "Si no se indica año, usa el año de la fecha actual. Si falta un dato "
                 "esencial, marca necesita_aclaracion=true y explica la duda."
+                " Fuentes y campos disponibles: vacantes (titulo, estado, modalidad, "
+                "ubicacion, cantidad_vacantes, fecha_publicacion); usuarios (nombres, "
+                "apellidos, email, username, telefono, activo, ultimo_acceso); "
+                "postulaciones (postulante, email, vacante, estado, puntaje, "
+                "fecha_postulacion). Devuelve exactamente fuente, columnas, filtros, "
+                "orden, necesita_aclaracion y aclaracion; usa listas vacias cuando "
+                "no haya filtros u orden."
             )}]},
             "contents": [{"role": "user", "parts": [{"text": json.dumps({
                 "consulta": text,
@@ -96,9 +103,8 @@ class GeminiReportInterpreter:
             }, ensure_ascii=False)}]}],
             "generationConfig": {
                 "maxOutputTokens": 2048,
-                "responseFormat": {"text": {
-                    "mimeType": "application/json", "schema": REPORT_SCHEMA,
-                }},
+                "responseMimeType": "application/json",
+                "responseSchema": REPORT_SCHEMA,
             },
         }
         try:
@@ -110,6 +116,24 @@ class GeminiReportInterpreter:
                         headers={"x-goog-api-key": key.get_secret_value()},
                         json=payload,
                     )
+                    if response.status_code == 400:
+                        logger.warning(
+                            "Gemini report schema rejected: http_status=400 model=%s; "
+                            "retrying JSON mode",
+                            self.config.gemini_report_model,
+                        )
+                        response = await client.post(
+                            "https://generativelanguage.googleapis.com/v1beta/models/"
+                            f"{self.config.gemini_report_model}:generateContent",
+                            headers={"x-goog-api-key": key.get_secret_value()},
+                            json={
+                                **payload,
+                                "generationConfig": {
+                                    "maxOutputTokens": 2048,
+                                    "responseMimeType": "application/json",
+                                },
+                            },
+                        )
                     response.raise_for_status()
             body = response.json()
             candidates = body.get("candidates", []) if isinstance(body, dict) else []
@@ -123,7 +147,24 @@ class GeminiReportInterpreter:
             return InterpretedReport.model_validate_json(texts[0])
         except (httpx.TimeoutException, TimeoutError) as exc:
             raise ReportInterpretationError("La IA tardó demasiado en responder", 504) from exc
-        except httpx.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
+            logger.warning(
+                "Gemini report request failed: http_status=%s model=%s",
+                exc.response.status_code,
+                self.config.gemini_report_model,
+            )
+            if exc.response.status_code == 402:
+                raise ReportInterpretationError("Los créditos de Gemini están agotados", 503) from exc
+            if exc.response.status_code == 429:
+                raise ReportInterpretationError("Gemini alcanzó su límite de uso", 503) from exc
             raise ReportInterpretationError("La IA no está disponible", 503) from exc
-        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+        except httpx.RequestError as exc:
+            raise ReportInterpretationError("La IA no está disponible", 503) from exc
+        except ValidationError as exc:
+            logger.warning(
+                "Gemini report response invalid: fields=%s",
+                [(error["loc"], error["type"]) for error in exc.errors(include_input=False)],
+            )
+            raise ReportInterpretationError("La IA devolvió una configuración inválida") from exc
+        except (ValueError, KeyError, TypeError) as exc:
             raise ReportInterpretationError("La IA devolvió una configuración inválida") from exc

@@ -51,11 +51,45 @@ async def test_provider_sends_only_the_query_not_catalog_or_rows():
         "postulaciones de septiembre"
     )
     assert result.fuente == "postulaciones"
-    assert sent[0]["generationConfig"]["responseFormat"]["text"]["mimeType"] == "application/json"
+    assert sent[0]["generationConfig"]["responseMimeType"] == "application/json"
+    assert sent[0]["generationConfig"]["responseSchema"]["required"] == [
+        "fuente", "columnas", "filtros", "orden", "necesita_aclaracion", "aclaracion"
+    ]
     sent_text = sent[0]["contents"][0]["parts"][0]["text"]
     assert json.loads(sent_text)["consulta"] == "postulaciones de septiembre"
     assert "fuentes" not in sent_text
     assert "registros" not in sent_text
+
+
+@pytest.mark.asyncio
+async def test_provider_falls_back_when_schema_is_rejected():
+    requests = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        if len(requests) == 1:
+            return httpx.Response(400, json={"error": {"status": "INVALID_ARGUMENT"}})
+        return httpx.Response(200, json={
+            "candidates": [{"finishReason": "STOP", "content": {
+                "parts": [{"text": interpretation().model_dump_json()}]
+            }}],
+        })
+
+    config = Settings(_env_file=None, app_secret_key="test", gemini_api_key="test-only")
+    result = await GeminiReportInterpreter(config, httpx.MockTransport(handle)).interpret(
+        "postulaciones de septiembre"
+    )
+    assert result.fuente == "postulaciones"
+    assert "responseSchema" in requests[0]["generationConfig"]
+    assert "responseSchema" not in requests[1]["generationConfig"]
+
+
+@pytest.mark.asyncio
+async def test_provider_reports_billing_error():
+    config = Settings(_env_file=None, app_secret_key="test", gemini_api_key="test-only")
+    transport = httpx.MockTransport(lambda _: httpx.Response(402))
+    with pytest.raises(ReportInterpretationError, match="créditos"):
+        await GeminiReportInterpreter(config, transport).interpret("postulaciones")
 
 
 @pytest.mark.asyncio

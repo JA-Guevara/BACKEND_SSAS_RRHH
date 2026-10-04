@@ -55,16 +55,18 @@ SOURCES = {
     },
     "postulaciones": {
         "postulante": "concat(p.nombres, ' ', p.apellidos)", "email": "p.email",
-        "vacante": "v.titulo", "estado": "po.estado", "puntaje": "po.puntaje_final",
+        "vacante": "v.titulo", "estado": "po.estado",
+        "puntaje": "COALESCE(po.puntaje_manual, po.puntaje_ia)",
         "fecha_postulacion": "po.fecha_postulacion",
     },
 }
 FROM_SQL = {
     "vacantes": "vacante v",
     "usuarios": "usuario u",
-    "postulaciones": "postulacion po JOIN postulante p ON p.id=po.postulante_id JOIN vacante v ON v.id=po.vacante_id",
+    "postulaciones": "postulacion po JOIN vacante v ON v.id=po.vacante_id "
+    "JOIN postulante p ON p.id=po.postulante_id AND p.empresa_id=v.empresa_id",
 }
-TENANT_COLUMN = {"vacantes": "v.empresa_id", "usuarios": "u.empresa_id", "postulaciones": "po.empresa_id"}
+TENANT_COLUMN = {"vacantes": "v.empresa_id", "usuarios": "u.empresa_id", "postulaciones": "v.empresa_id"}
 FIELD_ALIASES = {
     "vacantes": {"fecha": "fecha_publicacion", "nombre": "titulo", "cargo": "titulo", "ciudad": "ubicacion"},
     "usuarios": {"nombre": "nombres", "apellido": "apellidos", "usuario": "username", "fecha": "ultimo_acceso"},
