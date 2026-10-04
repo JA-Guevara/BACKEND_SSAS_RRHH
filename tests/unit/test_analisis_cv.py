@@ -183,6 +183,52 @@ async def test_provider_structured_request():
     assert json.loads(requests[0]["contents"][0]["parts"][0]["text"])["cv"] == "CV"
 
 
+@pytest.mark.asyncio
+async def test_provider_retries_plain_json_when_structured_request_is_rejected(caplog):
+    requests = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        if len(requests) == 1:
+            return httpx.Response(
+                400,
+                json={"error": {"status": "INVALID_ARGUMENT", "message": "Invalid schema"}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {"finishReason": "STOP", "content": {"parts": [{"text": result().model_dump_json()}]}}
+                ]
+            },
+        )
+
+    provider = GeminiAnalysisProvider(config(), httpx.MockTransport(handler))
+    assert await provider.analyze("CV", {}, []) == result()
+    assert "responseFormat" in requests[0]["generationConfig"]
+    assert requests[1]["generationConfig"]["responseMimeType"] == "application/json"
+    assert "responseFormat" not in requests[1]["generationConfig"]
+    assert "category=schema" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_provider_reports_persistent_bad_request_without_leaking_provider_message(caplog):
+    async def handler(request):
+        return httpx.Response(
+            400,
+            json={"error": {"status": "INVALID_ARGUMENT", "message": "CV privado: api key secret"}},
+        )
+
+    provider = GeminiAnalysisProvider(config(), httpx.MockTransport(handler))
+    with pytest.raises(AnalisisCvError) as exc:
+        await provider.analyze("CV privado", {}, [])
+    assert exc.value.status_code == 502
+    assert "api_status=INVALID_ARGUMENT" in caplog.text
+    assert "CV privado" not in caplog.text
+    assert "test-key" not in caplog.text
+
+
 @pytest.mark.parametrize(
     "body",
     [

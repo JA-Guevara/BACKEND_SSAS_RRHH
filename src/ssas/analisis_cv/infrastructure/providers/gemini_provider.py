@@ -1,11 +1,44 @@
 import asyncio
 import json
+import logging
 
 import httpx
 from pydantic import ValidationError
 
 from ssas.analisis_cv.domain.analysis import AnalisisCvError, ResultadoIA
 from ssas.config.settings import Settings
+
+logger = logging.getLogger(__name__)
+
+
+def _error_metadata(response: httpx.Response) -> tuple[str | None, str | None]:
+    try:
+        error = response.json().get("error", {})
+    except (ValueError, AttributeError):
+        return None, None
+    if not isinstance(error, dict):
+        return None, None
+    status = error.get("status")
+    message = error.get("message")
+    if not isinstance(status, str):
+        status = None
+    if not isinstance(message, str):
+        return status, None
+    normalized = message.lower()
+    for marker, category in (
+        ("responseformat", "response_format"),
+        ("response_format", "response_format"),
+        ("schema", "schema"),
+        ("model", "model"),
+        ("quota", "quota"),
+        ("billing", "billing"),
+        ("api key", "api_key"),
+        ("permission", "permission"),
+    ):
+        if marker in normalized:
+            return status, category
+    return status, "other"
+
 
 CV_ANALYSIS_SCHEMA = {
     "type": "object",
@@ -74,6 +107,10 @@ class GeminiAnalysisProvider:
                 },
             },
         }
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.config.gemini_cv_model}:generateContent"
+        )
         try:
             async with asyncio.timeout(self.config.ia_timeout_seconds):
                 async with httpx.AsyncClient(
@@ -81,11 +118,31 @@ class GeminiAnalysisProvider:
                     transport=self.transport,
                 ) as client:
                     response = await client.post(
-                        "https://generativelanguage.googleapis.com/v1beta/models/"
-                        f"{self.config.gemini_cv_model}:generateContent",
+                        url,
                         headers={"x-goog-api-key": key.get_secret_value()},
                         json=payload,
                     )
+                    if response.status_code == 400:
+                        api_status, category = _error_metadata(response)
+                        logger.warning(
+                            "Gemini CV structured request failed: http_status=400 "
+                            "api_status=%s category=%s model=%s; retrying JSON mode",
+                            api_status,
+                            category,
+                            self.config.gemini_cv_model,
+                        )
+                        fallback_payload = {
+                            **payload,
+                            "generationConfig": {
+                                "maxOutputTokens": self.config.ia_max_output_tokens,
+                                "responseMimeType": "application/json",
+                            },
+                        }
+                        response = await client.post(
+                            url,
+                            headers={"x-goog-api-key": key.get_secret_value()},
+                            json=fallback_payload,
+                        )
                     response.raise_for_status()
             body = response.json()
             candidates = body.get("candidates", []) if isinstance(body, dict) else []
@@ -103,12 +160,22 @@ class GeminiAnalysisProvider:
             raise AnalisisCvError("Gemini excedio el tiempo de analisis", 504) from exc
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
+            api_status, category = _error_metadata(exc.response)
+            logger.warning(
+                "Gemini CV request failed: http_status=%s api_status=%s category=%s model=%s",
+                status,
+                api_status,
+                category,
+                self.config.gemini_cv_model,
+            )
             if status in (401, 403):
                 raise AnalisisCvError("Gemini rechazo la clave API", 503) from exc
             if status == 429:
                 raise AnalisisCvError("Gemini alcanzo su limite de uso", 503) from exc
             if status == 404:
                 raise AnalisisCvError("El modelo de Gemini no esta disponible", 503) from exc
+            if status == 400:
+                raise AnalisisCvError("Gemini no acepto la solicitud de analisis", 502) from exc
             raise AnalisisCvError("Gemini rechazo la solicitud de analisis", 503) from exc
         except httpx.RequestError as exc:
             raise AnalisisCvError("Gemini no esta disponible", 503) from exc
