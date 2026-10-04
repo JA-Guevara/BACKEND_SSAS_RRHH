@@ -4,10 +4,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
 from ssas.suscripciones.application.reconciliation import derived_status
 from ssas.suscripciones.infrastructure.http import router as subscriptions_router
 from ssas.suscripciones.infrastructure.http.router import _claim_stripe_event, _map_status
+from ssas.main import app
 
 
 def subscription(**overrides):
@@ -27,6 +29,27 @@ def test_maps_stripe_statuses() -> None:
     assert _map_status("trialing") == "PRUEBA"
     assert _map_status("past_due") == "PAGO_FALLIDO"
     assert _map_status("canceled") == "CANCELADA"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_needs_signature_not_user_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(subscriptions_router, "_stripe_ready", lambda **_kwargs: None)
+
+    def reject_signature(*_args):
+        raise ValueError("invalid signature")
+
+    monkeypatch.setattr(subscriptions_router.stripe.Webhook, "construct_event", reject_signature)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        webhook_response = await client.post(
+            "/api/v1/webhooks/stripe",
+            content=b"{}",
+            headers={"Stripe-Signature": "invalid"},
+        )
+        protected_response = await client.get("/api/v1/suscripcion")
+
+    assert webhook_response.status_code == 400
+    assert webhook_response.json()["detail"] == "Firma Stripe inválida"
+    assert protected_response.status_code == 401
 
 
 def test_expired_trial_becomes_expired() -> None:

@@ -24,6 +24,7 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/email/verify",
         "/api/v1/auth/registro-empresa",
         "/api/v1/publico/postulaciones",
+        "/api/v1/webhooks/stripe",
     }
 )
 
