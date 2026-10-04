@@ -19,26 +19,33 @@ La dependencia HTTP conserva su commit/rollback habitual.
 
 | Variable | Valor por defecto | Uso |
 | --- | --- | --- |
-| OPENAI_API_KEY | sin configurar | Secreto backend; ausencia devuelve 503 |
-| IA_MODEL | gpt-4o-mini | Modelo compatible con Responses y Structured Outputs |
-| IA_TIMEOUT_SECONDS | 60 | Tiempo total maximo para OpenAI, entre 0 y 300 |
+| GEMINI_API_KEY | sin configurar | Secreto backend compartido con reportes; ausencia devuelve 503 |
+| GEMINI_CV_MODEL | gemini-3.5-flash-lite | Modelo Gemini para analisis de CV; independiente del de reportes |
+| IA_TIMEOUT_SECONDS | 60 | Tiempo total maximo para Gemini, entre 0 y 300 |
 | IA_MAX_CV_BYTES | 5242880 | Limite de archivo PDF/DOCX, maximo configurable 20 MiB |
 | IA_MAX_CV_TEXT_CHARS | 60000 | Limite de texto; se rechaza exceso, no se trunca |
 | IA_EXTRACTION_TIMEOUT_SECONDS | 15 | Tiempo maximo de parser en proceso independiente |
-| IA_MAX_OUTPUT_TOKENS | 4000 | Limite de salida OpenAI |
+| IA_MAX_OUTPUT_TOKENS | 4000 | Limite de salida Gemini |
 | IA_MAX_CONCURRENT_ANALYSES | 2 | Cupos globales PostgreSQL compartidos entre procesos |
-| CV_STORAGE_DIRECTORY | uploads/cv | Directorio compartido de carga, descarga y extraccion |
+| CV_STORAGE_DIRECTORY | `RAILWAY_VOLUME_MOUNT_PATH/cv` en Railway con volumen; `uploads/cv` local | Directorio compartido de carga, descarga y extraccion |
 
-Ejemplo sin secretos: `IA_MODEL=gpt-4o-mini`, `CV_STORAGE_DIRECTORY=/data/cv`.
-Configurar OPENAI_API_KEY directamente en las variables del backend; nunca en frontend.
-En Railway montar un volumen persistente en `/data` y usar `/data/cv`; copiar los CV
-existentes antes de cambiar la ruta. El resolver reutiliza el nombre de archivo guardado
+Ejemplo sin secretos: `GEMINI_CV_MODEL=gemini-3.5-flash-lite`, `CV_STORAGE_DIRECTORY=/data/cv`.
+Configurar GEMINI_API_KEY directamente en las variables del backend; nunca en frontend.
+OPENAI_API_KEY e IA_MODEL siguen siendo opciones de la ayuda generativa, pero el
+analisis de CV ya no las utiliza.
+En Railway, conectar un volumen al servicio backend con mount path `/data`. El backend
+usara automaticamente `/data/cv` para nuevas cargas y para el backup, sin agregar
+variables. Si ya existen `CV_STORAGE_DIRECTORY` o `BACKUP_FILES_DIRECTORY` en Railway,
+quitarlas o configurarlas ambas como `/data/cv`; una variable explicita tiene prioridad.
+El backend devuelve 503 y no crea la postulacion si se intenta subir un CV sin volumen
+o con un directorio fuera de este. Los CV de contenedores anteriores no se trasladan
+solos: copiarlos al volumen conservando sus nombres, si aun estan disponibles.
+El resolver reutiliza el nombre de archivo guardado
 y verifica que el archivo real no salga del directorio (incluidos enlaces simbolicos).
 Ademas se verifica que su nombre corresponda a un codigo_seguimiento de una
 postulacion del mismo postulante y empresa. Un cv_url a otro archivo del directorio
 compartido se rechaza antes de extraer o enviar al proveedor.
-Si se usa backup, alinear tambien `BACKUP_FILES_DIRECTORY=/data/cv`. No se crean ni
-despliegan volumenes automaticamente.
+No se crean ni despliegan volumenes automaticamente desde el repositorio.
 
 ## Extraccion y proveedor
 
@@ -48,9 +55,9 @@ independiente con timeout que termina el proceso, compatible con Windows y Linux
 PDF sin texto requiere OCR; OCR no esta implementado. Documentos corruptos/protegidos,
 tamano excesivo y formatos no aceptados producen errores comprensibles.
 
-El proveedor usa httpx asincrono contra `https://api.openai.com/v1/responses`,
-`text.format.type=json_schema`, `strict=true`, y `store=false` siguiendo la
-[documentacion oficial de OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs).
+El proveedor usa httpx asincrono contra Gemini Developer API `generateContent`
+con respuesta JSON estructurada, siguiendo la
+[documentacion oficial de Gemini](https://ai.google.dev/gemini-api/docs/generate-content/structured-output).
 No hay fallback que simule IA. Se manejan timeout (504), rechazo/salida invalida (502),
 HTTP externo o credenciales ausentes (503). No se incluye el cuerpo del error externo
 en errores/logs. Los puertos permiten sustituir extractor/proveedor para pruebas.
@@ -111,11 +118,11 @@ alineado con contratacion; nunca se confia en el orden de un FOR UPDATE con join
 `pytest tests/unit/test_analisis_cv.py` cubre extraccion real de documentos sinteticos,
 limites, proveedor con MockTransport, validacion de evidencia, formula, locks y contrato
 sin commit. `pytest tests/integration/test_analisis_cv_external.py` habilita pruebas
-reales solo con `RUN_CV_OPENAI_TEST=1` / `CV_LOCK_TEST_DATABASE_URL` configurados.
+reales solo con `RUN_CV_GEMINI_TEST=1` / `CV_LOCK_TEST_DATABASE_URL` configurados.
 `pytest tests/integration/test_analisis_cv_postgresql.py` con SPRINT2_TEST_DATABASE_URL
 usa exclusivamente loopback:55432/sprint2 sin password, crea un schema propio y lo
 elimina al terminar. Verifica guardado decimal/contrato, bloqueo concurrente, ausencia
 de transacciones externas, auditoria unica, rollback, snapshots y propiedad de archivos.
-La prueba OpenAI usa texto sintetico sin datos personales y consume una llamada.
+La prueba Gemini usa texto sintetico sin datos personales y consume una llamada.
 Los mocks no sustituyen esa prueba real para cerrar CU-13. Revision humana es necesaria
 antes de decisiones de contratacion/rechazo.

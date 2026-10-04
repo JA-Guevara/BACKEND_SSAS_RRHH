@@ -1,7 +1,13 @@
 import os
+from pathlib import Path
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_cv_files_directory() -> str:
+    mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+    return str(Path(mount) / "cv") if mount else "uploads/cv"
 
 
 class Settings(BaseSettings):
@@ -31,7 +37,7 @@ class Settings(BaseSettings):
     backup_storage_bucket: str = "respaldos"
     backup_restore_enabled: bool = False
     backup_restore_confirmation: str = "RESTAURAR BASE DE DATOS"
-    backup_files_directory: str = "uploads/cv"
+    backup_files_directory: str = Field(default_factory=_default_cv_files_directory)
     pg_dump_path: str = "pg_dump"
     pg_restore_path: str = "pg_restore"
     stripe_secret_key: str | None = None
@@ -47,7 +53,10 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     ia_model: str = Field(default="gpt-4o-mini", min_length=1, max_length=120)
     gemini_api_key: SecretStr | None = None
-    gemini_report_model: str = Field(default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$")
+    gemini_report_model: str = Field(
+        default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$"
+    )
+    gemini_cv_model: str = Field(default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$")
     help_ai_enabled: bool = False
     help_ai_timeout_seconds: float = Field(default=10, gt=0, le=30)
     ia_timeout_seconds: float = Field(default=60, gt=0, le=300)
@@ -56,7 +65,7 @@ class Settings(BaseSettings):
     ia_extraction_timeout_seconds: float = Field(default=15, gt=0, le=60)
     ia_max_output_tokens: int = Field(default=4000, ge=500, le=16000)
     ia_max_concurrent_analyses: int = Field(default=2, ge=1, le=32)
-    cv_storage_directory: str = "uploads/cv"
+    cv_storage_directory: str = Field(default_factory=_default_cv_files_directory)
     db_pool_recycle_seconds: int = Field(default=1800, ge=30)
 
     @field_validator("app_secret_key")

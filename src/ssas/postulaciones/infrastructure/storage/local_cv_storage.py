@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -9,6 +10,10 @@ CONTENT_TYPES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 CONTENT_TYPE_POR_DEFECTO = "application/octet-stream"
+
+
+class CvStorageUnavailableError(Exception):
+    pass
 
 
 class LocalCvStorage(CvStorage):
@@ -32,11 +37,20 @@ class LocalCvStorage(CvStorage):
         self.base_dir = Path(base_dir)
 
     async def save_cv(self, cv: CvAdjunto, codigo_seguimiento: str) -> str:
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        if os.getenv("RAILWAY_PROJECT_ID"):
+            mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+            if not mount or not self.base_dir.resolve().is_relative_to(Path(mount).resolve()):
+                raise CvStorageUnavailableError(
+                    "Configure un volumen persistente en Railway antes de recibir CV"
+                )
         extension = Path(cv.filename).suffix.lower()
         safe_code = re.sub(r"[^A-Z0-9-]", "_", codigo_seguimiento.upper())
         target = self.base_dir / f"{safe_code}{extension}"
-        target.write_bytes(cv.content)
+        try:
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(cv.content)
+        except OSError as exc:
+            raise CvStorageUnavailableError("No se pudo guardar el CV en el volumen") from exc
         return target.as_posix()
 
     def resolve_cv(self, cv_url: str) -> Path | None:

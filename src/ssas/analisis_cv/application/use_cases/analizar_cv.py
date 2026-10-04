@@ -15,7 +15,7 @@ from ssas.analisis_cv.domain.analysis import (
 from ssas.analisis_cv.infrastructure.extraction.cv_extractor import LocalCvExtractor
 from ssas.analisis_cv.infrastructure.persistence.models.analisis_cv import AnalisisCvModel
 from ssas.analisis_cv.infrastructure.providers.analysis_lock import analysis_lock, lock_persistence
-from ssas.analisis_cv.infrastructure.providers.openai_provider import OpenAIAnalysisProvider
+from ssas.analisis_cv.infrastructure.providers.gemini_provider import GeminiAnalysisProvider
 from ssas.analisis_cv.infrastructure.providers.privacy import redact_personal_data
 from ssas.analisis_cv.ports.outgoing.analysis_provider import AnalysisProvider, CvExtractor
 from ssas.auth.infrastructure.persistence.models.user import UserModel
@@ -229,7 +229,7 @@ async def analizar_cv(
         )
         vacante = {k: row[k] for k in ("titulo", "descripcion", "requisitos", "experiencia_min")}
         vacante["habilidades"] = [{**r, "peso": str(r["peso"])} for r in requisitos]
-        provider: AnalysisProvider = OpenAIAnalysisProvider(settings)
+        provider: AnalysisProvider = GeminiAnalysisProvider(settings)
         resultado = await provider.analyze(texto, vacante, catalogo)
         validar_evidencia(resultado, {h["habilidad_id"] for h in catalogo}, texto)
         score = calcular_afinidad(requisitos, resultado, row["experiencia_min"])
@@ -259,7 +259,7 @@ async def analizar_cv(
                     + "\nEvidencia experiencia: "
                     + resultado.evidencia_experiencia
                 ),
-                modelo_usado=settings.ia_model,
+                modelo_usado=settings.gemini_cv_model,
                 tiempo_proceso_ms=int((monotonic() - started) * 1000),
                 fecha_analisis=datetime.now(UTC),
             )
@@ -293,7 +293,7 @@ async def analizar_cv(
                 new_data={
                     "postulacion_id": postulacion_id,
                     "puntaje_afinidad": str(score),
-                    "modelo_usado": settings.ia_model,
+                    "modelo_usado": settings.gemini_cv_model,
                 },
             )
             await session.flush()

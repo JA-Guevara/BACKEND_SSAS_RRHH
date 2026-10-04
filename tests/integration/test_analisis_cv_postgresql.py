@@ -280,7 +280,7 @@ async def test_real_sql_persistence_concurrency_and_guards(monkeypatch):
             module, "LocalCvExtractor", lambda config: SimpleNamespace(extract=extract)
         )
         monkeypatch.setattr(
-            module, "OpenAIAnalysisProvider", lambda config: SimpleNamespace(analyze=analyze)
+            module, "GeminiAnalysisProvider", lambda config: SimpleNamespace(analyze=analyze)
         )
         async with factory() as winner, factory() as loser:
             await winner.scalar(select(UserModel.id).where(UserModel.id == ids["actor"]))

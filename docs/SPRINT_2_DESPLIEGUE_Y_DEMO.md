@@ -27,8 +27,8 @@ se detiene para que se resuelvan explícitamente.
 Configurar únicamente en backend:
 
 ```ini
-OPENAI_API_KEY=valor_privado_configurado_en_el_entorno
-IA_MODEL=gpt-4o-mini
+GEMINI_API_KEY=valor_privado_configurado_en_el_entorno
+GEMINI_CV_MODEL=gemini-3.5-flash-lite
 IA_TIMEOUT_SECONDS=60
 IA_EXTRACTION_TIMEOUT_SECONDS=15
 IA_MAX_CV_BYTES=5242880
@@ -37,7 +37,7 @@ IA_MAX_OUTPUT_TOKENS=4000
 CV_STORAGE_DIRECTORY=uploads/cv
 ```
 
-El modelo es configurable. La llamada real usa Responses API con respuesta
+El modelo es configurable. La llamada real usa Gemini Developer API con respuesta
 estructurada. La clave no se incluye en Git, en las variables VITE ni en Postman.
 Sin clave configurada, el análisis devuelve un error de configuración y conserva
 el último resultado exitoso. No se reemplaza por una afinidad ficticia.
@@ -49,14 +49,14 @@ automáticas de contratación/rechazo. El ranking permite ordenar separadamente 
 IA, puntaje manual, promedio normalizado de evaluaciones o entrevistas. Un puntaje
 ausente aparece como pendiente y se ordena al final.
 
-Para que los CV persistan en Railway, montar un volumen duradero y usar su ruta
-en `CV_STORAGE_DIRECTORY`; por ejemplo `/data/cv`. Coordinar también
-`BACKUP_FILES_DIRECTORY=/data/cv`, para incluir los mismos archivos en respaldos.
-La ruta por defecto `uploads/cv` conserva compatibilidad local, pero por sí sola
-no convierte el disco efímero del despliegue en almacenamiento duradero. Migrar
-los archivos existentes al volumen conservando sus nombres antes de cambiar la
-ruta. La base conserva las referencias; no descargar archivos arbitrarios desde
-URLs indicadas por el cliente.
+Para que los CV persistan en Railway, conectar un volumen al backend con mount path
+`/data`. El backend detecta `RAILWAY_VOLUME_MOUNT_PATH` y usa `/data/cv` tanto para
+CV como para backup. Si se definieron `CV_STORAGE_DIRECTORY` o
+`BACKUP_FILES_DIRECTORY`, quitarlas o fijar ambas a `/data/cv`; tienen prioridad
+sobre el valor automático. Sin volumen, nuevas postulaciones con CV devuelven 503
+en vez de guardar archivos efímeros. Migrar los archivos existentes al volumen
+conservando sus nombres antes del cambio, si aún están disponibles. La base conserva
+las referencias; no descargar archivos arbitrarios desde URLs del cliente.
 
 Esta entrega registra evaluaciones sin archivos adjuntos. `archivo_url` permanece
 en el esquema del diagrama, reservado para una futura carga/descarga protegida.
@@ -113,7 +113,7 @@ una empresa elegida expresamente.
 Ejecutar la suite unitaria y las pruebas del Sprint 2 contra una base PostgreSQL
 local desechable, nunca mediante la URL de producción. Consultar el encabezado de
 `tests/integration/test_sprint2_selection.py` para configurar su variable específica.
-La prueba real de OpenAI requiere además `RUN_CV_OPENAI_TEST=1`; puede realizar
+La prueba real de Gemini requiere además `RUN_CV_GEMINI_TEST=1`; puede realizar
 una llamada facturable y se mantiene desactivada por defecto.
 
 En frontend ejecutar build, lint, tests y comprobación del contrato OpenAPI

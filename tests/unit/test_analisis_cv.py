@@ -23,7 +23,7 @@ from ssas.analisis_cv.domain.analysis import (
 )
 from ssas.analisis_cv.infrastructure.extraction.cv_extractor import LocalCvExtractor, extract_file
 from ssas.analisis_cv.infrastructure.providers.analysis_lock import analysis_lock
-from ssas.analisis_cv.infrastructure.providers.openai_provider import OpenAIAnalysisProvider
+from ssas.analisis_cv.infrastructure.providers.gemini_provider import GeminiAnalysisProvider
 from ssas.analisis_cv.infrastructure.providers.privacy import redact_personal_data
 from ssas.config.settings import Settings
 from ssas.infrastructure.database.base import import_all_models
@@ -36,7 +36,7 @@ def config(**kwargs):
         _env_file=None,
         app_env="development",
         app_secret_key="test",
-        openai_api_key="test-key",
+        gemini_api_key="test-key",
         **kwargs,
     )
 
@@ -155,44 +155,45 @@ async def test_provider_structured_request():
 
     async def handler(request):
         requests.append(json.loads(request.content))
-        assert request.headers["authorization"] == "Bearer test-key"
+        assert request.headers["x-goog-api-key"] == "test-key"
+        assert request.url.path.endswith("/models/gemini-test-model:generateContent")
         return httpx.Response(
             200,
             json={
-                "status": "completed",
-                "output": [
+                "candidates": [
                     {
-                        "type": "message",
-                        "content": [{"type": "output_text", "text": result().model_dump_json()}],
-                    },
+                        "finishReason": "STOP",
+                        "content": {"parts": [{"text": result().model_dump_json()}]},
+                    }
                 ],
             },
         )
 
-    provider = OpenAIAnalysisProvider(
-        config(ia_model="configured-model"), httpx.MockTransport(handler)
+    provider = GeminiAnalysisProvider(
+        config(gemini_cv_model="gemini-test-model"), httpx.MockTransport(handler)
     )
     assert await provider.analyze("CV", {}, []) == result()
-    assert requests[0]["model"] == "configured-model"
-    assert requests[0]["store"] is False
-    assert requests[0]["text"]["format"]["strict"] is True
-    assert requests[0]["text"]["format"]["schema"]["additionalProperties"] is False
+    assert (
+        requests[0]["generationConfig"]["responseFormat"]["text"]["mimeType"] == "application/json"
+    )
+    assert (
+        requests[0]["generationConfig"]["responseFormat"]["text"]["schema"]["additionalProperties"]
+        is False
+    )
+    assert json.loads(requests[0]["contents"][0]["parts"][0]["text"])["cv"] == "CV"
 
 
 @pytest.mark.parametrize(
     "body",
     [
-        {"status": "incomplete", "output": []},
-        {"status": "completed", "output": []},
-        {"status": "completed", "output": [{"type": "message", "content": [{"type": "refusal"}]}]},
+        {"candidates": []},
+        {"candidates": [{"finishReason": "SAFETY", "content": {"parts": []}}]},
+        {"candidates": [{"finishReason": "STOP", "content": {"parts": []}}]},
         {
-            "status": "completed",
-            "output": [
+            "candidates": [
                 {
-                    "type": "message",
-                    "content": [
-                        {"type": "output_text", "text": '{"unexpected":true}'},
-                    ],
+                    "finishReason": "STOP",
+                    "content": {"parts": [{"text": '{"unexpected":true}'}]},
                 }
             ],
         },
@@ -200,7 +201,7 @@ async def test_provider_structured_request():
 )
 @pytest.mark.asyncio
 async def test_provider_invalid_refusal_incomplete(body):
-    provider = OpenAIAnalysisProvider(
+    provider = GeminiAnalysisProvider(
         config(),
         httpx.MockTransport(
             lambda request: httpx.Response(200, json=body),
@@ -214,19 +215,25 @@ async def test_provider_invalid_refusal_incomplete(body):
 @pytest.mark.asyncio
 async def test_provider_missing_key_timeout_and_http_error():
     without_key = config()
-    without_key.openai_api_key = None
-    with pytest.raises(AnalisisCvError, match="OPENAI_API_KEY"):
-        await OpenAIAnalysisProvider(without_key).analyze("CV", {}, [])
+    without_key.gemini_api_key = None
+    with pytest.raises(AnalisisCvError, match="GEMINI_API_KEY"):
+        await GeminiAnalysisProvider(without_key).analyze("CV", {}, [])
 
     def timeout(request):
         raise httpx.ReadTimeout("timeout", request=request)
 
-    for handler, status in [(timeout, 504), (lambda r: httpx.Response(429), 503)]:
+    for handler, status, message in [
+        (timeout, 504, "tiempo"),
+        (lambda r: httpx.Response(401), 503, "clave API"),
+        (lambda r: httpx.Response(429), 503, "limite de uso"),
+        (lambda r: httpx.Response(404), 503, "modelo"),
+    ]:
         with pytest.raises(AnalisisCvError) as exc:
-            await OpenAIAnalysisProvider(config(), httpx.MockTransport(handler)).analyze(
+            await GeminiAnalysisProvider(config(), httpx.MockTransport(handler)).analyze(
                 "CV", {}, []
             )
         assert exc.value.status_code == status
+        assert message in str(exc.value)
 
 
 @pytest.mark.asyncio
@@ -320,7 +327,7 @@ async def test_use_case_atomic_persistence_without_commit(monkeypatch, failure):
     provider = SimpleNamespace(analyze=AsyncMock(return_value=result()))
     if failure:
         provider.analyze.side_effect = AnalisisCvError("timeout", 504)
-    monkeypatch.setattr(module, "OpenAIAnalysisProvider", lambda settings: provider)
+    monkeypatch.setattr(module, "GeminiAnalysisProvider", lambda settings: provider)
     audit = SimpleNamespace(execute=AsyncMock())
     monkeypatch.setattr(module, "RegisterAuditEvent", lambda repository: audit)
     monkeypatch.setattr(module, "SqlAlchemyAuditLogRepository", lambda session: session)
@@ -347,6 +354,7 @@ async def test_use_case_atomic_persistence_without_commit(monkeypatch, failure):
 
         response = AnalisisResponse.model_validate(model)
         assert response.anios_experiencia_detectados == 2.0
+        assert model.modelo_usado == module.settings.gemini_cv_model
         assert response.puntaje_afinidad == Decimal("90.00")
         assert session.get.return_value.puntaje_ia == model.puntaje_afinidad
         sql = str(session.execute.call_args.args[0])

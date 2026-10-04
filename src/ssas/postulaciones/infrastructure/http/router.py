@@ -40,7 +40,10 @@ from ssas.postulaciones.infrastructure.http.schemas import (
 from ssas.postulaciones.infrastructure.persistence.repositories.postulacion_publica_repository import (
     SqlAlchemyPostulacionPublicaRepository,
 )
-from ssas.postulaciones.infrastructure.storage.local_cv_storage import LocalCvStorage
+from ssas.postulaciones.infrastructure.storage.local_cv_storage import (
+    CvStorageUnavailableError,
+    LocalCvStorage,
+)
 from ssas.suscripciones.application.policy import SubscriptionPolicy, SubscriptionPolicyError
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
@@ -86,6 +89,7 @@ def _raise_http_postulacion_error(exc: PostulacionError) -> None:
         404: {"description": "La vacante no existe o no esta publicada."},
         409: {"description": "El postulante ya postulo a esta vacante."},
         422: {"description": "Datos invalidos, CV invalido o etapa inicial no configurada."},
+        503: {"description": "El almacenamiento persistente de CV no esta disponible."},
     },
 )
 async def crear_postulacion_publica(
@@ -161,6 +165,8 @@ async def crear_postulacion_publica(
         ) from exc
     except SubscriptionPolicyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CvStorageUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except PostulacionError as exc:
         _raise_http_postulacion_error(exc)
 

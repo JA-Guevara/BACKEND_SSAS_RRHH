@@ -7,19 +7,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from ssas.analisis_cv.domain.analysis import AnalisisCvError, validar_evidencia
 from ssas.analisis_cv.infrastructure.providers.analysis_lock import analysis_lock, lock_persistence
-from ssas.analisis_cv.infrastructure.providers.openai_provider import OpenAIAnalysisProvider
+from ssas.analisis_cv.infrastructure.providers.gemini_provider import GeminiAnalysisProvider
 from ssas.config.settings import Settings, settings
 
 
 @pytest.mark.asyncio
-async def test_real_openai_structured_analysis():
-    if os.getenv("RUN_CV_OPENAI_TEST") != "1":
-        pytest.skip("Configure RUN_CV_OPENAI_TEST=1 y OPENAI_API_KEY")
-    if not settings.openai_api_key or not settings.openai_api_key.get_secret_value().strip():
-        pytest.skip("OPENAI_API_KEY no configurada")
+async def test_real_gemini_structured_analysis():
+    if os.getenv("RUN_CV_GEMINI_TEST") != "1":
+        pytest.skip("Configure RUN_CV_GEMINI_TEST=1 y GEMINI_API_KEY")
+    if not settings.gemini_api_key or not settings.gemini_api_key.get_secret_value().strip():
+        pytest.skip("GEMINI_API_KEY no configurada")
     skill_id = str(uuid4())
     text = "Desarrollo Python. Experiencia laboral relevante: 2 anos de desarrollo Python."
-    result = await OpenAIAnalysisProvider(settings).analyze(
+    result = await GeminiAnalysisProvider(settings).analyze(
         text,
         {"titulo": "Desarrollador Python", "experiencia_min": 2},
         [{"habilidad_id": skill_id, "nombre": "Python"}],
