@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -65,6 +66,11 @@ class LocalCvExtractor:
         if path.stat().st_size > self.config.ia_max_cv_bytes:
             raise AnalisisCvError("El CV excede el tamano permitido")
         # A killable process bounds parser runtime even for malformed documents.
+        source_root = str(Path(__file__).resolve().parents[4])
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            part for part in (source_root, env.get("PYTHONPATH")) if part
+        )
         try:
             process = await asyncio.to_thread(
                 subprocess.run,
@@ -78,6 +84,7 @@ class LocalCvExtractor:
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
+                env=env,
                 check=False,
                 timeout=self.config.ia_extraction_timeout_seconds,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,

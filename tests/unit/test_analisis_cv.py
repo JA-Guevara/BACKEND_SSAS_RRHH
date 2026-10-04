@@ -1,7 +1,9 @@
 import importlib
 import json
+import os
 from contextlib import asynccontextmanager
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -128,6 +130,23 @@ async def test_extractor_worker_and_storage_boundary(tmp_path):
     (tmp_path / "bad.docx").write_bytes(b"not a document")
     with pytest.raises(AnalisisCvError):
         await extractor.extract("bad.docx")
+
+
+@pytest.mark.asyncio
+async def test_extractor_worker_receives_source_path(tmp_path, monkeypatch):
+    module = importlib.import_module("ssas.analisis_cv.infrastructure.extraction.cv_extractor")
+    (tmp_path / "cv.pdf").write_bytes(b"sample")
+    monkeypatch.setenv("PYTHONPATH", "existing-path")
+
+    def run_worker(args, **kwargs):
+        assert args[2] == "ssas.analisis_cv.infrastructure.extraction.worker"
+        source_root = str(Path(module.__file__).resolve().parents[4])
+        assert kwargs["env"]["PYTHONPATH"].split(os.pathsep) == [source_root, "existing-path"]
+        return SimpleNamespace(returncode=0, stdout=b'{"text":"CV de prueba"}')
+
+    monkeypatch.setattr(module.subprocess, "run", run_worker)
+    extractor = LocalCvExtractor(config(cv_storage_directory=str(tmp_path)))
+    assert await extractor.extract("cv.pdf") == "CV de prueba"
 
 
 @pytest.mark.asyncio
