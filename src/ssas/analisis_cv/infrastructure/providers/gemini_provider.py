@@ -40,38 +40,6 @@ def _error_metadata(response: httpx.Response) -> tuple[str | None, str | None]:
     return status, "other"
 
 
-CV_ANALYSIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "habilidades": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "habilidad_id": {"type": "string"},
-                    "nivel": {"type": "string"},
-                    "evidencia": {"type": "string"},
-                },
-                "required": ["habilidad_id", "nivel", "evidencia"],
-                "additionalProperties": False,
-            },
-        },
-        "anios_experiencia": {"type": "number"},
-        "evidencia_experiencia": {"type": "string"},
-        "resumen": {"type": "string"},
-        "justificacion": {"type": "string"},
-    },
-    "required": [
-        "habilidades",
-        "anios_experiencia",
-        "evidencia_experiencia",
-        "resumen",
-        "justificacion",
-    ],
-    "additionalProperties": False,
-}
-
-
 class GeminiAnalysisProvider:
     def __init__(self, config: Settings, transport: httpx.AsyncBaseTransport | None = None):
         self.config = config
@@ -102,9 +70,7 @@ class GeminiAnalysisProvider:
             "contents": [{"role": "user", "parts": [{"text": user_input}]}],
             "generationConfig": {
                 "maxOutputTokens": self.config.ia_max_output_tokens,
-                "responseFormat": {
-                    "text": {"mimeType": "application/json", "schema": CV_ANALYSIS_SCHEMA}
-                },
+                "responseMimeType": "application/json",
             },
         }
         url = (
@@ -122,27 +88,6 @@ class GeminiAnalysisProvider:
                         headers={"x-goog-api-key": key.get_secret_value()},
                         json=payload,
                     )
-                    if response.status_code == 400:
-                        api_status, category = _error_metadata(response)
-                        logger.warning(
-                            "Gemini CV structured request failed: http_status=400 "
-                            "api_status=%s category=%s model=%s; retrying JSON mode",
-                            api_status,
-                            category,
-                            self.config.gemini_cv_model,
-                        )
-                        fallback_payload = {
-                            **payload,
-                            "generationConfig": {
-                                "maxOutputTokens": self.config.ia_max_output_tokens,
-                                "responseMimeType": "application/json",
-                            },
-                        }
-                        response = await client.post(
-                            url,
-                            headers={"x-goog-api-key": key.get_secret_value()},
-                            json=fallback_payload,
-                        )
                     response.raise_for_status()
             body = response.json()
             candidates = body.get("candidates", []) if isinstance(body, dict) else []
@@ -172,6 +117,11 @@ class GeminiAnalysisProvider:
                 raise AnalisisCvError("Gemini rechazo la clave API", 503) from exc
             if status == 429:
                 raise AnalisisCvError("Gemini alcanzo su limite de uso", 503) from exc
+            if status == 402:
+                raise AnalisisCvError(
+                    "Los creditos de Gemini estan agotados. Revisa la facturacion del proyecto de la clave API",
+                    503,
+                ) from exc
             if status == 404:
                 raise AnalisisCvError("El modelo de Gemini no esta disponible", 503) from exc
             if status == 400:
