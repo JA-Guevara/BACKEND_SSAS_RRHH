@@ -10,6 +10,35 @@ from ssas.config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
+CV_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "habilidades": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "habilidad_id": {"type": "STRING"},
+                    "nivel": {"type": "STRING"},
+                    "evidencia": {"type": "STRING"},
+                },
+                "required": ["habilidad_id", "nivel", "evidencia"],
+            },
+        },
+        "anios_experiencia": {"type": "NUMBER"},
+        "evidencia_experiencia": {"type": "STRING"},
+        "resumen": {"type": "STRING"},
+        "justificacion": {"type": "STRING"},
+    },
+    "required": [
+        "habilidades",
+        "anios_experiencia",
+        "evidencia_experiencia",
+        "resumen",
+        "justificacion",
+    ],
+}
+
 
 def _error_metadata(response: httpx.Response) -> tuple[str | None, str | None]:
     try:
@@ -60,7 +89,13 @@ class GeminiAnalysisProvider:
             "el nivel acreditado, no inventado. Calcula experiencia relevante sin sumar "
             "periodos simultaneos y cita evidencia textual. Si no consta, usa 0 y cadena "
             "vacia. No decidas contratar/rechazar. No reproduzcas datos de contacto. "
-            "Devuelve unicamente el JSON solicitado."
+            "Devuelve unicamente un objeto JSON con exactamente estas claves: "
+            "habilidades (lista de objetos con habilidad_id, nivel y evidencia), "
+            "anios_experiencia (numero entre 0 y 80), evidencia_experiencia (texto), "
+            "resumen (texto no vacio) y justificacion (texto no vacio). "
+            "Si no hay habilidades demostradas, usa habilidades=[]; si no hay experiencia "
+            "demostrada, usa anios_experiencia=0 y evidencia_experiencia=''. "
+            "Cada evidencia no vacia debe ser una cita exacta del CV. No agregues otras claves."
         )
         user_input = json.dumps(
             {"cv": texto, "vacante": vacante, "catalogo": catalogo}, ensure_ascii=False
@@ -71,6 +106,7 @@ class GeminiAnalysisProvider:
             "generationConfig": {
                 "maxOutputTokens": self.config.ia_max_output_tokens,
                 "responseMimeType": "application/json",
+                "responseSchema": CV_RESPONSE_SCHEMA,
             },
         }
         url = (
@@ -88,6 +124,27 @@ class GeminiAnalysisProvider:
                         headers={"x-goog-api-key": key.get_secret_value()},
                         json=payload,
                     )
+                    if response.status_code == 400:
+                        api_status, category = _error_metadata(response)
+                        logger.warning(
+                            "Gemini CV schema request failed: http_status=400 "
+                            "api_status=%s category=%s model=%s; retrying JSON mode",
+                            api_status,
+                            category,
+                            self.config.gemini_cv_model,
+                        )
+                        fallback_payload = {
+                            **payload,
+                            "generationConfig": {
+                                "maxOutputTokens": self.config.ia_max_output_tokens,
+                                "responseMimeType": "application/json",
+                            },
+                        }
+                        response = await client.post(
+                            url,
+                            headers={"x-goog-api-key": key.get_secret_value()},
+                            json=fallback_payload,
+                        )
                     response.raise_for_status()
             body = response.json()
             candidates = body.get("candidates", []) if isinstance(body, dict) else []
@@ -129,5 +186,14 @@ class GeminiAnalysisProvider:
             raise AnalisisCvError("Gemini rechazo la solicitud de analisis", 503) from exc
         except httpx.RequestError as exc:
             raise AnalisisCvError("Gemini no esta disponible", 503) from exc
-        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+        except ValidationError as exc:
+            logger.warning(
+                "Gemini CV response validation failed: fields=%s",
+                [(error["loc"], error["type"]) for error in exc.errors(include_input=False)],
+            )
+            raise AnalisisCvError("Gemini devolvio una respuesta invalida", 502) from exc
+        except (ValueError, KeyError, TypeError) as exc:
+            logger.warning(
+                "Gemini CV response could not be parsed: error_type=%s", type(exc).__name__
+            )
             raise AnalisisCvError("Gemini devolvio una respuesta invalida", 502) from exc

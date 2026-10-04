@@ -174,8 +174,46 @@ async def test_provider_structured_request():
     )
     assert await provider.analyze("CV", {}, []) == result()
     assert requests[0]["generationConfig"]["responseMimeType"] == "application/json"
+    assert requests[0]["generationConfig"]["responseSchema"]["required"] == [
+        "habilidades",
+        "anios_experiencia",
+        "evidencia_experiencia",
+        "resumen",
+        "justificacion",
+    ]
     assert "responseFormat" not in requests[0]["generationConfig"]
+    assert "exactamente estas claves" in requests[0]["systemInstruction"]["parts"][0]["text"]
     assert json.loads(requests[0]["contents"][0]["parts"][0]["text"])["cv"] == "CV"
+
+
+@pytest.mark.asyncio
+async def test_provider_uses_prompt_schema_if_api_rejects_response_schema():
+    requests = []
+
+    async def handler(request):
+        requests.append(json.loads(request.content))
+        if len(requests) == 1:
+            return httpx.Response(
+                400,
+                json={"error": {"status": "INVALID_ARGUMENT", "message": "Unknown responseSchema"}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "finishReason": "STOP",
+                        "content": {"parts": [{"text": result().model_dump_json()}]},
+                    }
+                ]
+            },
+        )
+
+    provider = GeminiAnalysisProvider(config(), httpx.MockTransport(handler))
+    assert await provider.analyze("CV", {}, []) == result()
+    assert "responseSchema" in requests[0]["generationConfig"]
+    assert "responseSchema" not in requests[1]["generationConfig"]
+    assert requests[1]["generationConfig"]["responseMimeType"] == "application/json"
 
 
 @pytest.mark.asyncio
@@ -196,7 +234,7 @@ async def test_provider_reports_persistent_bad_request_without_leaking_provider_
     assert "api_status=INVALID_ARGUMENT" in caplog.text
     assert "CV privado" not in caplog.text
     assert "test-key" not in caplog.text
-    assert len(requests) == 1
+    assert len(requests) == 2
 
 
 @pytest.mark.parametrize(
