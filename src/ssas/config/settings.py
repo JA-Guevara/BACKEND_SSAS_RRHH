@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     ia_model: str = Field(default="gpt-4o-mini", min_length=1, max_length=120)
     gemini_api_key: SecretStr | None = None
+    gemini_help_embedding_model: str = Field(default="gemini-embedding-001", pattern=r"^gemini-[a-z0-9.-]+$")
+    gemini_help_model: str = Field(default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$")
     gemini_report_model: str = Field(
         default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$"
     )

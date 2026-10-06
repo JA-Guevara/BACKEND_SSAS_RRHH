@@ -58,6 +58,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=[
+        {"name": "Chatbot", "description": "Base de conocimiento y conversacion por empresa."},
         {"name": "Ayuda", "description": "Guías locales de uso visibles según los permisos de la cuenta."},
         {"name": "Importación", "description": "Carga CSV de catálogos de una empresa con vista previa y confirmación."},
         {

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from ssas.auth.infrastructure.http.router import router as auth_router
 from ssas.ayuda.infrastructure.http.router import router as ayuda_router
+from ssas.ayuda.infrastructure.http.chatbot_router import router as chatbot_router
 from ssas.bitacora.infrastructure.http.router import router as bitacora_router
 from ssas.cargos.infrastructure.http.router import router as cargos_router
 from ssas.dashboard.infrastructure.http.router import router as dashboard_router
@@ -44,6 +45,7 @@ from ssas.vacantes.infrastructure.http.router import (
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(ayuda_router)
+api_router.include_router(chatbot_router)
 api_router.include_router(bitacora_router)
 api_router.include_router(departamentos_router)
 api_router.include_router(habilidades_router)

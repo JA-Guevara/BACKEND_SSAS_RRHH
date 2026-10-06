@@ -32,6 +32,7 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
 # protege el mismo sistema de permisos que el resto de la API.
 PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
     "/docs/",
+    "/api/v1/chatbot/publico/",
     "/api/v1/publico/postulaciones/",
     "/api/v1/publico/",
 )

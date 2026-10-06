@@ -7,6 +7,7 @@ class Base(DeclarativeBase):
 
 def import_all_models() -> None:
     """Carga los modelos ORM para registrar relaciones y metadata en una Base única."""
+    import ssas.ayuda.infrastructure.persistence.models
     import ssas.analisis_cv.infrastructure.persistence.models.analisis_cv
     import ssas.auth.infrastructure.persistence.models.email_verification_token
     import ssas.auth.infrastructure.persistence.models.password_reset_token
