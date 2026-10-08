@@ -1,12 +1,13 @@
 from fastapi import APIRouter
 
 from ssas.auth.infrastructure.http.router import router as auth_router
-from ssas.ayuda.infrastructure.http.router import router as ayuda_router
 from ssas.ayuda.infrastructure.http.chatbot_router import router as chatbot_router
+from ssas.ayuda.infrastructure.http.router import router as ayuda_router
 from ssas.bitacora.infrastructure.http.router import router as bitacora_router
 from ssas.cargos.infrastructure.http.router import router as cargos_router
 from ssas.dashboard.infrastructure.http.router import router as dashboard_router
 from ssas.departamentos.infrastructure.http.router import router as departamentos_router
+from ssas.empleados.infrastructure.http.router import router as empleados_router
 from ssas.habilidades.infrastructure.http.router import router as habilidades_router
 from ssas.importacion.infrastructure.http.router import router as importacion_router
 from ssas.modulos.infrastructure.http.router import (
@@ -19,8 +20,10 @@ from ssas.parametros_legales.infrastructure.http.router import (
     router as parametros_legales_router,
 )
 from ssas.platform.infrastructure.http.router import router as platform_router
+from ssas.postulaciones.infrastructure.http.entrevista_publica_router import (
+    router as entrevista_publica_router,
+)
 from ssas.postulaciones.infrastructure.http.router import router as postulaciones_router
-from ssas.postulaciones.infrastructure.http.entrevista_publica_router import router as entrevista_publica_router
 from ssas.postulaciones.infrastructure.http.seleccion_router import router as seleccion_router
 from ssas.postulaciones.infrastructure.http.tablero_router import router as tablero_router
 from ssas.postulantes.infrastructure.http.router import router as postulantes_router
@@ -48,6 +51,7 @@ api_router.include_router(ayuda_router)
 api_router.include_router(chatbot_router)
 api_router.include_router(bitacora_router)
 api_router.include_router(departamentos_router)
+api_router.include_router(empleados_router)
 api_router.include_router(habilidades_router)
 api_router.include_router(importacion_router)
 api_router.include_router(cargos_router)

@@ -11,9 +11,9 @@ from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository 
     SqlAlchemyAuditLogRepository,
 )
 from ssas.config.settings import settings
+from ssas.core.api.guards import permiso
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
-from ssas.empleados.infrastructure.persistence.models.empleado import EmpleadoModel
 from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
 from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.application.use_cases.gestionar_seleccion import GestionarSeleccion
@@ -21,6 +21,7 @@ from ssas.postulaciones.domain.seleccion import SeleccionError
 from ssas.postulaciones.infrastructure.http.seleccion_schemas import (
     AgendaResponse,
     AnalisisResponse,
+    AsociacionResponse,
     AsociarRequest,
     BancoRequest,
     CandidatoResponse,
@@ -95,24 +96,6 @@ async def vacantes_para_seleccion(
         VacanteSeleccionResponse(id=v.id, titulo=v.titulo, habilidades=by_vacancy.get(v.id, []))
         for v in vacancies
     ]
-
-
-def permiso(code: str):
-    async def guard(
-        request: Request,
-        user: CurrentUser = Depends(require_scoped_permission(code, f"platform:{code}")),
-        session: AsyncSession = Depends(get_session),
-    ):
-        if request.method != "GET" and not user.es_plataforma:
-            try:
-                await SubscriptionPolicy(
-                    session, settings.subscription_grace_days
-                ).require_operational(user.empresa_id)
-            except SubscriptionPolicyError as exc:
-                raise HTTPException(409, str(exc)) from exc
-        return user
-
-    return guard
 
 
 def repo(session, user, empresa_id):
@@ -450,44 +433,6 @@ async def contratar(
     return item
 
 
-@router.get("/empleados", response_model=list[EmpleadoResponse])
-async def empleados(
-    empresa_id: UUID | None = None,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
-    user: CurrentUser = Depends(permiso("empleados:ver")),
-    session: AsyncSession = Depends(get_session),
-):
-    repository = repo(session, user, empresa_id)
-    return (
-        await session.scalars(
-            select(EmpleadoModel)
-            .where(EmpleadoModel.empresa_id == repository.empresa_id)
-            .order_by(EmpleadoModel.fecha_ingreso.desc(), EmpleadoModel.id)
-            .offset(offset)
-            .limit(limit)
-        )
-    ).all()
-
-
-@router.get("/empleados/{id}", response_model=EmpleadoResponse)
-async def empleado(
-    id: UUID,
-    empresa_id: UUID | None = None,
-    user: CurrentUser = Depends(permiso("empleados:ver")),
-    session: AsyncSession = Depends(get_session),
-):
-    repository = repo(session, user, empresa_id)
-    item = await session.scalar(
-        select(EmpleadoModel).where(
-            EmpleadoModel.empresa_id == repository.empresa_id, EmpleadoModel.id == str(id)
-        )
-    )
-    if item is None:
-        raise SeleccionError("Empleado no encontrado", 404)
-    return item
-
-
 @router.patch("/postulantes/{id}/banco-talento", response_model=PostulanteResponse)
 async def banco(
     id: UUID,
@@ -503,7 +448,13 @@ async def banco(
     return item
 
 
-@router.post("/postulantes/{id}/postulaciones")
+@router.post(
+    "/postulantes/{id}/postulaciones",
+    response_model=AsociacionResponse,
+    status_code=201,
+    summary="Asociar postulante del banco",
+    description="Asocia un postulante del banco de talentos a una vacante activa (CU-18).",
+)
 async def asociar(
     id: UUID,
     data: AsociarRequest,

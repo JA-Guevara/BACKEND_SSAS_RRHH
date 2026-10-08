@@ -66,6 +66,10 @@ app = FastAPI(
             "description": "Entrevistas, evaluaciones, IA y contratación por empresa.",
         },
         {
+            "name": "Empleados",
+            "description": "Consulta y fichas detalladas de empleados de la empresa.",
+        },
+        {
             "name": TAG_AUTH,
             "description": "Inicio y cierre de sesión, tokens, contraseñas y correo.",
         },
