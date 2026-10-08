@@ -104,6 +104,7 @@ class UserSchema(BaseModel):
     email: EmailStr
     empresa_id: str | None = None
     username: str | None = None
+    foto_url: str | None = None
     roles: list[str] = Field(default_factory=list)
     permissions: list[str] = Field(
         default_factory=list,

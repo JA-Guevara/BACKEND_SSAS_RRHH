@@ -384,15 +384,6 @@ async def crear(body: CrearReporte, request: Request, empresa_id: str | None = N
     return _serialize(model)
 
 
-@router.patch("/{report_id}", response_model=ReporteResponse)
-async def actualizar(report_id: str, body: ActualizarReporte, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:editar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
-    """Modifica o desactiva una definición perteneciente al alcance autorizado."""
-    model = (await session.execute(select(ReporteDefinicionModel).where(ReporteDefinicionModel.id == report_id, ReporteDefinicionModel.empresa_id == _empresa(user, empresa_id)))).scalar_one_or_none()
-    if not model: raise HTTPException(404, "Reporte no encontrado")
-    for key, value in body.model_dump(exclude_unset=True).items(): setattr(model, key, value)
-    _autorizar(ReporteConfig(fuente=model.fuente, columnas=model.columnas, filtros=model.filtros, orden=model.orden), await _permisos(session, user), user.es_plataforma)
-    await session.flush(); await session.refresh(model); return _serialize(model)
-
 
 @router.post("/vista-previa", response_model=VistaPrevia)
 async def vista_previa(body: ReporteConfig, empresa_id: str | None = None, page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100), user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
@@ -1025,6 +1016,16 @@ async def eliminar_tarjeta(
     await session.delete(model)
     await session.commit()
     return Response(status_code=204)
+
+
+@router.patch("/{report_id}", response_model=ReporteResponse)
+async def actualizar(report_id: str, body: ActualizarReporte, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:editar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
+    """Modifica o desactiva una definición perteneciente al alcance autorizado."""
+    model = (await session.execute(select(ReporteDefinicionModel).where(ReporteDefinicionModel.id == report_id, ReporteDefinicionModel.empresa_id == _empresa(user, empresa_id)))).scalar_one_or_none()
+    if not model: raise HTTPException(404, "Reporte no encontrado")
+    for key, value in body.model_dump(exclude_unset=True).items(): setattr(model, key, value)
+    _autorizar(ReporteConfig(fuente=model.fuente, columnas=model.columnas, filtros=model.filtros, orden=model.orden), await _permisos(session, user), user.es_plataforma)
+    await session.flush(); await session.refresh(model); return _serialize(model)
 
 
 

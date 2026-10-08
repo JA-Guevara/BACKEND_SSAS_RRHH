@@ -45,6 +45,7 @@ class UsuarioResponse(BaseModel):
     email: EmailStr
     username: str
     telefono: str | None = None
+    foto_url: str | None = None
     is_active: bool
     email_verified: bool
     must_change_password: bool
@@ -56,6 +57,33 @@ class UsuarioResponse(BaseModel):
     roles: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class SesionResponse(BaseModel):
+    id: str
+    dispositivo: str
+    ip: str
+    inicio: datetime
+    expira_en: datetime
+    es_actual: bool = False
+
+
+class ActividadResponse(BaseModel):
+    id: str
+    modulo: str
+    accion: str
+    descripcion: str
+    ip_origen: str | None = None
+    fecha: datetime
+
+
+class FotoPerfilResponse(BaseModel):
+    foto_url: str
+    mensaje: str
+
+
+class MensajeResponse(BaseModel):
+    mensaje: str
 
 
 class UsuarioPageResponse(BaseModel):

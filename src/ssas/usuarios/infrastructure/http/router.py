@@ -1,7 +1,13 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.auth.domain.exceptions import AuthError
+from ssas.auth.infrastructure.persistence.models.refresh_token import RefreshTokenModel
+from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.auth.infrastructure.persistence.repositories.auth_token_repository import (
     SqlAlchemyAuthTokenRepository,
 )
@@ -46,16 +52,26 @@ from ssas.usuarios.domain.exceptions import (
     UsuarioNotFoundError,
     UsuarioWithoutRoleError,
 )
+from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.usuarios.infrastructure.http.schemas import (
+    ActividadResponse,
     ActualizarMiPerfilRequest,
     ActualizarUsuarioRequest,
     CambiarPasswordUsuarioRequest,
     CrearUsuarioRequest,
+    FotoPerfilResponse,
+    MensajeResponse,
+    SesionResponse,
     UsuarioPageResponse,
     UsuarioResponse,
 )
 from ssas.usuarios.infrastructure.persistence.repositories.usuario_repository import (
     SqlAlchemyUsuarioRepository,
+)
+from ssas.usuarios.infrastructure.storage.avatar_storage import (
+    delete_avatar_file,
+    get_avatar_path,
+    process_and_save_avatar,
 )
 
 router = APIRouter(prefix="/usuarios", tags=[TAG_USERS], responses=AUTHENTICATED_RESPONSES)
@@ -247,6 +263,195 @@ async def actualizar_mi_perfil(
         **_audit_context(http_request, current_user),
     )
     return user
+
+
+@router.post(
+    "/me/foto",
+    response_model=FotoPerfilResponse,
+    summary="Subir foto de perfil",
+    description=(
+        "Sube una foto de perfil (JPEG, PNG o WebP, máx 2 MB). La imagen se valida con Pillow, "
+        "se recorta en proporción 1:1, se redimensiona a 512x512 y se almacena en el volumen persistente."
+    ),
+)
+async def subir_foto_perfil(
+    http_request: Request,
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    content = await file.read()
+    try:
+        url = process_and_save_avatar(current_user.id, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Actualizar la URL en la base de datos
+    await session.execute(
+        update(UserModel)
+        .where(UserModel.id == current_user.id)
+        .values(foto_url=url)
+    )
+    await session.commit()
+
+    await _events(session).updated(
+        record_id=current_user.id,
+        new_data={"foto_url": url},
+        **_audit_context(http_request, current_user),
+    )
+    return FotoPerfilResponse(foto_url=url, mensaje="Foto de perfil actualizada correctamente")
+
+
+@router.delete(
+    "/me/foto",
+    response_model=MensajeResponse,
+    summary="Eliminar foto de perfil",
+    description="Elimina la foto de perfil y restablece el avatar a las iniciales calculadas.",
+)
+async def eliminar_foto_perfil(
+    http_request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    delete_avatar_file(current_user.id)
+    await session.execute(
+        update(UserModel)
+        .where(UserModel.id == current_user.id)
+        .values(foto_url=None)
+    )
+    await session.commit()
+
+    await _events(session).updated(
+        record_id=current_user.id,
+        new_data={"foto_url": None},
+        **_audit_context(http_request, current_user),
+    )
+    return MensajeResponse(mensaje="Foto de perfil eliminada correctamente")
+
+
+@router.get(
+    "/me/sesiones",
+    response_model=list[SesionResponse],
+    summary="Listar sesiones activas",
+    description="Devuelve la lista de sesiones y dispositivos conectados del usuario actual.",
+)
+async def listar_mis_sesiones(
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    now = datetime.now(UTC)
+    result = await session.execute(
+        select(RefreshTokenModel)
+        .where(
+            RefreshTokenModel.user_id == current_user.id,
+            RefreshTokenModel.revoked_at.is_(None),
+            RefreshTokenModel.expires_at > now,
+        )
+        .order_by(RefreshTokenModel.created_at.desc())
+    )
+    tokens = result.scalars().all()
+    sesiones: list[SesionResponse] = []
+    for idx, token in enumerate(tokens):
+        dispositivo = token.user_agent or "Navegador web"
+        ip = token.ip_origen or "127.0.0.1"
+        sesiones.append(
+            SesionResponse(
+                id=token.id,
+                dispositivo=dispositivo,
+                ip=ip,
+                inicio=token.created_at,
+                expira_en=token.expires_at,
+                es_actual=(idx == 0),
+            )
+        )
+    return sesiones
+
+
+@router.delete(
+    "/me/sesiones/{sesion_id}",
+    response_model=MensajeResponse,
+    summary="Cerrar una sesión",
+    description="Cierra una sesión activa específica revocando su refresh token.",
+)
+async def cerrar_sesion_individual(
+    sesion_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        update(RefreshTokenModel)
+        .where(
+            RefreshTokenModel.id == sesion_id,
+            RefreshTokenModel.user_id == current_user.id,
+            RefreshTokenModel.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+    )
+    await session.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada o ya finalizada.")
+    return MensajeResponse(mensaje="Sesión cerrada correctamente")
+
+
+@router.delete(
+    "/me/sesiones",
+    response_model=MensajeResponse,
+    summary="Cerrar todas las sesiones",
+    description="Cierra todas las sesiones activas del usuario actual.",
+)
+async def cerrar_todas_las_sesiones(
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    await session.execute(
+        update(RefreshTokenModel)
+        .where(
+            RefreshTokenModel.user_id == current_user.id,
+            RefreshTokenModel.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+    )
+    await session.commit()
+    return MensajeResponse(mensaje="Todas las sesiones fueron cerradas correctamente")
+
+
+@router.get(
+    "/me/actividad",
+    response_model=list[ActividadResponse],
+    summary="Mi actividad reciente",
+    description="Devuelve las últimas 50 acciones del usuario autenticado registradas en la bitácora.",
+)
+async def obtener_mi_actividad(
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(AuditLogModel)
+        .where(AuditLogModel.user_id == current_user.id)
+        .order_by(AuditLogModel.fecha.desc())
+        .limit(50)
+    )
+    models = result.scalars().all()
+    actividades: list[ActividadResponse] = []
+    for model in models:
+        try:
+            detail = SqlAlchemyAuditLogRepository._to_detail(model)
+            descripcion = detail.description
+            ip = detail.source_ip
+        except Exception:
+            descripcion = model.description or "Registro de actividad"
+            ip = str(model.ip_origen) if model.ip_origen else None
+        actividades.append(
+            ActividadResponse(
+                id=model.id,
+                modulo=model.module,
+                accion=model.action,
+                descripcion=descripcion,
+                ip_origen=ip,
+                fecha=model.fecha,
+            )
+        )
+    return actividades
 
 
 @router.patch(
@@ -455,6 +660,22 @@ async def obtener_usuario(
         )
     except UsuarioError as exc:
         _raise_http_usuario_error(exc)
+
+
+@router.get(
+    "/{usuario_id}/foto",
+    summary="Obtener foto de perfil",
+    description="Retorna el archivo binario de la imagen de perfil del usuario o 404 si no existe.",
+    responses={
+        200: {"content": {"image/jpeg": {}}},
+        404: {"description": "El usuario no tiene foto de perfil."},
+    },
+)
+async def obtener_foto_usuario(usuario_id: str):
+    path = get_avatar_path(usuario_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="El usuario no tiene foto de perfil.")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.put(

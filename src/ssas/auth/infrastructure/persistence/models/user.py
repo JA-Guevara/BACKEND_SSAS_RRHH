@@ -60,6 +60,7 @@ class UserModel(Base):
     username: Mapped[str] = mapped_column(String(80), nullable=False)
     hashed_password: Mapped[str] = mapped_column("password_hash", Text, nullable=False)
     telefono: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    foto_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     debe_cambiar_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"

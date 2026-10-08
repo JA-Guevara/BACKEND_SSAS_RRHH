@@ -11,6 +11,7 @@ class Usuario:
     email: str
     username: str
     telefono: str | None = None
+    foto_url: str | None = None
     is_active: bool = True
     email_verified: bool = False
     must_change_password: bool = False

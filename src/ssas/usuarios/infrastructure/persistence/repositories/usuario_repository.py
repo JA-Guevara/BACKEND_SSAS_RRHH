@@ -331,6 +331,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             "email": "email",
             "username": "username",
             "telefono": "telefono",
+            "foto_url": "foto_url",
         }
         return {mapping[key]: value for key, value in values.items() if key in mapping}
 
@@ -344,6 +345,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
             email=model.email,
             username=model.username,
             telefono=model.telefono,
+            foto_url=model.foto_url,
             is_active=model.is_active,
             email_verified=model.email_verified,
             must_change_password=model.debe_cambiar_password,
