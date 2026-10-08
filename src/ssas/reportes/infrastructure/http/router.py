@@ -21,6 +21,7 @@ from ssas.core.api.openapi import TAG_REPORTES
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
+from ssas.reportes.application.agregador import ejecutar as ejecutar_agregado
 from ssas.reportes.domain.catalogo import CATALOGO
 from ssas.reportes.infrastructure.http.ai_provider import (
     GeminiReportInterpreter,
@@ -35,6 +36,10 @@ from ssas.reportes.infrastructure.http.schemas import (
     ReporteConfig,
     ReporteResponse,
     VistaPrevia,
+)
+from ssas.reportes.infrastructure.http.schemas_agregado import (
+    ConsultaAgregada,
+    RespuestaAgregada,
 )
 from ssas.reportes.infrastructure.persistence.models.reporte import (
     ReporteDefinicionModel,
@@ -208,6 +213,12 @@ async def vista_previa(body: ReporteConfig, empresa_id: str | None = None, page:
     """Ejecuta una consulta limitada y devuelve una vista previa paginada."""
     rows = await _rows(session, _empresa(user, empresa_id), body); start = (page - 1) * per_page
     return VistaPrevia(columnas=body.columnas, items=rows[start:start + per_page], total=len(rows), page=page, per_page=per_page)
+
+
+@router.post("/agregado", response_model=RespuestaAgregada)
+async def agregado(body: ConsultaAgregada, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
+    """Ejecuta medidas agrupadas sobre el catálogo; alimenta los gráficos del panel."""
+    return await ejecutar_agregado(session, body, _empresa(user, empresa_id))
 
 
 def _document(config: ReporteConfig, rows: list[dict], formato: str) -> tuple[bytes, str]:
