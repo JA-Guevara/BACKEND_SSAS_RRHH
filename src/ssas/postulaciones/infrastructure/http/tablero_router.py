@@ -13,6 +13,7 @@ from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository 
     SqlAlchemyAuditLogRepository,
 )
 from ssas.core.api.request_metadata import get_client_ip
+from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
@@ -85,18 +86,6 @@ class NotaResponse(BaseModel):
     autor: str
     contenido: str
     created_at: datetime
-
-
-def _empresa(user: CurrentUser, requested: str | None) -> str:
-    if user.es_plataforma:
-        if requested is None:
-            raise HTTPException(status_code=422, detail="Debe indicar empresa_id")
-        return requested
-    if user.empresa_id is None:
-        raise HTTPException(status_code=403, detail="No tienes una empresa asignada")
-    if requested and requested != user.empresa_id:
-        raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
-    return user.empresa_id
 
 
 def _audit_context(request: Request, user: CurrentUser) -> dict[str, str | None]:

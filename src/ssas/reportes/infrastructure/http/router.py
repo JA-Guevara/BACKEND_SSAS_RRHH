@@ -19,6 +19,7 @@ from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository 
 from ssas.config.settings import settings
 from ssas.core.api.openapi import TAG_REPORTES
 from ssas.core.api.request_metadata import get_client_ip
+from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.reportes.application.agregador import ejecutar as ejecutar_agregado
@@ -71,13 +72,6 @@ async def _audit(session: AsyncSession, request: Request, user: CurrentUser, emp
         description=description, affected_table="reporte_definicion", record_id=record_id,
         new_data=new_data, source_ip=get_client_ip(request), user_agent=request.headers.get("user-agent"),
     )
-
-
-def _empresa(user: CurrentUser, requested: str | None) -> str:
-    target = requested if user.es_plataforma else user.empresa_id
-    if not target or (not user.es_plataforma and requested and requested != user.empresa_id):
-        raise HTTPException(403, "Selecciona una empresa válida")
-    return target
 
 
 def _validate(config: ReporteConfig) -> dict[str, str]:
