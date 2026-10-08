@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,7 +77,7 @@ def _raise_http_auth_error(exc: AuthError) -> None:
     if isinstance(exc, UserNotFoundError):
         code = status.HTTP_404_NOT_FOUND
     elif isinstance(exc, InvalidPasswordError):
-        code = status.HTTP_422_UNPROCESSABLE_CONTENT
+        code = status.HTTP_422_UNPROCESSABLE_ENTITY
     elif isinstance(exc, AccountLockedError):
         code = status.HTTP_423_LOCKED
     elif isinstance(exc, EmailNotVerifiedError):

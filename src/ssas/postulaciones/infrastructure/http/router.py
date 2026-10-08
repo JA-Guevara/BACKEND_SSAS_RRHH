@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+﻿from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from pydantic import EmailStr
@@ -67,7 +67,7 @@ def _raise_http_postulacion_error(exc: PostulacionError) -> None:
     elif isinstance(exc, PostulacionDuplicadaError):
         code = status.HTTP_409_CONFLICT
     elif isinstance(exc, (CvInvalidoError, EtapaInicialNoConfiguradaError)):
-        code = status.HTTP_422_UNPROCESSABLE_CONTENT
+        code = status.HTTP_422_UNPROCESSABLE_ENTITY
     elif isinstance(exc, VacanteNoDisponibleError):
         code = status.HTTP_404_NOT_FOUND
     else:

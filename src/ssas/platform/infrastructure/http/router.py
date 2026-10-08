@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -84,7 +84,7 @@ def _raise_platform(exc: PlatformError) -> None:
         if isinstance(exc, PlatformNotFoundError)
         else status.HTTP_409_CONFLICT
         if isinstance(exc, PlatformConflictError)
-        else status.HTTP_422_UNPROCESSABLE_CONTENT
+        else status.HTTP_422_UNPROCESSABLE_ENTITY
     )
     raise HTTPException(status_code=code, detail=str(exc)) from exc
 

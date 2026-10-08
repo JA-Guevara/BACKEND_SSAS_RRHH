@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+﻿from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssas.bitacora.application.events.parametros_legales_events import (
@@ -78,7 +78,7 @@ def _raise_http_parametro_error(exc: ParametroLegalError) -> None:
     elif isinstance(exc, ParametroLegalOverlapError):
         code = status.HTTP_409_CONFLICT
     elif isinstance(exc, (ParametroLegalRangeError, ParametroLegalPercentError)):
-        code = status.HTTP_422_UNPROCESSABLE_CONTENT
+        code = status.HTTP_422_UNPROCESSABLE_ENTITY
     else:
         code = status.HTTP_400_BAD_REQUEST
     raise HTTPException(status_code=code, detail=str(exc)) from exc

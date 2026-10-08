@@ -50,6 +50,8 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "analisis_cv",
         "empleado",
         "postulante_habilidad",
+        "conocimiento_articulo",
+        "conocimiento_fragmento",
     }
 
 
@@ -92,7 +94,9 @@ def test_openapi_is_grouped_and_describes_every_business_operation() -> None:
         "Backup / Restore",
         "Planes y suscripciones",
         "Selección",
+        "Empleados",
         "Ayuda",
+        "Chatbot",
         "Importación",
     }
 

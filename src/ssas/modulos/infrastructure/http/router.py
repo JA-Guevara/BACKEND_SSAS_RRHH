@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -136,7 +136,7 @@ async def actualizar_modulos_de_empresa(
     desconocidos = sorted(solicitados - por_codigo.keys())
     if desconocidos:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Módulos inexistentes: {', '.join(desconocidos)}",
         )
 

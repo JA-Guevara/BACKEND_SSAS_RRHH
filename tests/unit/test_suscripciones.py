@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from ssas.main import app
 from ssas.suscripciones.application.reconciliation import derived_status
 from ssas.suscripciones.infrastructure.http import router as subscriptions_router
 from ssas.suscripciones.infrastructure.http.router import _claim_stripe_event, _map_status
-from ssas.main import app
 
 
 def subscription(**overrides):
