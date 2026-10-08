@@ -28,7 +28,7 @@ class SqlAlchemyAuditLogRepository(AuditLogRepository):
         self.session = session
 
     async def add(self, audit_log: AuditLog) -> AuditLog:
-        cipher = AuditCipher(settings.app_audit_encryption_key)
+        cipher = AuditCipher(settings.audit_encryption_key)
         scope = audit_log.empresa_id or "PLATFORM"
         await self.session.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:scope))"),
@@ -198,7 +198,7 @@ class SqlAlchemyAuditLogRepository(AuditLogRepository):
             }
             integrity = None
         else:
-            payload = AuditCipher(settings.app_audit_encryption_key).decrypt(
+            payload = AuditCipher(settings.audit_encryption_key).decrypt(
                 model.datos_cifrados, model.nonce_cifrado, _metadata(model)
             )
             integrity = model.hash_registro == record_hash(

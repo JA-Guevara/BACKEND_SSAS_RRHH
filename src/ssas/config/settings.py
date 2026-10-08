@@ -1,3 +1,4 @@
+import hashlib
 import os
 from pathlib import Path
 from typing import Literal
@@ -127,6 +128,14 @@ class Settings(BaseSettings):
     def cors_origin_regex(self) -> str | None:
         # Subdominios de despliegue de Railway (producción y previews).
         return self.app_cors_origin_regex or r"^https://[a-z0-9-]+\.up\.railway\.app$"
+
+    @property
+    def audit_encryption_key(self) -> str:
+        if self.app_audit_encryption_key:
+            return self.app_audit_encryption_key
+        return hashlib.sha256(
+            f"ssas_audit_encryption_fallback:{self.app_secret_key}".encode()
+        ).hexdigest()
 
     model_config = SettingsConfigDict(
         env_file=".env",

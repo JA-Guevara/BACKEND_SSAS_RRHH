@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -177,13 +177,15 @@ async def login_user(
             await _record_failed_login(user, http_request)
         _raise_http_auth_error(exc)
     payload = token_service.decode_token(result["access_token"], expected_type="access")
-    tid = payload.get("tid")
-    await _events(session).login_success(
-        empresa_id=str(tid) if tid is not None else None,
-        user_id=str(payload["sub"]),
-        actor_label=login,
-        **_request_context(http_request),
-    )
+    try:
+        await _events(session).login_success(
+            empresa_id=str(tid) if tid is not None else None,
+            user_id=str(payload["sub"]),
+            actor_label=login,
+            **_request_context(http_request),
+        )
+    except Exception:
+        logger.exception("No se pudo registrar el evento de auditoría de inicio de sesión")
     return result
 
 

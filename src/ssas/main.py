@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -5,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+
+logger = logging.getLogger(__name__)
 
 from ssas.analisis_cv.domain.analysis import AnalisisCvError
 from ssas.config.settings import settings
@@ -168,6 +171,15 @@ async def integrity_error(_: Request, exc: IntegrityError):
         content={
             "detail": "La operación entra en conflicto con otro registro. Revisa los datos e intenta nuevamente."
         },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.exception("Error interno no controlado en %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor. Inténtalo de nuevo más tarde."},
     )
 
 
