@@ -4,6 +4,7 @@ from email.message import EmailMessage
 from html import escape
 from io import BytesIO
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from openpyxl import Workbook
 from pydantic import ValidationError
@@ -387,6 +388,18 @@ async def exportar(formato: str, body: ReporteConfig, request: Request, empresa_
     return Response(content, media_type=media, headers={"Content-Disposition": f'attachment; filename="reporte.{formato}"'})
 
 
+def _enviar_correo(message: EmailMessage) -> None:
+    """E/S bloqueante de SMTP: se ejecuta fuera del bucle de eventos."""
+    with smtplib.SMTP(
+        settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds
+    ) as smtp:
+        if settings.smtp_use_tls:
+            smtp.starttls()
+        if settings.smtp_username:
+            smtp.login(settings.smtp_username, settings.smtp_password or "")
+        smtp.send_message(message)
+
+
 @router.post("/enviar", status_code=202)
 async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:enviar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Genera el reporte y lo envía como adjunto mediante la configuración SMTP."""
@@ -398,10 +411,7 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
     rows = await _rows(session, target, config); content, media = _document(config, rows, body.formato)
     message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
     main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
-        if settings.smtp_use_tls: smtp.starttls()
-        if settings.smtp_username: smtp.login(settings.smtp_username, settings.smtp_password or "")
-        smtp.send_message(message)
+    await anyio.to_thread.run_sync(_enviar_correo, message)
     session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=body.formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
     await _audit(session, request, user, target, "SEND", "Reporte enviado por correo", new_data={"formato": body.formato, "destinatarios": len(body.destinatarios), "columnas_sensibles": sensibles})
     return {"message": "Reporte enviado"}

@@ -1,4 +1,7 @@
+import inspect
 import re
+from email.message import EmailMessage
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,6 +17,7 @@ from ssas.reportes.domain.catalogo import (
     Sensibilidad,
     TipoCampo,
 )
+from ssas.reportes.infrastructure.http import router as router_module
 from ssas.reportes.infrastructure.http.router import (
     FROM_SQL,
     LIMITE_FILAS,
@@ -321,3 +325,52 @@ def test_agregado_rechaza_campo_sin_permiso(monkeypatch) -> None:
     assert error.value.status_code == 403
 
     _autorizar_agregado(consulta, {"nomina:ver"}, False)
+
+
+def test_envio_smtp_usa_timeout_y_tls_fuera_del_bucle(monkeypatch) -> None:
+    registro: dict[str, object] = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None):
+            registro["host"] = host
+            registro["port"] = port
+            registro["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            registro["tls"] = True
+
+        def login(self, username, password):
+            registro["login"] = (username, password)
+
+        def send_message(self, message):
+            registro["message"] = message
+
+    monkeypatch.setattr(router_module, "smtplib", SimpleNamespace(SMTP=FakeSMTP))
+    monkeypatch.setattr(router_module.settings, "smtp_host", "smtp.test")
+    monkeypatch.setattr(router_module.settings, "smtp_port", 2525)
+    monkeypatch.setattr(router_module.settings, "smtp_use_tls", True)
+    monkeypatch.setattr(router_module.settings, "smtp_username", "usuario")
+    monkeypatch.setattr(router_module.settings, "smtp_password", "clave")
+    message = EmailMessage()
+
+    router_module._enviar_correo(message)
+
+    assert registro["host"] == "smtp.test"
+    assert registro["port"] == 2525
+    assert registro["timeout"] == router_module.settings.smtp_timeout_seconds
+    assert registro["tls"] is True
+    assert registro["login"] == ("usuario", "clave")
+    assert registro["message"] is message
+
+
+def test_el_envio_se_delega_a_un_hilo() -> None:
+    source = inspect.getsource(router_module.enviar)
+
+    assert "anyio.to_thread.run_sync(_enviar_correo" in source
+    assert "with smtplib.SMTP" not in source

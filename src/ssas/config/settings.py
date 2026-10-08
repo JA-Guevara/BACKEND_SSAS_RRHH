@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
     smtp_from_name: str = "SSAS RRHH"
     smtp_use_tls: bool = True
+    smtp_timeout_seconds: float = Field(default=15, gt=0, le=120)
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
     backup_storage_bucket: str = "respaldos"
