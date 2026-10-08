@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from time import monotonic
@@ -15,6 +16,7 @@ from ssas.analisis_cv.domain.analysis import (
 from ssas.analisis_cv.infrastructure.extraction.cv_extractor import LocalCvExtractor
 from ssas.analisis_cv.infrastructure.persistence.models.analisis_cv import AnalisisCvModel
 from ssas.analisis_cv.infrastructure.providers.analysis_lock import analysis_lock, lock_persistence
+from ssas.analisis_cv.infrastructure.providers.extraccion_local import ExtraccionLocalProvider
 from ssas.analisis_cv.infrastructure.providers.gemini_provider import GeminiAnalysisProvider
 from ssas.analisis_cv.infrastructure.providers.privacy import redact_personal_data
 from ssas.analisis_cv.ports.outgoing.analysis_provider import AnalysisProvider, CvExtractor
@@ -34,6 +36,31 @@ from ssas.postulantes.infrastructure.persistence.models.postulante_habilidad imp
 )
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 from ssas.vacantes.infrastructure.persistence.models.vacante_habilidad import VacanteHabilidadModel
+
+logger = logging.getLogger(__name__)
+
+
+def _proveedores(config) -> tuple[AnalysisProvider, AnalysisProvider | None]:
+    """Devuelve (primario, respaldo) según la configuración.
+
+    ia_proveedor_cv == 'local'   → (ExtraccionLocalProvider, None)
+    ia_proveedor_cv == 'gemini'  → (GeminiAnalysisProvider,  None)   sin degradación
+    ia_proveedor_cv == 'auto'    → (GeminiAnalysisProvider,  ExtraccionLocalProvider)
+                                   si no hay clave configurada: (ExtraccionLocalProvider, None)
+    """
+    local = ExtraccionLocalProvider(config)
+    gemini = GeminiAnalysisProvider(config)
+    modo = config.ia_proveedor_cv
+
+    if modo == "local":
+        return local, None
+    if modo == "gemini":
+        return gemini, None
+
+    has_key = config.gemini_api_key and config.gemini_api_key.get_secret_value().strip()
+    if not has_key:
+        return local, None
+    return gemini, local
 
 
 async def _snapshot(session, postulacion_id, empresa_id, actor_id, *, lock=False):
@@ -229,8 +256,21 @@ async def analizar_cv(
         )
         vacante = {k: row[k] for k in ("titulo", "descripcion", "requisitos", "experiencia_min")}
         vacante["habilidades"] = [{**r, "peso": str(r["peso"])} for r in requisitos]
-        provider: AnalysisProvider = GeminiAnalysisProvider(settings)
-        resultado = await provider.analyze(texto, vacante, catalogo)
+        primario, respaldo = _proveedores(settings)
+        try:
+            resultado = await primario.analyze(texto, vacante, catalogo)
+            modelo = primario.nombre
+        except AnalisisCvError as exc:
+            if respaldo is None or exc.status_code not in (502, 503, 504):
+                raise
+            logger.warning(
+                "Analisis con %s no disponible (status=%s): se usa el proveedor local de respaldo",
+                primario.nombre,
+                exc.status_code,
+            )
+            resultado = await respaldo.analyze(texto, vacante, catalogo)
+            modelo = respaldo.nombre
+
         validar_evidencia(resultado, {h["habilidad_id"] for h in catalogo}, texto)
         score = calcular_afinidad(requisitos, resultado, row["experiencia_min"])
         names = {h["habilidad_id"]: h["nombre"] for h in catalogo}
@@ -259,7 +299,7 @@ async def analizar_cv(
                     + "\nEvidencia experiencia: "
                     + resultado.evidencia_experiencia
                 ),
-                modelo_usado=settings.gemini_cv_model,
+                modelo_usado=modelo,
                 tiempo_proceso_ms=int((monotonic() - started) * 1000),
                 fecha_analisis=datetime.now(UTC),
             )
@@ -293,7 +333,7 @@ async def analizar_cv(
                 new_data={
                     "postulacion_id": postulacion_id,
                     "puntaje_afinidad": str(score),
-                    "modelo_usado": settings.gemini_cv_model,
+                    "modelo_usado": modelo,
                 },
             )
             await session.flush()

@@ -379,7 +379,11 @@ async def test_use_case_atomic_persistence_without_commit(monkeypatch, failure):
         extract=AsyncMock(return_value="Desarrollo Python. 2 anos de experiencia.")
     )
     monkeypatch.setattr(module, "LocalCvExtractor", lambda settings: extractor)
-    provider = SimpleNamespace(analyze=AsyncMock(return_value=result()))
+    monkeypatch.setattr(module.settings, "ia_proveedor_cv", "gemini")
+    provider = SimpleNamespace(
+        analyze=AsyncMock(return_value=result()),
+        nombre=module.settings.gemini_cv_model,
+    )
     if failure:
         provider.analyze.side_effect = AnalisisCvError("timeout", 504)
     monkeypatch.setattr(module, "GeminiAnalysisProvider", lambda settings: provider)

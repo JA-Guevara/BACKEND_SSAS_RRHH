@@ -74,6 +74,10 @@ class GeminiAnalysisProvider:
         self.config = config
         self.transport = transport
 
+    @property
+    def nombre(self) -> str:
+        return self.config.gemini_cv_model
+
     async def analyze(self, texto: str, vacante: dict, catalogo: list[dict]) -> ResultadoIA:
         key = self.config.gemini_api_key
         if key is None or not key.get_secret_value().strip():

@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from typing import Literal
+
 from pydantic import Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -59,6 +61,7 @@ class Settings(BaseSettings):
         default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$"
     )
     gemini_cv_model: str = Field(default="gemini-3.5-flash-lite", pattern=r"^gemini-[a-z0-9.-]+$")
+    ia_proveedor_cv: Literal["auto", "gemini", "local"] = "auto"
     help_ai_enabled: bool = False
     help_ai_timeout_seconds: float = Field(default=10, gt=0, le=30)
     ia_timeout_seconds: float = Field(default=60, gt=0, le=300)
