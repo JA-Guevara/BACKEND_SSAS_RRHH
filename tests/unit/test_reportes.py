@@ -11,6 +11,16 @@ from fastapi import HTTPException
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
+from ssas.reportes.application.cuotas import (
+    CUOTAS,
+    cuota_de_empresa,
+    cuota_de_plan,
+    exportaciones_de_hoy,
+    interpretaciones_ia_de_hoy,
+    verificar_exportaciones_dia,
+    verificar_filas,
+    verificar_interpretaciones_ia,
+)
 from ssas.reportes.domain.catalogo import (
     CATALOGO,
     Campo,
@@ -409,6 +419,7 @@ async def test_exportar_fallido_registra_estado_error(monkeypatch) -> None:
 
     monkeypatch.setattr(router_module, "_rows", boom)
     session = MagicMock()
+    session.scalar = AsyncMock(return_value=0)
     session.commit = AsyncMock()
     user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
     body = ReporteConfig(fuente="usuarios", columnas=["nombres"])
@@ -421,3 +432,71 @@ async def test_exportar_fallido_registra_estado_error(monkeypatch) -> None:
     assert ejecucion.estado == "ERROR"
     assert ejecucion.error.startswith("RuntimeError: db caida")
     session.commit.assert_awaited_once()
+
+
+def test_cuota_excedida_es_429() -> None:
+    basico = cuota_de_plan("Básico")
+
+    with pytest.raises(HTTPException) as error:
+        verificar_exportaciones_dia(basico, 21)
+
+    assert error.value.status_code == 429
+    assert "Básico" in error.value.detail
+    assert "20" in error.value.detail
+
+    verificar_exportaciones_dia(basico, 19)
+
+
+def test_filas_sobre_el_limite_del_plan_es_429() -> None:
+    basico = cuota_de_plan("Basico")
+
+    with pytest.raises(HTTPException) as error:
+        verificar_filas(basico, 1_001)
+
+    assert error.value.status_code == 429
+    assert "1000" in error.value.detail
+    assert "Básico" in error.value.detail
+
+    verificar_filas(basico, 1_000)
+
+
+def test_cuota_de_ia_excedida_es_429() -> None:
+    with pytest.raises(HTTPException) as error:
+        verificar_interpretaciones_ia(cuota_de_plan("basico"), 10)
+
+    assert error.value.status_code == 429
+    assert "IA" in error.value.detail
+
+
+def test_plan_premium_no_tiene_limite_diario() -> None:
+    premium = cuota_de_plan("Empresarial")
+
+    assert premium is CUOTAS["premium"]
+    verificar_exportaciones_dia(premium, 10_000)
+
+
+def test_plan_desconocido_cae_al_mas_restrictivo() -> None:
+    assert cuota_de_plan(None) is CUOTAS["basico"]
+    assert cuota_de_plan("Plan Raro") is CUOTAS["basico"]
+
+
+@pytest.mark.asyncio
+async def test_cuota_de_empresa_usa_el_plan_activo() -> None:
+    session = MagicMock()
+    session.scalar = AsyncMock(return_value="Profesional")
+
+    assert await cuota_de_empresa(session, "emp1") is CUOTAS["profesional"]
+    sql = str(session.scalar.await_args.args[0])
+    assert "plan_suscripcion" in sql
+    assert "suscripcion.estado = :estado_1" in sql
+
+
+@pytest.mark.asyncio
+async def test_conteos_diarios_leen_reporte_ejecucion() -> None:
+    session = MagicMock()
+    session.scalar = AsyncMock(return_value=7)
+
+    assert await exportaciones_de_hoy(session, "emp1") == 7
+    assert await interpretaciones_ia_de_hoy(session, "emp1") == 7
+    sql = str(session.scalar.await_args.args[0])
+    assert "reporte_ejecucion.formato IN" in sql

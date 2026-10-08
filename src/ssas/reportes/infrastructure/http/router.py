@@ -24,6 +24,15 @@ from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.reportes.application.agregador import ejecutar as ejecutar_agregado
+from ssas.reportes.application.cuotas import (
+    FORMATO_IA,
+    cuota_de_empresa,
+    exportaciones_de_hoy,
+    interpretaciones_ia_de_hoy,
+    verificar_exportaciones_dia,
+    verificar_filas,
+    verificar_interpretaciones_ia,
+)
 from ssas.reportes.domain.catalogo import CATALOGO, Campo, Sensibilidad, campo_de
 from ssas.reportes.infrastructure.http.ai_provider import (
     GeminiReportInterpreter,
@@ -183,7 +192,7 @@ def _where(config: ReporteConfig, columns: dict[str, str], empresa_id: str) -> t
 
 
 async def _rows_truncado(
-    session: AsyncSession, empresa_id: str, config: ReporteConfig
+    session: AsyncSession, empresa_id: str, config: ReporteConfig, limite: int = LIMITE_FILAS
 ) -> tuple[list[dict], bool]:
     columns = _validate(config)
     selected = ", ".join(f"{columns[name]} AS {name}" for name in config.columnas)
@@ -191,15 +200,17 @@ async def _rows_truncado(
     order = ", ".join(f"{columns[o.campo]} {o.direccion.upper()}" for o in config.orden)
     sql = f"SELECT {selected} FROM {FROM_SQL[config.fuente]} WHERE {where}"
     if order: sql += f" ORDER BY {order}"
-    sql += f" LIMIT {LIMITE_FILAS + 1}"
+    sql += f" LIMIT {limite + 1}"
     result = await session.execute(text(sql), params)
     rows = [dict(row) for row in result.mappings().all()]
-    truncado = len(rows) > LIMITE_FILAS
-    return rows[:LIMITE_FILAS], truncado
+    truncado = len(rows) > limite
+    return rows[:limite], truncado
 
 
-async def _rows(session: AsyncSession, empresa_id: str, config: ReporteConfig) -> list[dict]:
-    rows, _ = await _rows_truncado(session, empresa_id, config)
+async def _rows(
+    session: AsyncSession, empresa_id: str, config: ReporteConfig, limite: int = LIMITE_FILAS
+) -> list[dict]:
+    rows, _ = await _rows_truncado(session, empresa_id, config, limite)
     return rows
 
 
@@ -274,15 +285,19 @@ async def interpretar(
     user: CurrentUser = Depends(require_scoped_permission(
         "reportes:ejecutar", "platform:reportes:gestionar"
     )),
+    session: AsyncSession = Depends(get_session),
 ):
     """Interpreta texto; no envía filas ni el catálogo al proveedor de IA."""
-    _empresa(user, empresa_id)
+    target = _empresa(user, empresa_id)
     if not body.texto.strip():
         raise HTTPException(422, "Escribe una consulta para el reporte")
+    cuota = await cuota_de_empresa(session, target)
+    verificar_interpretaciones_ia(cuota, await interpretaciones_ia_de_hoy(session, target))
     try:
         result = await GeminiReportInterpreter(settings).interpret(body.texto.strip())
     except ReportInterpretationError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
+    session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=FORMATO_IA, filtros_aplicados=[], columnas_sensibles=[], estado="COMPLETADO", fecha_fin=datetime.now(UTC)))
     if result.necesita_aclaracion:
         return InterpretarReporteResponse(
             config=None, aclaracion=result.aclaracion or "Aclara qué reporte necesitas"
@@ -360,8 +375,10 @@ async def vista_previa(body: ReporteConfig, empresa_id: str | None = None, page:
 async def conteo(body: ReporteConfig, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Cuenta las filas que devolvería el reporte antes de exportarlo."""
     _autorizar(body, await _permisos(session, user), user.es_plataforma)
-    total = await _contar(session, _empresa(user, empresa_id), body)
-    return ConteoResponse(total=total, excede_limite=total > LIMITE_FILAS, limite_del_plan=LIMITE_FILAS)
+    target = _empresa(user, empresa_id)
+    cuota = await cuota_de_empresa(session, target)
+    total = await _contar(session, target, body)
+    return ConteoResponse(total=total, excede_limite=total > cuota.filas_exportacion, limite_del_plan=cuota.filas_exportacion)
 
 
 @router.post("/agregado", response_model=RespuestaAgregada)
@@ -397,8 +414,11 @@ async def exportar(formato: str, body: ReporteConfig, request: Request, empresa_
     """Genera y descarga el reporte en HTML, Excel o PDF y registra la ejecución."""
     _autorizar(body, await _permisos(session, user), user.es_plataforma)
     target = _empresa(user, empresa_id); sensibles = _columnas_sensibles(body)
+    cuota = await cuota_de_empresa(session, target)
+    verificar_filas(cuota, await _contar(session, target, body))
+    verificar_exportaciones_dia(cuota, await exportaciones_de_hoy(session, target))
     try:
-        rows = await _rows(session, target, body)
+        rows = await _rows(session, target, body, cuota.filas_exportacion)
         content, media = _document(body, rows, formato)
     except Exception as exc:
         session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="ERROR", error=_error_texto(exc), fecha_fin=datetime.now(UTC)))
@@ -429,8 +449,11 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
     config = ReporteConfig(**body.model_dump(exclude={"destinatarios", "formato"})); target = _empresa(user, empresa_id)
     _autorizar(config, await _permisos(session, user), user.es_plataforma)
     sensibles = _columnas_sensibles(config)
+    cuota = await cuota_de_empresa(session, target)
+    verificar_filas(cuota, await _contar(session, target, config))
+    verificar_exportaciones_dia(cuota, await exportaciones_de_hoy(session, target))
     try:
-        rows = await _rows(session, target, config); content, media = _document(config, rows, body.formato)
+        rows = await _rows(session, target, config, cuota.filas_exportacion); content, media = _document(config, rows, body.formato)
         message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
         main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
         await anyio.to_thread.run_sync(_enviar_correo, message)

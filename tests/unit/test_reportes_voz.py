@@ -1,6 +1,6 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -14,6 +14,13 @@ from ssas.reportes.infrastructure.http.ai_provider import (
 )
 from ssas.reportes.infrastructure.http.router import interpretar
 from ssas.reportes.infrastructure.http.schemas import InterpretarReporteRequest
+
+
+def sesion() -> MagicMock:
+    session = MagicMock()
+    session.scalar = AsyncMock(return_value=None)
+    session.add = MagicMock()
+    return session
 
 
 def interpretation(**overrides) -> InterpretedReport:
@@ -118,13 +125,13 @@ async def test_interpretation_uses_catalog_defaults_and_keeps_tenant_scope(monke
         "ssas.reportes.infrastructure.http.router.GeminiReportInterpreter.interpret",
         AsyncMock(return_value=interpretation()),
     )
-    user = SimpleNamespace(empresa_id="company-a", es_plataforma=False)
-    result = await interpretar(InterpretarReporteRequest(texto="postulaciones de septiembre"), None, user)
+    user = SimpleNamespace(id="user-1", empresa_id="company-a", es_plataforma=False)
+    result = await interpretar(InterpretarReporteRequest(texto="postulaciones de septiembre"), None, user, sesion())
     assert result.config.fuente == "postulaciones"
     assert result.config.columnas
     assert len(result.config.filtros) == 2
     with pytest.raises(HTTPException) as error:
-        await interpretar(InterpretarReporteRequest(texto="postulaciones de septiembre"), "company-b", user)
+        await interpretar(InterpretarReporteRequest(texto="postulaciones de septiembre"), "company-b", user, sesion())
     assert error.value.status_code == 403
 
 
@@ -136,8 +143,8 @@ async def test_unknown_ai_field_requests_clarification_instead_of_running_report
             filtros=[{"campo": "salario_privado", "operador": "igual", "valor": "100"}]
         )),
     )
-    user = SimpleNamespace(empresa_id="company-a", es_plataforma=False)
-    result = await interpretar(InterpretarReporteRequest(texto="reporte de salarios"), None, user)
+    user = SimpleNamespace(id="user-1", empresa_id="company-a", es_plataforma=False)
+    result = await interpretar(InterpretarReporteRequest(texto="reporte de salarios"), None, user, sesion())
     assert result.config is None
     assert result.aclaracion
 
@@ -153,8 +160,8 @@ async def test_common_date_alias_is_resolved_locally(monkeypatch):
             orden=[{"campo": "fecha", "direccion": "desc"}],
         )),
     )
-    user = SimpleNamespace(empresa_id="company-a", es_plataforma=False)
-    result = await interpretar(InterpretarReporteRequest(texto="postulaciones de septiembre"), None, user)
+    user = SimpleNamespace(id="user-1", empresa_id="company-a", es_plataforma=False)
+    result = await interpretar(InterpretarReporteRequest(texto="postulaciones de septiembre"), None, user, sesion())
     assert result.config.fuente == "postulaciones"
     assert result.config.columnas == ["postulante", "fecha_postulacion"]
     assert result.config.filtros[0].campo == "fecha_postulacion"
