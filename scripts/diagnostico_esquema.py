@@ -128,7 +128,7 @@ async def main() -> int:
                 print(f"VEREDICTO: compatible -> se puede sellar con 'alembic stamp {CONSOLIDATED_REVISION}'")
                 return 0
             else:
-                print("VEREDICTO: incompatible → requiere reconstrucción o migración manual")
+                print("VEREDICTO: incompatible -> requiere reconstrucción o migración manual")
                 return 1
     except Exception as exc:
         print(f"ERROR conectando a la base de datos: {exc}")
