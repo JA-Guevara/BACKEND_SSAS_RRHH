@@ -21,6 +21,7 @@ from ssas.core.api.openapi import TAG_REPORTES
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
+from ssas.reportes.domain.catalogo import CATALOGO
 from ssas.reportes.infrastructure.http.ai_provider import (
     GeminiReportInterpreter,
     ReportInterpretationError,
@@ -42,31 +43,13 @@ from ssas.reportes.infrastructure.persistence.models.reporte import (
 
 router = APIRouter(prefix="/reportes", tags=[TAG_REPORTES])
 
+# Los mapas SQL se derivan de la capa semántica: una sola definición del catálogo.
 SOURCES = {
-    "vacantes": {
-        "titulo": "v.titulo", "estado": "v.estado", "modalidad": "v.modalidad",
-        "ubicacion": "v.ubicacion", "cantidad_vacantes": "v.cantidad_vacantes",
-        "fecha_publicacion": "v.fecha_publicacion",
-    },
-    "usuarios": {
-        "nombres": "u.nombres", "apellidos": "u.apellidos", "email": "u.email",
-        "username": "u.username", "telefono": "u.telefono", "activo": "u.activo",
-        "ultimo_acceso": "u.ultimo_acceso",
-    },
-    "postulaciones": {
-        "postulante": "concat(p.nombres, ' ', p.apellidos)", "email": "p.email",
-        "vacante": "v.titulo", "estado": "po.estado",
-        "puntaje": "COALESCE(po.puntaje_manual, po.puntaje_ia)",
-        "fecha_postulacion": "po.fecha_postulacion",
-    },
+    code: {name: campo.sql for name, campo in source.campos.items()}
+    for code, source in CATALOGO.items()
 }
-FROM_SQL = {
-    "vacantes": "vacante v",
-    "usuarios": "usuario u",
-    "postulaciones": "postulacion po JOIN vacante v ON v.id=po.vacante_id "
-    "JOIN postulante p ON p.id=po.postulante_id AND p.empresa_id=v.empresa_id",
-}
-TENANT_COLUMN = {"vacantes": "v.empresa_id", "usuarios": "u.empresa_id", "postulaciones": "v.empresa_id"}
+FROM_SQL = {code: source.from_sql for code, source in CATALOGO.items()}
+TENANT_COLUMN = {code: source.columna_tenant for code, source in CATALOGO.items()}
 FIELD_ALIASES = {
     "vacantes": {"fecha": "fecha_publicacion", "nombre": "titulo", "cargo": "titulo", "ciudad": "ubicacion"},
     "usuarios": {"nombre": "nombres", "apellido": "apellidos", "usuario": "username", "fecha": "ultimo_acceso"},
