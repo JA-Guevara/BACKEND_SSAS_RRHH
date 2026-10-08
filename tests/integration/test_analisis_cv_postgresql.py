@@ -230,6 +230,8 @@ async def test_real_sql_persistence_concurrency_and_guards(monkeypatch):
             app_env="development",
             app_secret_key="test",
             app_audit_encryption_key="11" * 32,
+            # El doble de este proveedor solo se usa si el modo lo selecciona como primario.
+            ia_proveedor_cv="gemini",
         )
         monkeypatch.setattr(module, "settings", config)
         monkeypatch.setattr(audit_module, "settings", config)
@@ -280,7 +282,9 @@ async def test_real_sql_persistence_concurrency_and_guards(monkeypatch):
             module, "LocalCvExtractor", lambda config: SimpleNamespace(extract=extract)
         )
         monkeypatch.setattr(
-            module, "GeminiAnalysisProvider", lambda config: SimpleNamespace(analyze=analyze)
+            module,
+            "GeminiAnalysisProvider",
+            lambda config: SimpleNamespace(analyze=analyze, nombre="gemini-fake"),
         )
         async with factory() as winner, factory() as loser:
             await winner.scalar(select(UserModel.id).where(UserModel.id == ids["actor"]))

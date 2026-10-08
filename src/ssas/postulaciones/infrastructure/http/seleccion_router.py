@@ -10,14 +10,12 @@ from ssas.bitacora.application.use_cases.register_audit_event import RegisterAud
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
 )
-from ssas.config.settings import settings
 from ssas.core.api.guards import permiso
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
 from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.application.use_cases.gestionar_seleccion import GestionarSeleccion
-from ssas.postulaciones.domain.seleccion import SeleccionError
 from ssas.postulaciones.infrastructure.http.seleccion_schemas import (
     AgendaResponse,
     AnalisisResponse,
@@ -49,7 +47,6 @@ from ssas.postulantes.infrastructure.http.router import PostulanteResponse
 from ssas.roles.infrastructure.persistence.repositories.authorization_repository import (
     SqlAlchemyAuthorizationRepository,
 )
-from ssas.suscripciones.application.policy import SubscriptionPolicy, SubscriptionPolicyError
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 from ssas.vacantes.infrastructure.persistence.models.vacante_habilidad import VacanteHabilidadModel
 

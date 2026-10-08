@@ -1,6 +1,5 @@
 import importlib
 from contextlib import asynccontextmanager
-from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -10,8 +9,6 @@ from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ssas.analisis_cv.domain.analysis import AnalisisCvError, ResultadoIA
-from ssas.analisis_cv.infrastructure.providers.extraccion_local import ExtraccionLocalProvider
-from ssas.config.settings import Settings
 from ssas.infrastructure.database.base import import_all_models
 
 import_all_models()
