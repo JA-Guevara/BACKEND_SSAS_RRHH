@@ -2,11 +2,14 @@
 
 import asyncio
 import os
+import re
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from reportlab.pdfgen.canvas import Canvas
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
@@ -55,9 +58,12 @@ from ssas.infrastructure.database.base import import_all_models
 import_all_models()
 from ssas.analisis_cv.infrastructure.persistence.models.analisis_cv import AnalisisCvModel
 from ssas.auth.infrastructure.persistence.models.user import UserModel
+from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.cargos.infrastructure.persistence.models.cargo import CargoModel
+from ssas.config.settings import settings
 from ssas.core.security.dependencies import CurrentUser, get_current_user
 from ssas.departamentos.infrastructure.persistence.models.departamento import DepartamentoModel
+from ssas.empleados.infrastructure.http.router import router as empleados_router
 from ssas.empleados.infrastructure.persistence.models.empleado import EmpleadoModel
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 from ssas.empresas.infrastructure.persistence.models.suscripcion import (
@@ -66,11 +72,15 @@ from ssas.empresas.infrastructure.persistence.models.suscripcion import (
 )
 from ssas.entrevistas.infrastructure.persistence.models.entrevista import EntrevistaModel
 from ssas.evaluaciones.infrastructure.persistence.models.evaluacion import EvaluacionModel
+from ssas.habilidades.infrastructure.persistence.models.habilidad import HabilidadModel
 from ssas.infrastructure.database.session import get_session
 from ssas.modulos.infrastructure.persistence.models.empresa_modulo import EmpresaModuloModel
 from ssas.modulos.infrastructure.persistence.models.modulo import ModuloModel
 from ssas.postulaciones.application.use_cases.gestionar_seleccion import GestionarSeleccion
 from ssas.postulaciones.domain.seleccion import SeleccionError
+from ssas.postulaciones.infrastructure.http.entrevista_publica_router import (
+    router as entrevista_publica_router,
+)
 from ssas.postulaciones.infrastructure.http.seleccion_router import router
 from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import (
     EtapaReclutamientoModel,
@@ -85,6 +95,9 @@ from ssas.roles.infrastructure.persistence.models.role import RoleModel
 from ssas.roles.infrastructure.persistence.models.role_permission import rol_permiso_table
 from ssas.roles.infrastructure.persistence.models.user_role import usuario_rol_table
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
+from ssas.vacantes.infrastructure.persistence.models.vacante_habilidad import (
+    VacanteHabilidadModel,
+)
 
 
 def uid():
@@ -137,7 +150,7 @@ def database():
                 .scalars()
                 .all()
             )
-            assert "20260927_0006" in versions, "Migrate disposable DB to Sprint2 head first"
+            assert "20261005_0009" in versions, "Migrate disposable DB to Sprint2 head first"
             metadata = MetaData()
             await conn.run_sync(lambda sync: metadata.reflect(sync))
             metadata.remove(metadata.tables["alembic_version"])
@@ -183,6 +196,7 @@ async def scenario(schema, body):
                 "evaluaciones:ver",
                 "evaluaciones:gestionar",
                 "postulaciones:ver",
+                "postulaciones:analizar_cv",
                 "postulaciones:contratar",
                 "empleados:ver",
                 "postulantes:gestionar",
@@ -309,6 +323,8 @@ async def scenario(schema, body):
             await s.commit()
         app = FastAPI()
         app.include_router(router, prefix="/api/v1")
+        app.include_router(empleados_router, prefix="/api/v1")
+        app.include_router(entrevista_publica_router, prefix="/api/v1")
 
         @app.exception_handler(SeleccionError)
         async def selection_error(request: Request, exc: SeleccionError):
@@ -776,5 +792,279 @@ def test_ranking_comparison_latest_analysis_and_history(database):
         assert [e["tipo"] for e in events].count("ANALISIS_CV") == 2
         assert any(e["tipo"] == "EVALUACION" and e["responsable"] == "Tester 0" for e in events)
         assert [e["fecha"] for e in events] == sorted([e["fecha"] for e in events], reverse=True)
+
+    asyncio.run(scenario(database, body))
+
+
+def test_flujo_completo_cu13_a_cu19(database, tmp_path, monkeypatch):
+    """QA-04: postulación -> CV -> análisis -> entrevista -> evaluación -> contratación."""
+    monkeypatch.setattr(settings, "ia_proveedor_cv", "local")
+    monkeypatch.setattr(settings, "cv_storage_directory", str(tmp_path))
+
+    async def body(factory, c, ts, current, module):
+        a, b = ts
+        codigo = uid()
+        pdf = tmp_path / (re.sub(r"[^A-Z0-9-]", "_", codigo.upper()) + ".pdf")
+        canvas = Canvas(str(pdf))
+        y = 760
+        for line in (
+            "Flujo Completo, desarrollador de software radicado en La Paz, Bolivia.",
+            "5 anios de experiencia construyendo aplicaciones web con Python.",
+            "Manejo de bases de datos relacionales y consultas SQL avanzadas.",
+            "Experiencia en pruebas automatizadas, control de versiones con Git",
+            "y metodologias agiles de trabajo en equipo.",
+        ):
+            canvas.drawString(50, y, line)
+            y -= 16
+        canvas.save()
+
+        # Pasos 1 y 2: vacante con 3 habilidades (una obligatoria) y postulación activa con CV.
+        async with factory() as s:
+            habilidades = []
+            for nombre in ("Python", "SQL", "Docker"):
+                skill = HabilidadModel(
+                    id=uid(), empresa_id=a["empresa"], nombre=nombre, activo=True
+                )
+                s.add(skill)
+                habilidades.append(skill)
+            await s.flush()
+            cargo = (
+                await s.scalars(select(CargoModel).where(CargoModel.empresa_id == a["empresa"]))
+            ).first()
+            dep = (
+                await s.scalars(
+                    select(DepartamentoModel).where(DepartamentoModel.empresa_id == a["empresa"])
+                )
+            ).first()
+            initial = (
+                await s.scalars(
+                    select(EtapaReclutamientoModel).where(
+                        EtapaReclutamientoModel.empresa_id == a["empresa"],
+                        EtapaReclutamientoModel.es_inicial.is_(True),
+                    )
+                )
+            ).first()
+            vacancy = VacanteModel(
+                id=uid(),
+                empresa_id=a["empresa"],
+                cargo_id=cargo.id,
+                departamento_id=dep.id,
+                responsable_id=a["user"],
+                titulo="Vacante flujo QA-04",
+                descripcion="Solo para el flujo completo del CU-13 al CU-19",
+                modalidad="REMOTO",
+                estado="PUBLICADA",
+                cantidad_vacantes=1,
+                experiencia_min=3,
+            )
+            s.add(vacancy)
+            await s.flush()
+            for position, skill in enumerate(habilidades):
+                s.add(
+                    VacanteHabilidadModel(
+                        id=uid(),
+                        vacante_id=vacancy.id,
+                        habilidad_id=skill.id,
+                        nivel_requerido="INTERMEDIO",
+                        es_obligatorio=position == 0,
+                        peso=Decimal("3.00"),
+                    )
+                )
+            candidate = PostulanteModel(
+                id=uid(),
+                empresa_id=a["empresa"],
+                nombres="Flujo",
+                apellidos="Contratacion",
+                ci="FLUJO01",
+                email="flujo@example.invalid",
+                telefono="70000000",
+                ciudad="La Paz",
+                nivel_educativo="LICENCIATURA",
+                fuente="OTRO",
+                anios_experiencia=5,
+                cv_url=pdf.as_posix(),
+            )
+            rival = PostulanteModel(
+                id=uid(),
+                empresa_id=a["empresa"],
+                nombres="Flujo",
+                apellidos="Comparacion",
+                ci="FLUJO02",
+                email="comparacion@example.invalid",
+                telefono="70000001",
+                ciudad="La Paz",
+                nivel_educativo="LICENCIATURA",
+                fuente="OTRO",
+                anios_experiencia=2,
+            )
+            s.add_all([candidate, rival])
+            await s.flush()
+            post_cv = PostulacionModel(
+                id=uid(),
+                vacante_id=vacancy.id,
+                postulante_id=candidate.id,
+                etapa_id=initial.id,
+                estado="ACTIVA",
+                codigo_seguimiento=codigo,
+            )
+            post_rival = PostulacionModel(
+                id=uid(),
+                vacante_id=vacancy.id,
+                postulante_id=rival.id,
+                etapa_id=initial.id,
+                estado="ACTIVA",
+                codigo_seguimiento=uid(),
+            )
+            s.add_all([post_cv, post_rival])
+            await s.commit()
+            flow = {
+                "vacante": vacancy.id,
+                "post_cv": post_cv.id,
+                "post_rival": post_rival.id,
+                "postulante": candidate.id,
+                "codigo": codigo,
+            }
+
+        # Paso 3 (CU-13): análisis del CV con el proveedor local.
+        r = await c.post(f"postulaciones/{flow['post_cv']}/analisis-cv")
+        assert r.status_code == 201, r.text
+        analysis = r.json()
+        assert 0 <= float(analysis["puntaje_afinidad"]) <= 100
+        assert analysis["modelo_usado"] == "extraccion-local-v1"
+        assert "Python" in analysis["habilidades_detectadas"]
+        assert "SQL" in analysis["habilidades_detectadas"]
+        assert analysis["habilidades_faltantes"] == ["Docker"]
+        assert analysis["anios_experiencia_detectados"] == 5
+        analysis_id = analysis["id"]
+
+        # Paso 4 (CU-14): ranking de la vacante ordenado por el puntaje de la IA.
+        ranking = await c.get(f"vacantes/{flow['vacante']}/ranking", params={"orden": "ia"})
+        assert ranking.status_code == 200, ranking.text
+        page = ranking.json()
+        assert page["total"] == 2
+        assert page["items"][0]["id"] == flow["post_cv"]
+        assert page["items"][0]["puntaje_ia"] is not None
+        assert page["items"][1]["puntaje_ia"] is None
+
+        # Paso 5 (CU-15): entrevista programada para una fecha futura.
+        r = await c.post("entrevistas", json=interview(a, post=flow["post_cv"]))
+        assert r.status_code == 201, r.text
+        entrevista_id = r.json()["id"]
+        assert r.json()["estado"] == "PROGRAMADA"
+
+        # Paso 6 (CU-15): el postulante confirma con su código de seguimiento.
+        r = await c.post(
+            f"publico/postulaciones/{flow['codigo']}/entrevista/confirmar",
+            params={"entrevista_id": entrevista_id},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["estado"] == "CONFIRMADA"
+
+        # Paso 7 (CU-16): resultado de la entrevista ya realizada.
+        async with factory() as s:
+            item = await s.get(EntrevistaModel, entrevista_id)
+            item.fecha_hora = datetime.now(UTC) - timedelta(hours=1)
+            await s.commit()
+        r = await c.patch(
+            f"entrevistas/{entrevista_id}/resultado",
+            json={
+                "puntaje": 91,
+                "observaciones": "Flujo QA-04 verificado",
+                "recomendacion": "APTO",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["estado"] == "REALIZADA"
+
+        # Paso 8 (CU-16): evaluación técnica de la postulación.
+        r = await c.post(
+            f"postulaciones/{flow['post_cv']}/evaluaciones",
+            json={
+                "tipo": "TECNICA",
+                "nombre": "Prueba flujo QA-04",
+                "puntaje": 9,
+                "puntaje_maximo": 10,
+                "aprobado": True,
+                "observaciones": "Evaluacion del flujo completo",
+            },
+        )
+        assert r.status_code == 201, r.text
+        evaluacion_id = r.json()["id"]
+
+        # Paso 9 (CU-17): comparación de las dos postulaciones de la vacante.
+        r = await c.post(
+            f"vacantes/{flow['vacante']}/comparar",
+            json={"postulacion_ids": [flow["post_cv"], flow["post_rival"]]},
+        )
+        assert r.status_code == 200, r.text
+        assert {item["id"] for item in r.json()} == {flow["post_cv"], flow["post_rival"]}
+
+        # Paso 10 (CU-18): el postulante queda en el banco de talento.
+        r = await c.patch(
+            f"postulantes/{flow['postulante']}/banco-talento", json={"en_banco_talento": True}
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["en_banco_talento"] is True
+
+        # Paso 11 (CU-19): contratación que crea el empleado.
+        r = await c.post(f"postulaciones/{flow['post_cv']}/contratar", json=hire("QA04-001"))
+        assert r.status_code == 201, r.text
+        empleado_id = r.json()["id"]
+
+        # Paso 12 (CU-19): el empleado aparece en el listado de la empresa.
+        r = await c.get("empleados")
+        assert r.status_code == 200, r.text
+        assert any(item["id"] == empleado_id for item in r.json()["items"])
+
+        # Paso 13: historial de la postulación con los pasos 3 a 11.
+        r = await c.get(f"postulaciones/{flow['post_cv']}/historial")
+        assert r.status_code == 200, r.text
+        events = r.json()
+        tipos = {event["tipo"] for event in events}
+        assert {"ANALISIS_CV", "ENTREVISTA", "EVALUACION"} <= tipos
+        assert any(event["tipo"] == "APPROVE" for event in events)
+
+        async with factory() as s:
+            post = await s.get(PostulacionModel, flow["post_cv"])
+            assert post.empleado_id == empleado_id
+            assert post.estado == "CONTRATADA"
+            audit = (
+                await s.scalars(
+                    select(AuditLogModel).where(
+                        AuditLogModel.empresa_id == a["empresa"],
+                        AuditLogModel.module == "SELECCION",
+                    )
+                )
+            ).all()
+        # Cada paso que escribe deja su evento en bitacora con modulo SELECCION.
+        # La descripcion se persiste cifrada, por eso se verifican los campos claros.
+        assert len(audit) == 7
+        assert {(row.tabla_afectada, row.action) for row in audit} == {
+            ("analisis_cv", "CREATE"),
+            ("entrevista", "CREATE"),
+            ("entrevista", "UPDATE"),
+            ("evaluacion", "CREATE"),
+            ("postulacion", "APPROVE"),
+            ("postulante", "UPDATE"),
+        }
+        registros = {}
+        for row in audit:
+            registros.setdefault(row.tabla_afectada, set()).add(row.registro_id)
+        assert registros == {
+            "analisis_cv": {analysis_id},
+            "entrevista": {entrevista_id},
+            "evaluacion": {evaluacion_id},
+            "postulacion": {flow["post_cv"]},
+            "postulante": {flow["postulante"]},
+        }
+
+        # Aislamiento multiempresa sobre los pasos 4, 12 y 13.
+        current[0] = CurrentUser(id=b["user"], empresa_id=b["empresa"])
+        assert (await c.get(f"vacantes/{flow['vacante']}/ranking")).status_code == 404
+        assert (await c.get(f"postulaciones/{flow['post_cv']}/historial")).status_code == 404
+        foreign_page = (await c.get("empleados")).json()
+        assert foreign_page["items"] == [] and foreign_page["total"] == 0
+        current[0] = CurrentUser(id=a["user"], empresa_id=a["empresa"])
+        assert (await c.get(f"vacantes/{flow['vacante']}/ranking")).status_code == 200
 
     asyncio.run(scenario(database, body))
