@@ -23,7 +23,7 @@ from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.reportes.application.agregador import ejecutar as ejecutar_agregado
-from ssas.reportes.domain.catalogo import CATALOGO, Campo
+from ssas.reportes.domain.catalogo import CATALOGO, Campo, Sensibilidad, campo_de
 from ssas.reportes.infrastructure.http.ai_provider import (
     GeminiReportInterpreter,
     ReportInterpretationError,
@@ -87,6 +87,70 @@ def _validate(config: ReporteConfig) -> dict[str, str]:
     if invalid:
         raise HTTPException(422, f"Campos no permitidos: {', '.join(sorted(invalid))}")
     return columns
+
+
+def _campos_usados(config: ReporteConfig) -> set[str]:
+    campos = set(config.columnas)
+    campos.update(item.campo for item in config.filtros)
+    campos.update(item.campo for item in config.orden)
+    return campos
+
+
+async def _permisos(session: AsyncSession, user: CurrentUser) -> set[str]:
+    return await SqlAlchemyAuthorizationRepository(session).get_user_permission_codes(
+        user.id, user.empresa_id
+    )
+
+
+def _autorizar(config: ReporteConfig, permisos: set[str], es_plataforma: bool) -> dict[str, str]:
+    columns = _validate(config)
+    if es_plataforma:
+        return columns
+    prohibidos = [
+        name
+        for name in _campos_usados(config)
+        if (campo := campo_de(config.fuente, name))
+        and campo.permiso
+        and campo.permiso not in permisos
+    ]
+    if prohibidos:
+        raise HTTPException(
+            403, f"No tienes permiso para las columnas: {', '.join(sorted(prohibidos))}"
+        )
+    return columns
+
+
+def _columnas_sensibles(config: ReporteConfig) -> list[str]:
+    return sorted(
+        name
+        for name in _campos_usados(config)
+        if (campo := campo_de(config.fuente, name))
+        and campo.sensibilidad in (Sensibilidad.PERSONAL, Sensibilidad.CONFIDENCIAL)
+    )
+
+
+def _autorizar_agregado(
+    consulta: ConsultaAgregada, permisos: set[str], es_plataforma: bool
+) -> None:
+    if es_plataforma:
+        return
+    if CATALOGO.get(consulta.fuente) is None:
+        raise HTTPException(422, "Fuente de reporte no permitida")
+    campos = set(consulta.agrupar_por)
+    campos.update(medida.campo for medida in consulta.medidas if medida.campo)
+    campos.update(filtro.campo for filtro in consulta.filtros)
+    campos.update(orden.campo for orden in consulta.orden)
+    prohibidos = [
+        name
+        for name in campos
+        if (campo := campo_de(consulta.fuente, name))
+        and campo.permiso
+        and campo.permiso not in permisos
+    ]
+    if prohibidos:
+        raise HTTPException(
+            403, f"No tienes permiso para las columnas: {', '.join(sorted(prohibidos))}"
+        )
 
 
 def _report_field(source: str, field: str) -> str:
@@ -250,7 +314,7 @@ async def listar(empresa_id: str | None = None, user: CurrentUser = Depends(requ
 @router.post("", response_model=ReporteResponse, status_code=201)
 async def crear(body: CrearReporte, request: Request, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:crear", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Guarda una definición validada para reutilizar columnas, filtros y orden."""
-    _validate(body)
+    _autorizar(body, await _permisos(session, user), user.es_plataforma)
     model = ReporteDefinicionModel(empresa_id=_empresa(user, empresa_id), usuario_id=user.id, **body.model_dump())
     session.add(model); await session.flush(); await session.refresh(model)
     await _audit(session, request, user, model.empresa_id, "CREATE", "Definición de reporte creada", model.id, {"nombre": model.nombre, "fuente": model.fuente})
@@ -263,13 +327,14 @@ async def actualizar(report_id: str, body: ActualizarReporte, empresa_id: str | 
     model = (await session.execute(select(ReporteDefinicionModel).where(ReporteDefinicionModel.id == report_id, ReporteDefinicionModel.empresa_id == _empresa(user, empresa_id)))).scalar_one_or_none()
     if not model: raise HTTPException(404, "Reporte no encontrado")
     for key, value in body.model_dump(exclude_unset=True).items(): setattr(model, key, value)
-    _validate(ReporteConfig(fuente=model.fuente, columnas=model.columnas, filtros=model.filtros, orden=model.orden))
+    _autorizar(ReporteConfig(fuente=model.fuente, columnas=model.columnas, filtros=model.filtros, orden=model.orden), await _permisos(session, user), user.es_plataforma)
     await session.flush(); await session.refresh(model); return _serialize(model)
 
 
 @router.post("/vista-previa", response_model=VistaPrevia)
 async def vista_previa(body: ReporteConfig, empresa_id: str | None = None, page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100), user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Ejecuta una consulta limitada y devuelve una vista previa paginada, avisando si truncó."""
+    _autorizar(body, await _permisos(session, user), user.es_plataforma)
     rows, truncado = await _rows_truncado(session, _empresa(user, empresa_id), body); start = (page - 1) * per_page
     return VistaPrevia(columnas=body.columnas, items=rows[start:start + per_page], total=len(rows), page=page, per_page=per_page, truncado=truncado, total_exacto=not truncado)
 
@@ -277,6 +342,7 @@ async def vista_previa(body: ReporteConfig, empresa_id: str | None = None, page:
 @router.post("/conteo", response_model=ConteoResponse)
 async def conteo(body: ReporteConfig, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Cuenta las filas que devolvería el reporte antes de exportarlo."""
+    _autorizar(body, await _permisos(session, user), user.es_plataforma)
     total = await _contar(session, _empresa(user, empresa_id), body)
     return ConteoResponse(total=total, excede_limite=total > LIMITE_FILAS, limite_del_plan=LIMITE_FILAS)
 
@@ -284,6 +350,7 @@ async def conteo(body: ReporteConfig, empresa_id: str | None = None, user: Curre
 @router.post("/agregado", response_model=RespuestaAgregada)
 async def agregado(body: ConsultaAgregada, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Ejecuta medidas agrupadas sobre el catálogo; alimenta los gráficos del panel."""
+    _autorizar_agregado(body, await _permisos(session, user), user.es_plataforma)
     return await ejecutar_agregado(session, body, _empresa(user, empresa_id))
 
 
@@ -311,10 +378,12 @@ def _document(config: ReporteConfig, rows: list[dict], formato: str) -> tuple[by
 @router.post("/exportar/{formato}")
 async def exportar(formato: str, body: ReporteConfig, request: Request, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:exportar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Genera y descarga el reporte en HTML, Excel o PDF y registra la ejecución."""
+    _autorizar(body, await _permisos(session, user), user.es_plataforma)
     target = _empresa(user, empresa_id); rows = await _rows(session, target, body)
+    sensibles = _columnas_sensibles(body)
     content, media = _document(body, rows, formato)
-    session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
-    await _audit(session, request, user, target, "EXPORT", "Reporte exportado", new_data={"formato": formato, "registros": len(rows)})
+    session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
+    await _audit(session, request, user, target, "EXPORT", "Reporte exportado", new_data={"formato": formato, "registros": len(rows), "columnas_sensibles": sensibles})
     return Response(content, media_type=media, headers={"Content-Disposition": f'attachment; filename="reporte.{formato}"'})
 
 
@@ -324,6 +393,8 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
     if not all((settings.smtp_host, settings.smtp_from_email)):
         raise HTTPException(503, "El envío de correo no está configurado")
     config = ReporteConfig(**body.model_dump(exclude={"destinatarios", "formato"})); target = _empresa(user, empresa_id)
+    _autorizar(config, await _permisos(session, user), user.es_plataforma)
+    sensibles = _columnas_sensibles(config)
     rows = await _rows(session, target, config); content, media = _document(config, rows, body.formato)
     message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
     main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
@@ -331,6 +402,6 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
         if settings.smtp_use_tls: smtp.starttls()
         if settings.smtp_username: smtp.login(settings.smtp_username, settings.smtp_password or "")
         smtp.send_message(message)
-    session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=body.formato, filtros_aplicados=[f.model_dump() for f in body.filtros], estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
-    await _audit(session, request, user, target, "SEND", "Reporte enviado por correo", new_data={"formato": body.formato, "destinatarios": len(body.destinatarios)})
+    session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=body.formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
+    await _audit(session, request, user, target, "SEND", "Reporte enviado por correo", new_data={"formato": body.formato, "destinatarios": len(body.destinatarios), "columnas_sensibles": sensibles})
     return {"message": "Reporte enviado"}

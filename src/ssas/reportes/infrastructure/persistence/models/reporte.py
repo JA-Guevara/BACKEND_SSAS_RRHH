@@ -45,6 +45,7 @@ class ReporteEjecucionModel(Base):
     usuario_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
     formato: Mapped[str] = mapped_column(String(20), nullable=False)
     filtros_aplicados: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    columnas_sensibles: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     estado: Mapped[str] = mapped_column(String(20), nullable=False)
     cantidad_registros: Mapped[int | None] = mapped_column(Integer)
     fecha_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

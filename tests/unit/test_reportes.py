@@ -7,14 +7,23 @@ from fastapi import HTTPException
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
-from ssas.reportes.domain.catalogo import CATALOGO, Campo, TipoCampo
+from ssas.reportes.domain.catalogo import (
+    CATALOGO,
+    Campo,
+    Fuente,
+    Sensibilidad,
+    TipoCampo,
+)
 from ssas.reportes.infrastructure.http.router import (
     FROM_SQL,
     LIMITE_FILAS,
     SOURCES,
     TENANT_COLUMN,
+    _autorizar,
+    _autorizar_agregado,
     _campo_visible,
     _catalogo_visible,
+    _columnas_sensibles,
     _contar,
     _document,
     _rows,
@@ -22,6 +31,11 @@ from ssas.reportes.infrastructure.http.router import (
     _validate,
 )
 from ssas.reportes.infrastructure.http.schemas import ReporteConfig
+from ssas.reportes.infrastructure.http.schemas_agregado import (
+    Agregacion,
+    ConsultaAgregada,
+    Medida,
+)
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
 
@@ -210,3 +224,100 @@ async def test_conteo_cuenta_con_los_mismos_filtros() -> None:
     sql = str(session.scalar.await_args.args[0])
     assert "count(*) AS total" in sql
     assert "v.empresa_id = :empresa_id" in sql
+
+
+def _registrar_fuente_prueba(monkeypatch, fuente: Fuente) -> None:
+    monkeypatch.setitem(CATALOGO, fuente.codigo, fuente)
+    monkeypatch.setitem(
+        SOURCES, fuente.codigo, {name: campo.sql for name, campo in fuente.campos.items()}
+    )
+    monkeypatch.setitem(FROM_SQL, fuente.codigo, fuente.from_sql)
+    monkeypatch.setitem(TENANT_COLUMN, fuente.codigo, fuente.columna_tenant)
+
+
+def _fuente_de_prueba(codigo: str) -> Fuente:
+    return Fuente(
+        codigo=codigo,
+        etiqueta="Fuente de prueba",
+        descripcion="",
+        from_sql="tabla t",
+        columna_tenant="t.empresa_id",
+        permiso="test:ver",
+        campos={
+            "salario": Campo(
+                codigo="salario",
+                etiqueta="Salario",
+                sql="t.salario",
+                tipo=TipoCampo.NUMERO,
+                permiso="nomina:ver",
+            ),
+            "email": Campo(
+                codigo="email",
+                etiqueta="Correo",
+                sql="t.email",
+                tipo=TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.PERSONAL,
+            ),
+            "nota": Campo(
+                codigo="nota",
+                etiqueta="Nota",
+                sql="t.nota",
+                tipo=TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.CONFIDENCIAL,
+            ),
+            "nombre": Campo(
+                codigo="nombre",
+                etiqueta="Nombre",
+                sql="t.nombre",
+                tipo=TipoCampo.TEXTO,
+            ),
+        },
+    )
+
+
+def test_campo_con_permiso_no_autorizado_es_403(monkeypatch) -> None:
+    _registrar_fuente_prueba(monkeypatch, _fuente_de_prueba("test_perm"))
+    config = ReporteConfig(fuente="test_perm", columnas=["salario"])
+
+    with pytest.raises(HTTPException) as error:
+        _autorizar(config, set(), False)
+    assert error.value.status_code == 403
+
+    assert _autorizar(config, {"nomina:ver"}, False)["salario"] == "t.salario"
+    assert _autorizar(config, set(), True)["salario"] == "t.salario"
+
+
+def test_permiso_se_exige_tambien_en_filtros(monkeypatch) -> None:
+    _registrar_fuente_prueba(monkeypatch, _fuente_de_prueba("test_perm"))
+    config = ReporteConfig(
+        fuente="test_perm",
+        columnas=["nombre"],
+        filtros=[{"campo": "salario", "operador": "mayor_igual", "valor": 1}],
+    )
+
+    with pytest.raises(HTTPException) as error:
+        _autorizar(config, set(), False)
+    assert error.value.status_code == 403
+
+
+def test_columnas_sensibles_marca_personal_y_confidencial(monkeypatch) -> None:
+    _registrar_fuente_prueba(monkeypatch, _fuente_de_prueba("test_sens"))
+    config = ReporteConfig(
+        fuente="test_sens", columnas=["email", "nombre", "nota"]
+    )
+
+    assert _columnas_sensibles(config) == ["email", "nota"]
+
+
+def test_agregado_rechaza_campo_sin_permiso(monkeypatch) -> None:
+    _registrar_fuente_prueba(monkeypatch, _fuente_de_prueba("test_perm"))
+    consulta = ConsultaAgregada(
+        fuente="test_perm",
+        medidas=[Medida(agregacion=Agregacion.SUMA, campo="salario")],
+    )
+
+    with pytest.raises(HTTPException) as error:
+        _autorizar_agregado(consulta, set(), False)
+    assert error.value.status_code == 403
+
+    _autorizar_agregado(consulta, {"nomina:ver"}, False)
