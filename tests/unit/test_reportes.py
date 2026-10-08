@@ -7,10 +7,13 @@ from fastapi import HTTPException
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
+from ssas.reportes.domain.catalogo import CATALOGO, Campo, TipoCampo
 from ssas.reportes.infrastructure.http.router import (
     FROM_SQL,
     SOURCES,
     TENANT_COLUMN,
+    _campo_visible,
+    _catalogo_visible,
     _document,
     _rows,
     _validate,
@@ -147,3 +150,25 @@ async def test_date_range_filter_works_for_every_report_source(
         "v0a": "2026-10-01",
         "v0b": "2026-10-31",
     }
+
+
+def test_catalogo_oculta_fuentes_sin_permiso() -> None:
+    assert _catalogo_visible(set(), False) == []
+    codigos = {fuente["codigo"] for fuente in _catalogo_visible({"vacantes:ver"}, False)}
+    assert codigos == {"vacantes"}
+
+
+def test_catalogo_de_plataforma_ve_todas_las_fuentes() -> None:
+    codigos = {fuente["codigo"] for fuente in _catalogo_visible(set(), True)}
+    assert codigos == set(CATALOGO)
+
+
+def test_campo_con_permiso_oculto_sin_autorizacion() -> None:
+    campo = Campo(
+        codigo="salario", etiqueta="Salario", sql="e.salario",
+        tipo=TipoCampo.NUMERO, permiso="nomina:ver",
+    )
+
+    assert _campo_visible(campo, set(), False) is False
+    assert _campo_visible(campo, {"nomina:ver"}, False) is True
+    assert _campo_visible(campo, set(), True) is True

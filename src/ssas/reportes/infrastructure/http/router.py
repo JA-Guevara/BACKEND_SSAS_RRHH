@@ -22,7 +22,7 @@ from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
 from ssas.reportes.application.agregador import ejecutar as ejecutar_agregado
-from ssas.reportes.domain.catalogo import CATALOGO
+from ssas.reportes.domain.catalogo import CATALOGO, Campo
 from ssas.reportes.infrastructure.http.ai_provider import (
     GeminiReportInterpreter,
     ReportInterpretationError,
@@ -44,6 +44,9 @@ from ssas.reportes.infrastructure.http.schemas_agregado import (
 from ssas.reportes.infrastructure.persistence.models.reporte import (
     ReporteDefinicionModel,
     ReporteEjecucionModel,
+)
+from ssas.roles.infrastructure.persistence.repositories.authorization_repository import (
+    SqlAlchemyAuthorizationRepository,
 )
 
 router = APIRouter(prefix="/reportes", tags=[TAG_REPORTES])
@@ -128,10 +131,48 @@ def _serialize(model: ReporteDefinicionModel) -> ReporteResponse:
     return ReporteResponse.model_validate(model, from_attributes=True)
 
 
+def _campo_visible(campo: Campo, permisos: set[str], es_plataforma: bool) -> bool:
+    return es_plataforma or campo.permiso is None or campo.permiso in permisos
+
+
+def _serializar_campo(campo: Campo) -> dict:
+    data = {
+        "codigo": campo.codigo,
+        "etiqueta": campo.etiqueta,
+        "tipo": campo.tipo.value,
+        "agrupable": campo.agrupable,
+        "agregable": campo.agregable,
+        "sensibilidad": campo.sensibilidad.value,
+    }
+    if campo.valores:
+        data["valores"] = list(campo.valores)
+    return data
+
+
+def _catalogo_visible(permisos: set[str], es_plataforma: bool) -> list[dict]:
+    fuentes = []
+    for code, fuente in CATALOGO.items():
+        if not es_plataforma and fuente.permiso not in permisos:
+            continue
+        campos = [c for c in fuente.campos.values() if _campo_visible(c, permisos, es_plataforma)]
+        if not campos:
+            continue
+        fuentes.append({
+            "codigo": code,
+            "nombre": fuente.etiqueta,
+            "etiqueta": fuente.etiqueta,
+            "descripcion": fuente.descripcion,
+            "columnas": [c.codigo for c in campos],
+            "campos": [_serializar_campo(c) for c in campos],
+        })
+    return fuentes
+
+
 @router.get("/catalogo")
-async def catalogo(_: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar"))):
-    """Lista las fuentes y columnas que pueden utilizarse sin aceptar SQL libre."""
-    return [{"codigo": code, "nombre": code.replace("_", " ").title(), "columnas": list(cols)} for code, cols in SOURCES.items()]
+async def catalogo(user: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
+    """Devuelve el catálogo ya filtrado: los campos que el usuario no puede ver no existen para él."""
+    permisos = await SqlAlchemyAuthorizationRepository(session).get_user_permission_codes(user.id, user.empresa_id)
+    return _catalogo_visible(permisos, user.es_plataforma)
 
 
 @router.post("/interpretar", response_model=InterpretarReporteResponse)
