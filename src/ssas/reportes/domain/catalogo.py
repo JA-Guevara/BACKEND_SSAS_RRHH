@@ -169,7 +169,8 @@ CATALOGO: dict[str, Fuente] = {
         descripcion="Candidatos postulados a cada vacante",
         from_sql=(
             "postulacion po JOIN vacante v ON v.id=po.vacante_id "
-            "JOIN postulante p ON p.id=po.postulante_id AND p.empresa_id=v.empresa_id"
+            "JOIN postulante p ON p.id=po.postulante_id AND p.empresa_id=v.empresa_id "
+            "LEFT JOIN empleado e ON e.id=po.empleado_id AND e.empresa_id=v.empresa_id"
         ),
         columna_tenant="v.empresa_id",
         permiso="postulaciones:ver",
@@ -215,6 +216,14 @@ CATALOGO: dict[str, Fuente] = {
                 "En banco de talentos",
                 "p.en_banco_talento",
                 TipoCampo.BOOLEANO,
+            ),
+            "dias_hasta_contratacion": _f(
+                "dias_hasta_contratacion",
+                "Días hasta contratación",
+                "EXTRACT(DAY FROM (e.fecha_ingreso - po.fecha_postulacion))",
+                TipoCampo.NUMERO,
+                agrupable=False,
+                agregable=True,
             ),
         },
     ),
