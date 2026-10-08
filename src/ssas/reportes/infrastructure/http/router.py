@@ -33,6 +33,7 @@ from ssas.reportes.infrastructure.http.schemas import (
     ActualizarReporte,
     ConteoResponse,
     CrearReporte,
+    EjecucionResponse,
     EnviarReporteRequest,
     InterpretarReporteRequest,
     InterpretarReporteResponse,
@@ -214,6 +215,14 @@ def _serialize(model: ReporteDefinicionModel) -> ReporteResponse:
     return ReporteResponse.model_validate(model, from_attributes=True)
 
 
+def _serialize_ejecucion(model: ReporteEjecucionModel) -> EjecucionResponse:
+    return EjecucionResponse.model_validate(model, from_attributes=True)
+
+
+def _error_texto(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"[:500]
+
+
 def _campo_visible(campo: Campo, permisos: set[str], es_plataforma: bool) -> bool:
     return es_plataforma or campo.permiso is None or campo.permiso in permisos
 
@@ -312,6 +321,13 @@ async def listar(empresa_id: str | None = None, user: CurrentUser = Depends(requ
     return [_serialize(item) for item in result.scalars().all()]
 
 
+@router.get("/ejecuciones", response_model=list[EjecucionResponse])
+async def ejecuciones(empresa_id: str | None = None, limite: int = Query(50, ge=1, le=200), user: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
+    """Historial de ejecuciones (exportaciones y envíos) con su estado y error."""
+    result = await session.execute(select(ReporteEjecucionModel).where(ReporteEjecucionModel.empresa_id == _empresa(user, empresa_id)).order_by(ReporteEjecucionModel.fecha_inicio.desc()).limit(limite))
+    return [_serialize_ejecucion(item) for item in result.scalars().all()]
+
+
 @router.post("", response_model=ReporteResponse, status_code=201)
 async def crear(body: CrearReporte, request: Request, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:crear", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Guarda una definición validada para reutilizar columnas, filtros y orden."""
@@ -380,9 +396,14 @@ def _document(config: ReporteConfig, rows: list[dict], formato: str) -> tuple[by
 async def exportar(formato: str, body: ReporteConfig, request: Request, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:exportar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Genera y descarga el reporte en HTML, Excel o PDF y registra la ejecución."""
     _autorizar(body, await _permisos(session, user), user.es_plataforma)
-    target = _empresa(user, empresa_id); rows = await _rows(session, target, body)
-    sensibles = _columnas_sensibles(body)
-    content, media = _document(body, rows, formato)
+    target = _empresa(user, empresa_id); sensibles = _columnas_sensibles(body)
+    try:
+        rows = await _rows(session, target, body)
+        content, media = _document(body, rows, formato)
+    except Exception as exc:
+        session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="ERROR", error=_error_texto(exc), fecha_fin=datetime.now(UTC)))
+        await session.commit()
+        raise HTTPException(500, "No se pudo generar el reporte") from exc
     session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
     await _audit(session, request, user, target, "EXPORT", "Reporte exportado", new_data={"formato": formato, "registros": len(rows), "columnas_sensibles": sensibles})
     return Response(content, media_type=media, headers={"Content-Disposition": f'attachment; filename="reporte.{formato}"'})
@@ -408,10 +429,15 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
     config = ReporteConfig(**body.model_dump(exclude={"destinatarios", "formato"})); target = _empresa(user, empresa_id)
     _autorizar(config, await _permisos(session, user), user.es_plataforma)
     sensibles = _columnas_sensibles(config)
-    rows = await _rows(session, target, config); content, media = _document(config, rows, body.formato)
-    message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
-    main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
-    await anyio.to_thread.run_sync(_enviar_correo, message)
+    try:
+        rows = await _rows(session, target, config); content, media = _document(config, rows, body.formato)
+        message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
+        main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
+        await anyio.to_thread.run_sync(_enviar_correo, message)
+    except Exception as exc:
+        session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=body.formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="ERROR", error=_error_texto(exc), fecha_fin=datetime.now(UTC)))
+        await session.commit()
+        raise HTTPException(500, "No se pudo enviar el reporte") from exc
     session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=body.formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
     await _audit(session, request, user, target, "SEND", "Reporte enviado por correo", new_data={"formato": body.formato, "destinatarios": len(body.destinatarios), "columnas_sensibles": sensibles})
     return {"message": "Reporte enviado"}

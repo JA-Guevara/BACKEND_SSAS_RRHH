@@ -66,6 +66,18 @@ class ConteoResponse(BaseModel):
     limite_del_plan: int
 
 
+class EjecucionResponse(BaseModel):
+    id: str
+    reporte_id: str | None
+    usuario_id: str
+    formato: str
+    estado: str
+    cantidad_registros: int | None
+    error: str | None
+    fecha_inicio: datetime
+    fecha_fin: datetime | None
+
+
 class InterpretarReporteRequest(BaseModel):
     texto: str = Field(min_length=3, max_length=500)
 

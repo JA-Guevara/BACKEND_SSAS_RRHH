@@ -1,5 +1,6 @@
 import inspect
 import re
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -32,6 +33,7 @@ from ssas.reportes.infrastructure.http.router import (
     _document,
     _rows,
     _rows_truncado,
+    _serialize_ejecucion,
     _validate,
 )
 from ssas.reportes.infrastructure.http.schemas import ReporteConfig
@@ -40,6 +42,7 @@ from ssas.reportes.infrastructure.http.schemas_agregado import (
     ConsultaAgregada,
     Medida,
 )
+from ssas.reportes.infrastructure.persistence.models.reporte import ReporteEjecucionModel
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
 
 
@@ -374,3 +377,47 @@ def test_el_envio_se_delega_a_un_hilo() -> None:
 
     assert "anyio.to_thread.run_sync(_enviar_correo" in source
     assert "with smtplib.SMTP" not in source
+
+
+def test_ejecucion_serializa_estado_y_error() -> None:
+    item = ReporteEjecucionModel(
+        id="e1",
+        empresa_id="emp1",
+        usuario_id="u1",
+        formato="xlsx",
+        estado="ERROR",
+        error="RuntimeError: boom",
+        filtros_aplicados=[],
+        columnas_sensibles=[],
+        fecha_inicio=datetime.now(UTC),
+        fecha_fin=None,
+    )
+
+    data = _serialize_ejecucion(item)
+
+    assert data.estado == "ERROR"
+    assert data.error == "RuntimeError: boom"
+    assert data.cantidad_registros is None
+
+
+@pytest.mark.asyncio
+async def test_exportar_fallido_registra_estado_error(monkeypatch) -> None:
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value=set()))
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("db caida")
+
+    monkeypatch.setattr(router_module, "_rows", boom)
+    session = MagicMock()
+    session.commit = AsyncMock()
+    user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
+    body = ReporteConfig(fuente="usuarios", columnas=["nombres"])
+
+    with pytest.raises(HTTPException) as error:
+        await router_module.exportar("xlsx", body, None, None, user, session)
+
+    assert error.value.status_code == 500
+    ejecucion = session.add.call_args.args[0]
+    assert ejecucion.estado == "ERROR"
+    assert ejecucion.error.startswith("RuntimeError: db caida")
+    session.commit.assert_awaited_once()
