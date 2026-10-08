@@ -177,6 +177,7 @@ async def login_user(
             await _record_failed_login(user, http_request)
         _raise_http_auth_error(exc)
     payload = token_service.decode_token(result["access_token"], expected_type="access")
+    tid = payload.get("tid")
     try:
         await _events(session).login_success(
             empresa_id=str(tid) if tid is not None else None,
