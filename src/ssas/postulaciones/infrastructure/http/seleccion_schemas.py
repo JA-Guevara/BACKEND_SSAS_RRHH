@@ -190,3 +190,13 @@ class PostulacionOpcion(BaseModel):
 class OpcionesResponse(BaseModel):
     entrevistadores: list[EntrevistadorOpcion]
     postulaciones: list[PostulacionOpcion]
+
+
+class AsociacionResponse(BaseModel):
+    """Resultado de asociar un postulante del banco de talentos a una vacante (CU-18)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    vacante_id: str
+    estado: str
+
