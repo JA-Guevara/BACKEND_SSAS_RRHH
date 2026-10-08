@@ -125,7 +125,7 @@ async def main() -> int:
             print(f"Tablas sobrantes                       : {', '.join(sorted(sobrantes)) if sobrantes else '(ninguna)'}")
 
             if not faltantes:
-                print(f"VEREDICTO: compatible → se puede sellar con 'alembic stamp {CONSOLIDATED_REVISION}'")
+                print(f"VEREDICTO: compatible -> se puede sellar con 'alembic stamp {CONSOLIDATED_REVISION}'")
                 return 0
             else:
                 print("VEREDICTO: incompatible → requiere reconstrucción o migración manual")
@@ -138,4 +138,7 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        # psycopg y asyncpg no pueden usar el ProactorEventLoop de Windows.
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     sys.exit(asyncio.run(main()))
