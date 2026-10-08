@@ -1,15 +1,21 @@
+import csv
 import smtplib
 from datetime import UTC, datetime
+from decimal import Decimal
 from email.message import EmailMessage
 from html import escape
-from io import BytesIO
+from io import BytesIO, StringIO
 
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from openpyxl import Workbook
+from openpyxl.styles import Font
 from pydantic import ValidationError
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfgen.canvas import Canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +28,7 @@ from ssas.core.api.openapi import TAG_REPORTES
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
+from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 from ssas.infrastructure.database.session import get_session
 from ssas.reportes.application.agregador import (
     aplicar_statement_timeout,
@@ -35,9 +42,11 @@ from ssas.reportes.application.cuotas import (
     cuota_de_empresa,
     exportaciones_de_hoy,
     interpretaciones_ia_de_hoy,
+    tarjetas_fijadas_de_usuario,
     verificar_exportaciones_dia,
     verificar_filas,
     verificar_interpretaciones_ia,
+    verificar_tarjetas_fijadas,
 )
 from ssas.reportes.domain.catalogo import CATALOGO, Campo, Sensibilidad, campo_de
 from ssas.reportes.infrastructure.http.ai_provider import (
@@ -50,19 +59,27 @@ from ssas.reportes.infrastructure.http.schemas import (
     CrearReporte,
     EjecucionResponse,
     EnviarReporteRequest,
+    FiltroReporte,
     InterpretarReporteRequest,
     InterpretarReporteResponse,
+    OrdenReporte,
     ReporteConfig,
     ReporteResponse,
     VistaPrevia,
 )
 from ssas.reportes.infrastructure.http.schemas_agregado import (
+    ActualizarWidgetPanel,
+    Agregacion,
     ConsultaAgregada,
+    CrearWidgetPanel,
+    Medida,
     RespuestaAgregada,
+    WidgetPanelResponse,
 )
 from ssas.reportes.infrastructure.persistence.models.reporte import (
     ReporteDefinicionModel,
     ReporteEjecucionModel,
+    WidgetPanelModel,
 )
 from ssas.roles.infrastructure.persistence.repositories.authorization_repository import (
     SqlAlchemyAuthorizationRepository,
@@ -242,6 +259,12 @@ def _error_texto(exc: Exception) -> str:
     return f"{type(exc).__name__}: {exc}"[:500]
 
 
+async def _nombre_empresa(session: AsyncSession, empresa_id: str) -> str | None:
+    return await session.scalar(
+        select(EmpresaModel.razon_social).where(EmpresaModel.id == empresa_id)
+    )
+
+
 def _campo_visible(campo: Campo, permisos: set[str], es_plataforma: bool) -> bool:
     return es_plataforma or campo.permiso is None or campo.permiso in permisos
 
@@ -403,45 +426,606 @@ async def agregado(body: ConsultaAgregada, empresa_id: str | None = None, user: 
     return respuesta
 
 
-def _document(config: ReporteConfig, rows: list[dict], formato: str) -> tuple[bytes, str]:
+def _etiquetas_columnas(config: ReporteConfig) -> list[str]:
+    etiquetas = []
+    for codigo in config.columnas:
+        campo = campo_de(config.fuente, codigo)
+        etiquetas.append(campo.etiqueta if campo else codigo)
+    return etiquetas
+
+
+def _valor_hoja(valor):
+    if isinstance(valor, Decimal):
+        return float(valor)
+    if isinstance(valor, datetime) and valor.tzinfo is not None:
+        return valor.astimezone(UTC).replace(tzinfo=None)
+    return valor
+
+
+def _resumen_filtros(config: ReporteConfig) -> str:
+    if not config.filtros:
+        return "Sin filtros"
+    partes = []
+    for filtro in config.filtros:
+        campo = campo_de(config.fuente, filtro.campo)
+        etiqueta = campo.etiqueta if campo else filtro.campo
+        valor = filtro.valor
+        if isinstance(valor, list):
+            valor = " y ".join(str(parte) for parte in valor)
+        partes.append(f"{etiqueta} {filtro.operador.replace('_', ' ')} {valor}")
+    return "; ".join(partes)
+
+
+def _xlsx(config: ReporteConfig, rows: list[dict], empresa: str | None, generado_en: datetime | None) -> bytes:
+    book = Workbook()
+    hoja = book.active
+    hoja.title = "Datos"
+    hoja.append(_etiquetas_columnas(config))
+    for celda in hoja[1]:
+        celda.font = Font(bold=True)
+    hoja.freeze_panes = "A2"
+    for row in rows:
+        hoja.append([_valor_hoja(row.get(codigo)) for codigo in config.columnas])
+    if rows:
+        hoja.auto_filter.ref = hoja.dimensions
+    parametros = book.create_sheet("Parámetros")
+    resumen = [
+        ("Empresa", empresa or ""),
+        ("Fuente", config.fuente),
+        ("Columnas", ", ".join(_etiquetas_columnas(config))),
+        ("Filtros", _resumen_filtros(config)),
+        ("Orden", ", ".join(f"{o.campo} {o.direccion}" for o in config.orden) or "Sin orden"),
+        ("Generado en", (generado_en or datetime.now(UTC)).isoformat()),
+        ("Registros", len(rows)),
+    ]
+    for etiqueta, valor in resumen:
+        parametros.append([etiqueta, valor])
+    parametros.column_dimensions["A"].width = 18
+    parametros.column_dimensions["B"].width = 90
+    output = BytesIO()
+    book.save(output)
+    return output.getvalue()
+
+
+def _csv(config: ReporteConfig, rows: list[dict]) -> bytes:
+    buffer = StringIO()
+    writer = csv.writer(buffer, quoting=csv.QUOTE_MINIMAL)
+    writer.writerow(_etiquetas_columnas(config))
+    for row in rows:
+        fila = []
+        for col in config.columnas:
+            val = row.get(col)
+            if val is None:
+                fila.append("")
+            elif isinstance(val, bool):
+                fila.append("Sí" if val else "No")
+            elif isinstance(val, (datetime, Decimal)):
+                fila.append(str(_valor_hoja(val)))
+            else:
+                fila.append(str(val))
+        writer.writerow(fila)
+    return b"\xef\xbb\xbf" + buffer.getvalue().encode("utf-8")
+
+
+class NumberedCanvas(Canvas):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._saved_page_states = []
+
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        num_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self.draw_page_number(num_pages)
+            Canvas.showPage(self)
+        Canvas.save(self)
+
+    def draw_page_number(self, page_count):
+        self.saveState()
+        self.setFont("Helvetica", 8)
+        self.setFillColor(colors.HexColor("#64748b"))
+        page_w, _ = landscape(A4)
+        self.drawString(36, 20, "SSAS RRHH · Módulo de Reportes")
+        self.drawRightString(page_w - 36, 20, f"Página {self._pageNumber} de {page_count}")
+        self.restoreState()
+
+
+def _pdf(
+    config: ReporteConfig,
+    rows: list[dict],
+    empresa: str | None,
+    generado_en: datetime | None,
+) -> bytes:
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=landscape(A4),
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+
+    fuente_obj = CATALOGO.get(config.fuente)
+    titulo_fuente = fuente_obj.etiqueta if fuente_obj else config.fuente.capitalize()
+    elements = []
+
+    title_style = ParagraphStyle(
+        "PdfTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=14,
+        leading=17,
+        textColor=colors.HexColor("#0f172a"),
+    )
+    meta_style = ParagraphStyle(
+        "PdfMeta",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor("#475569"),
+    )
+    cell_header_style = ParagraphStyle(
+        "CellHeader",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        leading=10,
+        textColor=colors.white,
+    )
+    cell_style = ParagraphStyle(
+        "CellData",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=7.5,
+        leading=9.5,
+        textColor=colors.HexColor("#1e293b"),
+    )
+
+    fecha_str = (generado_en or datetime.now(UTC)).strftime("%d/%m/%Y %H:%M UTC")
+    empresa_str = f"Empresa: {empresa} · " if empresa else ""
+    meta_line = f"{empresa_str}Fecha: {fecha_str} · Total registros: {len(rows)}"
+    filtros_line = f"Filtros: {_resumen_filtros(config)}"
+
+    elements.append(Paragraph(f"Reporte de {titulo_fuente}", title_style))
+    elements.append(Spacer(1, 4))
+    elements.append(Paragraph(meta_line, meta_style))
+    elements.append(Paragraph(filtros_line, meta_style))
+    elements.append(Spacer(1, 10))
+
+    headers = [
+        Paragraph(escape(etiqueta), cell_header_style)
+        for etiqueta in _etiquetas_columnas(config)
+    ]
+    table_data = [headers]
+
+    for row in rows:
+        fila_celdas = []
+        for col in config.columnas:
+            val = row.get(col)
+            if val is None:
+                txt = "—"
+            elif isinstance(val, bool):
+                txt = "Sí" if val else "No"
+            elif isinstance(val, (datetime, Decimal)):
+                txt = str(_valor_hoja(val))
+            else:
+                txt = str(val)
+            fila_celdas.append(Paragraph(escape(txt), cell_style))
+        table_data.append(fila_celdas)
+
+    table = Table(table_data, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f8259")),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.HexColor("#ffffff"), colors.HexColor("#f8fafc")],
+                ),
+            ]
+        )
+    )
+    elements.append(table)
+    doc.build(elements, canvasmaker=NumberedCanvas)
+    return output.getvalue()
+
+
+def _document(
+    config: ReporteConfig,
+    rows: list[dict],
+    formato: str,
+    *,
+    empresa: str | None = None,
+    generado_en: datetime | None = None,
+) -> tuple[bytes, str]:
+    if formato == "csv":
+        return _csv(config, rows), "text/csv; charset=utf-8"
+    if formato == "xlsx":
+        return _xlsx(config, rows, empresa, generado_en), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if formato == "pdf":
+        return _pdf(config, rows, empresa, generado_en), "application/pdf"
     if formato == "html":
         head = "".join(f"<th>{escape(c)}</th>" for c in config.columnas)
         body = "".join("<tr>" + "".join(f"<td>{escape(str(row.get(c, '')))}</td>" for c in config.columnas) + "</tr>" for row in rows)
         return f"<!doctype html><meta charset='utf-8'><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>".encode(), "text/html"
-    if formato == "xlsx":
-        book = Workbook(); sheet = book.active; sheet.append(config.columnas)
-        for row in rows: sheet.append([row.get(c) for c in config.columnas])
-        output = BytesIO(); book.save(output)
-        return output.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    if formato == "pdf":
-        output = BytesIO(); canvas = Canvas(output, pagesize=landscape(A4)); y = 560
-        canvas.setFont("Helvetica-Bold", 12); canvas.drawString(30, y, " | ".join(config.columnas)); y -= 20
-        canvas.setFont("Helvetica", 8)
-        for row in rows:
-            if y < 30: canvas.showPage(); y = 560; canvas.setFont("Helvetica", 8)
-            canvas.drawString(30, y, " | ".join(str(row.get(c, ""))[:35] for c in config.columnas)); y -= 13
-        canvas.save(); return output.getvalue(), "application/pdf"
-    raise HTTPException(422, "Formato no permitido")
+    raise HTTPException(422, f"Formato '{formato}' no permitido")
 
 
 @router.post("/exportar/{formato}")
-async def exportar(formato: str, body: ReporteConfig, request: Request, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:exportar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
-    """Genera y descarga el reporte en HTML, Excel o PDF y registra la ejecución."""
+async def exportar(
+    formato: str,
+    body: ReporteConfig,
+    request: Request,
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission("reportes:exportar", "platform:reportes:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Genera y descarga el reporte en XLSX, CSV o PDF y registra la ejecución."""
+    if formato not in ("xlsx", "csv", "pdf"):
+        raise HTTPException(
+            422,
+            f"Formato '{formato}' no permitido. Los formatos soportados son xlsx, csv y pdf.",
+        )
     _autorizar(body, await _permisos(session, user), user.es_plataforma)
-    target = _empresa(user, empresa_id); sensibles = _columnas_sensibles(body)
+    target = _empresa(user, empresa_id)
+    sensibles = _columnas_sensibles(body)
     cuota = await cuota_de_empresa(session, target)
     verificar_filas(cuota, await _contar(session, target, body))
     verificar_exportaciones_dia(cuota, await exportaciones_de_hoy(session, target))
+    empresa = await _nombre_empresa(session, target)
     try:
         rows = await _rows(session, target, body, cuota.filas_exportacion)
-        content, media = _document(body, rows, formato)
+        content, media = _document(body, rows, formato, empresa=empresa)
     except Exception as exc:
-        session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="ERROR", error=_error_texto(exc), fecha_fin=datetime.now(UTC)))
+        session.add(
+            ReporteEjecucionModel(
+                empresa_id=target,
+                usuario_id=user.id,
+                formato=formato,
+                filtros_aplicados=[f.model_dump() for f in body.filtros],
+                columnas_sensibles=sensibles,
+                estado="ERROR",
+                error=_error_texto(exc),
+                fecha_fin=datetime.now(UTC),
+            )
+        )
         await session.commit()
         raise HTTPException(500, "No se pudo generar el reporte") from exc
-    session.add(ReporteEjecucionModel(empresa_id=target, usuario_id=user.id, formato=formato, filtros_aplicados=[f.model_dump() for f in body.filtros], columnas_sensibles=sensibles, estado="COMPLETADO", cantidad_registros=len(rows), fecha_fin=datetime.now(UTC)))
-    await _audit(session, request, user, target, "EXPORT", "Reporte exportado", new_data={"formato": formato, "registros": len(rows), "columnas_sensibles": sensibles})
-    return Response(content, media_type=media, headers={"Content-Disposition": f'attachment; filename="reporte.{formato}"'})
+    session.add(
+        ReporteEjecucionModel(
+            empresa_id=target,
+            usuario_id=user.id,
+            formato=formato,
+            filtros_aplicados=[f.model_dump() for f in body.filtros],
+            columnas_sensibles=sensibles,
+            estado="COMPLETADO",
+            cantidad_registros=len(rows),
+            fecha_fin=datetime.now(UTC),
+        )
+    )
+    await _audit(
+        session,
+        request,
+        user,
+        target,
+        "EXPORT",
+        "Reporte exportado",
+        new_data={"formato": formato, "registros": len(rows), "columnas_sensibles": sensibles},
+    )
+    return Response(
+        content,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="reporte.{formato}"'},
+    )
+
+
+def _widgets_por_defecto(permisos: set[str], es_plataforma: bool) -> list[WidgetPanelResponse]:
+    ahora = datetime.now(UTC)
+    candidatos = [
+        WidgetPanelResponse(
+            id="default-kpi-postulaciones",
+            empresa_id="",
+            usuario_id="",
+            titulo="Postulaciones",
+            tipo="kpi",
+            consulta=ConsultaAgregada(
+                fuente="postulaciones",
+                medidas=[Medida(agregacion=Agregacion.CONTEO, etiqueta="Postulaciones")],
+            ),
+            posicion=0,
+            ancho=1,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-kpi-conversion",
+            empresa_id="",
+            usuario_id="",
+            titulo="Tasa de conversión",
+            tipo="kpi",
+            consulta=ConsultaAgregada(
+                fuente="postulaciones",
+                medidas=[Medida(agregacion=Agregacion.CONTEO)],
+                agrupar_por=["estado"],
+            ),
+            posicion=1,
+            ancho=1,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-kpi-dias-contratacion",
+            empresa_id="",
+            usuario_id="",
+            titulo="Días para contratar",
+            tipo="kpi",
+            consulta=ConsultaAgregada(
+                fuente="postulaciones",
+                medidas=[
+                    Medida(
+                        agregacion=Agregacion.PROMEDIO,
+                        campo="dias_hasta_contratacion",
+                        etiqueta="Días",
+                    )
+                ],
+            ),
+            posicion=2,
+            ancho=1,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-kpi-vacantes",
+            empresa_id="",
+            usuario_id="",
+            titulo="Vacantes activas",
+            tipo="kpi",
+            consulta=ConsultaAgregada(
+                fuente="vacantes",
+                medidas=[Medida(agregacion=Agregacion.CONTEO)],
+                filtros=[
+                    FiltroReporte(campo="estado", operador="igual", valor="PUBLICADA")
+                ],
+            ),
+            posicion=3,
+            ancho=1,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-embudo",
+            empresa_id="",
+            usuario_id="",
+            titulo="Embudo de selección",
+            tipo="embudo",
+            consulta=ConsultaAgregada(
+                fuente="postulaciones",
+                medidas=[Medida(agregacion=Agregacion.CONTEO)],
+                agrupar_por=["etapa"],
+                orden=[OrdenReporte(campo="etapa_orden", direccion="asc")],
+            ),
+            posicion=4,
+            ancho=2,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-linea-semanal",
+            empresa_id="",
+            usuario_id="",
+            titulo="Postulaciones por semana",
+            tipo="linea",
+            consulta=ConsultaAgregada(
+                fuente="postulaciones",
+                medidas=[Medida(agregacion=Agregacion.CONTEO)],
+                agrupar_por=["fecha_postulacion"],
+                granularidad="semana",
+                limite=26,
+            ),
+            posicion=5,
+            ancho=2,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-vacantes-estado",
+            empresa_id="",
+            usuario_id="",
+            titulo="Vacantes por estado",
+            tipo="barra_apilada",
+            consulta=ConsultaAgregada(
+                fuente="vacantes",
+                medidas=[Medida(agregacion=Agregacion.CONTEO)],
+                agrupar_por=["estado"],
+            ),
+            posicion=6,
+            ancho=2,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+        WidgetPanelResponse(
+            id="default-afinidad",
+            empresa_id="",
+            usuario_id="",
+            titulo="Afinidad media por vacante",
+            tipo="barra",
+            consulta=ConsultaAgregada(
+                fuente="analisis_cv",
+                medidas=[
+                    Medida(
+                        agregacion=Agregacion.PROMEDIO,
+                        campo="puntaje_afinidad",
+                    )
+                ],
+                agrupar_por=["vacante"],
+                orden=[OrdenReporte(campo="puntaje_afinidad", direccion="desc")],
+                limite=8,
+            ),
+            posicion=7,
+            ancho=2,
+            activo=True,
+            fecha_registro=ahora,
+        ),
+    ]
+    visibles = []
+    for item in candidatos:
+        fuente_obj = CATALOGO.get(item.consulta.fuente)
+        if fuente_obj and (es_plataforma or fuente_obj.permiso in permisos):
+            visibles.append(item)
+    return visibles
+
+
+def _serialize_widget(item: WidgetPanelModel) -> WidgetPanelResponse:
+    return WidgetPanelResponse(
+        id=item.id,
+        empresa_id=item.empresa_id,
+        usuario_id=item.usuario_id,
+        titulo=item.titulo,
+        tipo=item.tipo,  # type: ignore
+        consulta=ConsultaAgregada(**item.consulta),
+        posicion=item.posicion,
+        ancho=item.ancho,
+        activo=item.activo,
+        fecha_registro=item.fecha_registro,
+    )
+
+
+@router.get("/panel", response_model=list[WidgetPanelResponse])
+async def obtener_panel(
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Lista las tarjetas fijadas en el panel del usuario o devuelve las tarjetas predeterminadas."""
+    target = _empresa(user, empresa_id)
+    permisos = await _permisos(session, user)
+    stmt = (
+        select(WidgetPanelModel)
+        .where(
+            WidgetPanelModel.empresa_id == target,
+            WidgetPanelModel.usuario_id == user.id,
+            WidgetPanelModel.activo.is_(True),
+        )
+        .order_by(WidgetPanelModel.posicion.asc(), WidgetPanelModel.fecha_registro.asc())
+    )
+    result = await session.execute(stmt)
+    guardados = result.scalars().all()
+    if guardados:
+        items = []
+        for item in guardados:
+            fuente_obj = CATALOGO.get(item.consulta.get("fuente"))
+            if fuente_obj and (user.es_plataforma or fuente_obj.permiso in permisos):
+                items.append(_serialize_widget(item))
+        return items
+    return _widgets_por_defecto(permisos, user.es_plataforma)
+
+
+@router.post("/panel", response_model=WidgetPanelResponse, status_code=201)
+async def fijar_tarjeta(
+    body: CrearWidgetPanel,
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission("reportes:crear", "platform:reportes:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Fija una consulta agregada como tarjeta en el panel del usuario validando la cuota del plan."""
+    target = _empresa(user, empresa_id)
+    permisos = await _permisos(session, user)
+    _autorizar_agregado(body.consulta, permisos, user.es_plataforma)
+
+    cuota = await cuota_de_empresa(session, target)
+    existentes = await tarjetas_fijadas_de_usuario(session, target, user.id)
+    verificar_tarjetas_fijadas(cuota, existentes)
+
+    model = WidgetPanelModel(
+        empresa_id=target,
+        usuario_id=user.id,
+        titulo=body.titulo,
+        tipo=body.tipo,
+        consulta=body.consulta.model_dump(),
+        posicion=body.posicion or existentes,
+        ancho=body.ancho,
+        activo=True,
+    )
+    session.add(model)
+    await session.commit()
+    await session.refresh(model)
+    return _serialize_widget(model)
+
+
+@router.patch("/panel/{widget_id}", response_model=WidgetPanelResponse)
+async def actualizar_tarjeta(
+    widget_id: str,
+    body: ActualizarWidgetPanel,
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission("reportes:editar", "platform:reportes:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Actualiza una tarjeta del panel (título, tipo, ancho, orden o consulta)."""
+    target = _empresa(user, empresa_id)
+    stmt = select(WidgetPanelModel).where(
+        WidgetPanelModel.id == widget_id,
+        WidgetPanelModel.empresa_id == target,
+    )
+    model = (await session.execute(stmt)).scalar_one_or_none()
+    if not model:
+        raise HTTPException(404, "Tarjeta no encontrada")
+
+    permisos = await _permisos(session, user)
+    if body.consulta is not None:
+        _autorizar_agregado(body.consulta, permisos, user.es_plataforma)
+        model.consulta = body.consulta.model_dump()
+    if body.titulo is not None:
+        model.titulo = body.titulo
+    if body.tipo is not None:
+        model.tipo = body.tipo
+    if body.posicion is not None:
+        model.posicion = body.posicion
+    if body.ancho is not None:
+        model.ancho = body.ancho
+    if body.activo is not None:
+        model.activo = body.activo
+
+    await session.commit()
+    await session.refresh(model)
+    return _serialize_widget(model)
+
+
+@router.delete("/panel/{widget_id}", status_code=204)
+async def eliminar_tarjeta(
+    widget_id: str,
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission("reportes:editar", "platform:reportes:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Elimina una tarjeta del panel del inquilino."""
+    target = _empresa(user, empresa_id)
+    stmt = select(WidgetPanelModel).where(
+        WidgetPanelModel.id == widget_id,
+        WidgetPanelModel.empresa_id == target,
+    )
+    model = (await session.execute(stmt)).scalar_one_or_none()
+    if not model:
+        raise HTTPException(404, "Tarjeta no encontrada")
+    await session.delete(model)
+    await session.commit()
+    return Response(status_code=204)
+
 
 
 def _enviar_correo(message: EmailMessage) -> None:
@@ -467,8 +1051,9 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
     cuota = await cuota_de_empresa(session, target)
     verificar_filas(cuota, await _contar(session, target, config))
     verificar_exportaciones_dia(cuota, await exportaciones_de_hoy(session, target))
+    empresa = await _nombre_empresa(session, target)
     try:
-        rows = await _rows(session, target, config, cuota.filas_exportacion); content, media = _document(config, rows, body.formato)
+        rows = await _rows(session, target, config, cuota.filas_exportacion); content, media = _document(config, rows, body.formato, empresa=empresa)
         message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
         main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
         await anyio.to_thread.run_sync(_enviar_correo, message)

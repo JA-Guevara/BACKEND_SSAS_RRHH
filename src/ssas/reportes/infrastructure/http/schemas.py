@@ -89,4 +89,5 @@ class InterpretarReporteResponse(BaseModel):
 
 class EnviarReporteRequest(ReporteConfig):
     destinatarios: list[str] = Field(min_length=1, max_length=10)
-    formato: Literal["xlsx", "html", "pdf"]
+    formato: Literal["xlsx", "csv", "html", "pdf"]
+

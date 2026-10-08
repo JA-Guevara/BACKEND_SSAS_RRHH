@@ -170,7 +170,8 @@ CATALOGO: dict[str, Fuente] = {
         from_sql=(
             "postulacion po JOIN vacante v ON v.id=po.vacante_id "
             "JOIN postulante p ON p.id=po.postulante_id AND p.empresa_id=v.empresa_id "
-            "LEFT JOIN empleado e ON e.id=po.empleado_id AND e.empresa_id=v.empresa_id"
+            "LEFT JOIN empleado e ON e.id=po.empleado_id AND e.empresa_id=v.empresa_id "
+            "LEFT JOIN etapa_reclutamiento er ON er.id=po.etapa_id AND er.empresa_id=v.empresa_id"
         ),
         columna_tenant="v.empresa_id",
         permiso="postulaciones:ver",
@@ -189,6 +190,14 @@ CATALOGO: dict[str, Fuente] = {
                 sensibilidad=Sensibilidad.PERSONAL,
             ),
             "vacante": _f("vacante", "Vacante", "v.titulo", TipoCampo.TEXTO),
+            "etapa": _f("etapa", "Etapa", "er.nombre", TipoCampo.TEXTO),
+            "etapa_orden": _f(
+                "etapa_orden",
+                "Orden de etapa",
+                "er.orden",
+                TipoCampo.NUMERO,
+                agregable=True,
+            ),
             "estado": _f(
                 "estado",
                 "Estado",

@@ -1,12 +1,15 @@
 import inspect
 import re
 from datetime import UTC, datetime
+from decimal import Decimal
 from email.message import EmailMessage
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from openpyxl import load_workbook
 
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
@@ -69,7 +72,7 @@ def test_report_catalog_rejects_unknown_columns() -> None:
 
 @pytest.mark.parametrize(
     ("format", "signature"),
-    [("html", b"<!doctype html>"), ("xlsx", b"PK"), ("pdf", b"%PDF")],
+    [("html", b"<!doctype html>"), ("xlsx", b"PK"), ("pdf", b"%PDF"), ("csv", b"\xef\xbb\xbf")],
 )
 def test_exports_create_real_documents(format: str, signature: bytes) -> None:
     config = ReporteConfig(fuente="usuarios", columnas=["nombres", "email"])
@@ -80,6 +83,40 @@ def test_exports_create_real_documents(format: str, signature: bytes) -> None:
 
     assert content.startswith(signature)
     assert media_type
+
+
+
+def test_xlsx_tiene_encabezado_inmovilizado_y_hoja_de_parametros() -> None:
+    config = ReporteConfig(fuente="usuarios", columnas=["nombres", "email"])
+
+    content, _ = _document(
+        config,
+        [{"nombres": "Ana", "email": "ana@example.com"}],
+        "xlsx",
+        empresa="ACME",
+    )
+
+    book = load_workbook(BytesIO(content))
+    assert book["Datos"].freeze_panes == "A2"
+    assert "Parámetros" in book.sheetnames
+    resumen = {fila[0].value: fila[1].value for fila in book["Parámetros"].iter_rows()}
+    assert resumen["Empresa"] == "ACME"
+    assert resumen["Registros"] == 1
+
+
+def test_xlsx_convierte_decimales_y_fechas_con_zona() -> None:
+    config = ReporteConfig(fuente="usuarios", columnas=["nombres", "email"])
+    fila = {
+        "nombres": Decimal("10.50"),
+        "email": datetime(2026, 10, 8, 12, 0, tzinfo=UTC),
+    }
+
+    content, _ = _document(config, [fila], "xlsx")
+
+    book = load_workbook(BytesIO(content))
+    hoja = book["Datos"]
+    assert isinstance(hoja["A2"].value, float)
+    assert hoja["B2"].value.tzinfo is None
 
 
 @pytest.mark.asyncio
@@ -569,3 +606,87 @@ async def test_statement_timeout_se_aplica_antes_de_consultar() -> None:
     sentencias = [str(call.args[0]) for call in session.execute.await_args_list]
     assert sentencias[0] == "SET LOCAL statement_timeout = '15s'"
     assert "SELECT" in sentencias[1]
+
+
+def test_csv_tiene_bom_y_etiquetas_en_espanol() -> None:
+    config = ReporteConfig(fuente="usuarios", columnas=["nombres", "email"])
+    fila = {"nombres": "José Pérez", "email": "jose@example.com"}
+
+    content, media_type = _document(config, [fila], "csv")
+
+    assert content.startswith(b"\xef\xbb\xbf")
+    assert media_type == "text/csv; charset=utf-8"
+    texto = content.decode("utf-8-sig")
+    assert "Nombres,Correo" in texto
+    assert "José Pérez,jose@example.com" in texto
+
+
+def test_pdf_platypus_genera_documento_valido_con_metadatos() -> None:
+    config = ReporteConfig(fuente="postulaciones", columnas=["postulante", "estado"])
+    fila = {"postulante": "Carlos Gómez", "estado": "ACTIVA"}
+
+    content, media_type = _document(
+        config,
+        [fila],
+        "pdf",
+        empresa="Empresa Demo",
+        generado_en=datetime(2026, 10, 8, 15, 0, tzinfo=UTC),
+    )
+
+    assert content.startswith(b"%PDF")
+    assert media_type == "application/pdf"
+    assert len(content) > 1000
+
+
+@pytest.mark.asyncio
+async def test_exportar_rechaza_formato_html(monkeypatch) -> None:
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value=set()))
+    session = MagicMock()
+    user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
+    request = MagicMock()
+    config = ReporteConfig(fuente="usuarios", columnas=["nombres"])
+
+    with pytest.raises(HTTPException) as error:
+        await router_module.exportar("html", config, request, None, user, session)
+
+    assert error.value.status_code == 422
+    assert "html" in error.value.detail
+
+
+@pytest.mark.asyncio
+async def test_panel_devuelve_widgets_por_defecto_si_no_hay_guardados(monkeypatch) -> None:
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value={"postulaciones:ver", "vacantes:ver", "analisis_cv:ver"}))
+    session = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
+
+    widgets = await router_module.obtener_panel(None, user, session)
+
+    assert len(widgets) >= 6
+    titulos = [w.titulo for w in widgets]
+    assert "Postulaciones" in titulos
+    assert "Embudo de selección" in titulos
+    assert "Postulaciones por semana" in titulos
+
+
+@pytest.mark.asyncio
+async def test_panel_fijar_tarjeta_excede_cuota_es_429(monkeypatch) -> None:
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value={"postulaciones:ver"}))
+    monkeypatch.setattr(router_module, "tarjetas_fijadas_de_usuario", AsyncMock(return_value=4))
+    session = MagicMock()
+    session.scalar = AsyncMock(return_value=None)  # Plan básico -> 4 tarjetas max
+    user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
+    body = router_module.CrearWidgetPanel(
+        titulo="Nueva tarjeta",
+        tipo="kpi",
+        consulta=ConsultaAgregada(fuente="postulaciones", medidas=[{"agregacion": "conteo"}]),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await router_module.fijar_tarjeta(body, None, user, session)
+
+    assert error.value.status_code == 429
+    assert "tarjetas" in error.value.detail
+

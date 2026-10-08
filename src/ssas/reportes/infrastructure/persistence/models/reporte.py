@@ -51,3 +51,22 @@ class ReporteEjecucionModel(Base):
     fecha_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     fecha_fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class WidgetPanelModel(Base):
+    __tablename__ = "widget_panel"
+    __table_args__ = (
+        Index("idx_widget_panel_empresa", "empresa_id", "usuario_id", "posicion"),
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid())
+    empresa_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False, index=True)
+    usuario_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False, index=True)
+    titulo: Mapped[str] = mapped_column(String(120), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(24), nullable=False)
+    consulta: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    posicion: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ancho: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+

@@ -20,10 +20,14 @@ from ssas.empresas.infrastructure.persistence.models.suscripcion import (
     PlanSuscripcionModel,
     SuscripcionModel,
 )
-from ssas.reportes.infrastructure.persistence.models.reporte import ReporteEjecucionModel
+from ssas.reportes.infrastructure.persistence.models.reporte import (
+    ReporteEjecucionModel,
+    WidgetPanelModel,
+)
 
-FORMATOS_EXPORTACION = ("xlsx", "html", "pdf")
+FORMATOS_EXPORTACION = ("xlsx", "csv", "html", "pdf")
 FORMATO_IA = "ia"
+
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,21 @@ async def interpretaciones_ia_de_hoy(session: AsyncSession, empresa_id: str) -> 
     return await _conteo_hoy(session, empresa_id, (FORMATO_IA,))
 
 
+async def tarjetas_fijadas_de_usuario(
+    session: AsyncSession, empresa_id: str, usuario_id: str
+) -> int:
+    total = await session.scalar(
+        select(func.count())
+        .select_from(WidgetPanelModel)
+        .where(
+            WidgetPanelModel.empresa_id == empresa_id,
+            WidgetPanelModel.usuario_id == usuario_id,
+            WidgetPanelModel.activo.is_(True),
+        )
+    )
+    return int(total or 0)
+
+
 def verificar_filas(cuota: Cuota, filas: int) -> None:
     if filas > cuota.filas_exportacion:
         raise HTTPException(
@@ -122,6 +141,15 @@ def verificar_exportaciones_dia(cuota: Cuota, hechas: int) -> None:
             429,
             f"El plan {cuota.etiqueta} permite {cuota.exportaciones_dia} exportaciones "
             "por día y ya alcanzaste el límite. Mejora tu plan para exportar más.",
+        )
+
+
+def verificar_tarjetas_fijadas(cuota: Cuota, fijadas: int) -> None:
+    if fijadas >= cuota.tarjetas_fijadas:
+        raise HTTPException(
+            429,
+            f"El plan {cuota.etiqueta} permite hasta {cuota.tarjetas_fijadas} tarjetas "
+            "fijadas en el panel y ya alcanzaste el límite. Mejora tu plan para fijar más.",
         )
 
 

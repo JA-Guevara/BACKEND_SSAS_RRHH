@@ -52,3 +52,33 @@ class RespuestaAgregada(BaseModel):
     truncado: bool
     generado_en: datetime
     milisegundos: int
+
+
+class CrearWidgetPanel(BaseModel):
+    titulo: str = Field(min_length=1, max_length=120)
+    tipo: Literal["kpi", "linea", "barra", "barra_apilada", "embudo", "tabla"]
+    consulta: ConsultaAgregada
+    posicion: int = Field(default=0, ge=0)
+    ancho: int = Field(default=2, ge=1, le=4)
+
+
+class ActualizarWidgetPanel(BaseModel):
+    titulo: str | None = Field(default=None, min_length=1, max_length=120)
+    tipo: Literal["kpi", "linea", "barra", "barra_apilada", "embudo", "tabla"] | None = None
+    consulta: ConsultaAgregada | None = None
+    posicion: int | None = Field(default=None, ge=0)
+    ancho: int | None = Field(default=None, ge=1, le=4)
+    activo: bool | None = None
+
+
+class WidgetPanelResponse(BaseModel):
+    id: str
+    empresa_id: str
+    usuario_id: str
+    titulo: str
+    tipo: Literal["kpi", "linea", "barra", "barra_apilada", "embudo", "tabla"]
+    consulta: ConsultaAgregada
+    posicion: int
+    ancho: int
+    activo: bool
+    fecha_registro: datetime
