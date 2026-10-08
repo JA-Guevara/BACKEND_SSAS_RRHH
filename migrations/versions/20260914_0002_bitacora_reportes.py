@@ -43,27 +43,14 @@ def upgrade() -> None:
         "VALUES ('REPORTES', 'Reportes', 'Constructor de reportes personalizables', "
         "'chart-column', 70, TRUE, TRUE) ON CONFLICT (codigo) DO NOTHING"
     )
-    permiso = sa.table(
-        "permiso",
-        sa.column("codigo", sa.String),
-        sa.column("modulo", sa.String),
-        sa.column("recurso", sa.String),
-        sa.column("operacion", sa.String),
-        sa.column("descripcion", sa.String),
-    )
-    op.bulk_insert(
-        permiso,
-        [
-            {
-                "codigo": codigo,
-                "modulo": _permiso(codigo)[0],
-                "recurso": _permiso(codigo)[1],
-                "operacion": _permiso(codigo)[2],
-                "descripcion": codigo,
-            }
-            for codigo in PERMISOS
-        ],
-    )
+    for codigo in PERMISOS:
+        m, r, o = _permiso(codigo)
+        op.execute(
+            sa.text(
+                "INSERT INTO permiso (codigo, modulo, recurso, operacion, descripcion) "
+                "VALUES (:c, :m, :r, :o, :d) ON CONFLICT (codigo) DO NOTHING"
+            ).bindparams(c=codigo, m=m, r=r, o=o, d=codigo)
+        )
     op.execute(
         "INSERT INTO empresa_modulo (empresa_id, modulo_id, habilitado, fecha_habilitacion) "
         "SELECT e.id, m.id, TRUE, now() FROM empresa e CROSS JOIN modulo m "
@@ -126,9 +113,10 @@ def upgrade() -> None:
         "bitacora_empresa_id_fkey", "bitacora", "empresa", ["empresa_id"], ["id"], ondelete="SET NULL"
     )
     op.execute(
-        "CREATE FUNCTION proteger_bitacora() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "CREATE OR REPLACE FUNCTION proteger_bitacora() RETURNS trigger LANGUAGE plpgsql AS $$ "
         "BEGIN RAISE EXCEPTION 'La bitacora es inmutable'; END; $$"
     )
+    op.execute("DROP TRIGGER IF EXISTS trg_bitacora_inmutable ON bitacora")
     op.execute(
         "CREATE TRIGGER trg_bitacora_inmutable BEFORE UPDATE OR DELETE ON bitacora "
         "FOR EACH ROW EXECUTE FUNCTION proteger_bitacora()"

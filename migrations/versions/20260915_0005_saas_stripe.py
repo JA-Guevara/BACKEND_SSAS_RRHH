@@ -113,8 +113,16 @@ def upgrade() -> None:
         "WHERE s.empresa_id=em.empresa_id AND pm.modulo_id=em.modulo_id) "
         "FROM modulo m WHERE m.id=em.modulo_id"
     )
-    permiso = sa.table("permiso", sa.column("codigo", sa.String), sa.column("modulo", sa.String), sa.column("recurso", sa.String), sa.column("operacion", sa.String), sa.column("descripcion", sa.String))
-    op.bulk_insert(permiso, [{"codigo": c, "modulo": "PLATFORM" if c.startswith("platform:") else "SUSCRIPCION", "recurso": c.split(":")[-2], "operacion": c.split(":")[-1], "descripcion": c} for c in PERMISOS])
+    for c in PERMISOS:
+        m = "PLATFORM" if c.startswith("platform:") else "SUSCRIPCION"
+        r = c.split(":")[-2]
+        o = c.split(":")[-1]
+        op.execute(
+            sa.text(
+                "INSERT INTO permiso (codigo, modulo, recurso, operacion, descripcion) "
+                "VALUES (:c, :m, :r, :o, :d) ON CONFLICT (codigo) DO NOTHING"
+            ).bindparams(c=c, m=m, r=r, o=o, d=c)
+        )
     op.execute("INSERT INTO rol_permiso (rol_id, permiso_id) SELECT r.id,p.id FROM rol r CROSS JOIN permiso p WHERE r.codigo='SUPER_ADMIN' AND r.empresa_id IS NULL AND p.codigo LIKE 'platform:%' ON CONFLICT DO NOTHING")
     op.execute("INSERT INTO rol_permiso (rol_id, permiso_id) SELECT r.id,p.id FROM rol r CROSS JOIN permiso p WHERE r.codigo='ADMIN_EMPRESA' AND r.empresa_id IS NOT NULL AND p.codigo LIKE 'suscripcion:%' ON CONFLICT DO NOTHING")
 

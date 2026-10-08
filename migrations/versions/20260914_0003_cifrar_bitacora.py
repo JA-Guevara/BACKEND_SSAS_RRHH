@@ -4,6 +4,7 @@ Revision ID: 20260914_0003
 Revises: 20260914_0002
 """
 
+import hashlib
 import json
 from collections.abc import Sequence
 
@@ -64,7 +65,11 @@ def upgrade() -> None:
     op.create_unique_constraint("uq_bitacora_hash_registro", "bitacora", ["hash_registro"])
 
     if not context.is_offline_mode():
-        cipher = AuditCipher(settings.app_audit_encryption_key)
+        audit_key = (
+            settings.app_audit_encryption_key
+            or hashlib.sha256(settings.app_secret_key.encode("utf-8")).hexdigest()
+        )
+        cipher = AuditCipher(audit_key)
         connection = op.get_bind()
         rows = connection.execute(
             sa.text(

@@ -24,27 +24,13 @@ PERMISOS = (
 
 
 def upgrade() -> None:
-    permiso = sa.table(
-        "permiso",
-        sa.column("codigo", sa.String),
-        sa.column("modulo", sa.String),
-        sa.column("recurso", sa.String),
-        sa.column("operacion", sa.String),
-        sa.column("descripcion", sa.String),
-    )
-    op.bulk_insert(
-        permiso,
-        [
-            {
-                "codigo": codigo,
-                "modulo": "PLATFORM",
-                "recurso": "backup",
-                "operacion": codigo.rsplit(":", 1)[1],
-                "descripcion": codigo,
-            }
-            for codigo in PERMISOS
-        ],
-    )
+    for codigo in PERMISOS:
+        op.execute(
+            sa.text(
+                "INSERT INTO permiso (codigo, modulo, recurso, operacion, descripcion) "
+                "VALUES (:c, 'PLATFORM', 'backup', :o, :d) ON CONFLICT (codigo) DO NOTHING"
+            ).bindparams(c=codigo, o=codigo.rsplit(":", 1)[1], d=codigo)
+        )
     op.execute(
         "INSERT INTO rol_permiso (rol_id, permiso_id) "
         "SELECT r.id, p.id FROM rol r CROSS JOIN permiso p "
