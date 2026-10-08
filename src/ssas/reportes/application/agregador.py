@@ -23,6 +23,12 @@ from ssas.reportes.infrastructure.http.schemas_agregado import (
 )
 
 LIMITE_GRUPOS = 500
+STATEMENT_TIMEOUT = "15s"
+
+
+async def aplicar_statement_timeout(session: AsyncSession) -> None:
+    """Ninguna consulta de reporte puede tumbar la base para los demás inquilinos."""
+    await session.execute(text(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'"))
 
 _GRANULARIDAD_PG = {
     "dia": "day",
@@ -159,6 +165,7 @@ async def ejecutar(
 ) -> RespuestaAgregada:
     inicio = perf_counter()
     sql, params, limite = construir_sql(consulta, empresa_id)
+    await aplicar_statement_timeout(session)
     result = await session.execute(text(sql), params)
     filas = result.mappings().all()
     truncado = len(filas) > limite

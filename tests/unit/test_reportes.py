@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
+from ssas.reportes.application.cache import CacheAgregados, cache_agregados
 from ssas.reportes.application.cuotas import (
     CUOTAS,
     cuota_de_empresa,
@@ -51,6 +52,7 @@ from ssas.reportes.infrastructure.http.schemas_agregado import (
     Agregacion,
     ConsultaAgregada,
     Medida,
+    RespuestaAgregada,
 )
 from ssas.reportes.infrastructure.persistence.models.reporte import ReporteEjecucionModel
 from ssas.vacantes.infrastructure.persistence.models.vacante import VacanteModel
@@ -229,6 +231,7 @@ async def test_truncado_se_informa_cuando_hay_mas_filas_que_el_limite() -> None:
 async def test_conteo_cuenta_con_los_mismos_filtros() -> None:
     session = MagicMock()
     session.scalar = AsyncMock(return_value=12_345)
+    session.execute = AsyncMock()
     config = ReporteConfig(
         fuente="postulaciones",
         columnas=["postulante"],
@@ -420,6 +423,7 @@ async def test_exportar_fallido_registra_estado_error(monkeypatch) -> None:
     monkeypatch.setattr(router_module, "_rows", boom)
     session = MagicMock()
     session.scalar = AsyncMock(return_value=0)
+    session.execute = AsyncMock()
     session.commit = AsyncMock()
     user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
     body = ReporteConfig(fuente="usuarios", columnas=["nombres"])
@@ -500,3 +504,68 @@ async def test_conteos_diarios_leen_reporte_ejecucion() -> None:
     assert await interpretaciones_ia_de_hoy(session, "emp1") == 7
     sql = str(session.scalar.await_args.args[0])
     assert "reporte_ejecucion.formato IN" in sql
+
+
+def test_cache_no_cruza_empresas() -> None:
+    cache = CacheAgregados()
+    cache.set("empresa-a", "misma-consulta", ["dato-a"])
+
+    assert cache.get("empresa-a", "misma-consulta") == ["dato-a"]
+    assert cache.get("empresa-b", "misma-consulta") is None
+
+
+def test_cache_expira_a_los_60_segundos() -> None:
+    ahora = [0.0]
+    cache = CacheAgregados(ttl_segundos=60, reloj=lambda: ahora[0])
+    cache.set("emp1", "clave", "valor")
+
+    assert cache.get("emp1", "clave") == "valor"
+    ahora[0] = 59.9
+    assert cache.get("emp1", "clave") == "valor"
+    ahora[0] = 60.0
+    assert cache.get("emp1", "clave") is None
+
+
+@pytest.mark.asyncio
+async def test_agregado_reutiliza_la_cache(monkeypatch) -> None:
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value=set()))
+    llamadas: list[str] = []
+
+    async def fake_ejecutar(session, consulta, empresa_id):
+        llamadas.append(empresa_id)
+        return RespuestaAgregada(
+            series=[],
+            medidas=["conteo"],
+            total_grupos=0,
+            truncado=False,
+            generado_en=datetime.now(UTC),
+            milisegundos=1,
+        )
+
+    monkeypatch.setattr(router_module, "ejecutar_agregado", fake_ejecutar)
+    cache_agregados.clear()
+    session = MagicMock()
+    session.scalar = AsyncMock(return_value=None)
+    user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
+    body = ConsultaAgregada(fuente="postulaciones", medidas=[{"agregacion": "conteo"}])
+
+    primera = await router_module.agregado(body, None, user, session)
+    segunda = await router_module.agregado(body, None, user, session)
+
+    assert llamadas == ["emp1"]
+    assert primera is segunda
+
+
+@pytest.mark.asyncio
+async def test_statement_timeout_se_aplica_antes_de_consultar() -> None:
+    session = MagicMock()
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    config = ReporteConfig(fuente="usuarios", columnas=["nombres"])
+
+    await _rows(session, "empresa-a", config)
+
+    sentencias = [str(call.args[0]) for call in session.execute.await_args_list]
+    assert sentencias[0] == "SET LOCAL statement_timeout = '15s'"
+    assert "SELECT" in sentencias[1]

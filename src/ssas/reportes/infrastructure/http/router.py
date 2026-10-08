@@ -23,7 +23,13 @@ from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.infrastructure.database.session import get_session
-from ssas.reportes.application.agregador import ejecutar as ejecutar_agregado
+from ssas.reportes.application.agregador import (
+    aplicar_statement_timeout,
+)
+from ssas.reportes.application.agregador import (
+    ejecutar as ejecutar_agregado,
+)
+from ssas.reportes.application.cache import cache_agregados, clave_consulta
 from ssas.reportes.application.cuotas import (
     FORMATO_IA,
     cuota_de_empresa,
@@ -201,6 +207,7 @@ async def _rows_truncado(
     sql = f"SELECT {selected} FROM {FROM_SQL[config.fuente]} WHERE {where}"
     if order: sql += f" ORDER BY {order}"
     sql += f" LIMIT {limite + 1}"
+    await aplicar_statement_timeout(session)
     result = await session.execute(text(sql), params)
     rows = [dict(row) for row in result.mappings().all()]
     truncado = len(rows) > limite
@@ -218,6 +225,7 @@ async def _contar(session: AsyncSession, empresa_id: str, config: ReporteConfig)
     columns = _validate(config)
     where, params = _where(config, columns, empresa_id)
     sql = f"SELECT count(*) AS total FROM {FROM_SQL[config.fuente]} WHERE {where}"
+    await aplicar_statement_timeout(session)
     total = await session.scalar(text(sql), params)
     return int(total or 0)
 
@@ -385,7 +393,14 @@ async def conteo(body: ReporteConfig, empresa_id: str | None = None, user: Curre
 async def agregado(body: ConsultaAgregada, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Ejecuta medidas agrupadas sobre el catálogo; alimenta los gráficos del panel."""
     _autorizar_agregado(body, await _permisos(session, user), user.es_plataforma)
-    return await ejecutar_agregado(session, body, _empresa(user, empresa_id))
+    target = _empresa(user, empresa_id)
+    clave = clave_consulta(body)
+    cacheado = cache_agregados.get(target, clave)
+    if cacheado is not None:
+        return cacheado
+    respuesta = await ejecutar_agregado(session, body, target)
+    cache_agregados.set(target, clave, respuesta)
+    return respuesta
 
 
 def _document(config: ReporteConfig, rows: list[dict], formato: str) -> tuple[bytes, str]:
