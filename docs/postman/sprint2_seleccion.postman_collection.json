@@ -78,6 +78,10 @@
     {
       "key": "codigo_empleado",
       "value": "DEMO-POSTMAN-001"
+    },
+    {
+      "key": "codigo_seguimiento",
+      "value": ""
     }
   ],
   "event": [
@@ -552,7 +556,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{base_url}}/empleados"
+        "url": "{{base_url}}/empleados?limit=50"
       },
       "event": [
         {
@@ -580,6 +584,45 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Consultar entrevista publica",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/publico/postulaciones/{{codigo_seguimiento}}/entrevista"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Confirmar entrevista publica",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/publico/postulaciones/{{codigo_seguimiento}}/entrevista/confirmar?entrevista_id={{entrevista_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Confirmada', () => pm.expect(pm.response.json().estado).to.eql('CONFIRMADA'));"
             ]
           }
         }

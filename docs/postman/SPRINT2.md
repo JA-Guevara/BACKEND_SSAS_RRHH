@@ -107,6 +107,17 @@ Mapear el manifiesto de demo: `vacante_id`; primera y segunda entrada de
 `fecha_entrevista` con una fecha futura ISO 8601 y zona horaria, `fecha_ingreso`
 con `YYYY-MM-DD` y `codigo_empleado` con un codigo unico de demo.
 
+Sobre las exportaciones previas se agregaron los endpoints de consulta de empleados
+y el portal publico de entrevistas: `GET /empleados?limit=50`,
+`GET /empleados/{{empleado_id}}`,
+`GET /publico/postulaciones/{{codigo_seguimiento}}/entrevista` y
+`POST /publico/postulaciones/{{codigo_seguimiento}}/entrevista/confirmar?entrevista_id={{entrevista_id}}`.
+`codigo_seguimiento` es el codigo publico que devuelve la creacion de la postulacion.
+Los dos ultimos no llevan `access_token` porque son del portal publico; para confirmar
+hay que copiar el `entrevista_id` que devuelve el detalle publico o el que guardo
+"Programar entrevista". El `entrevista_id`, `evaluacion_id`, `empleado_id` y
+`codigo_seguimiento` del entorno empiezan vacios en la exportacion.
+
 Seleccionar peticiones individualmente. Las escrituras y la comparacion POST
 requieren `allow_writes=true`. La coleccion rechaza cualquier URL no local.
 Programar crea `entrevista_id`; evaluar crea `evaluacion_id`; contratar crea
