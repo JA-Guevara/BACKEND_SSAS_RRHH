@@ -56,6 +56,14 @@ class VistaPrevia(BaseModel):
     total: int
     page: int
     per_page: int
+    truncado: bool = False
+    total_exacto: bool = True
+
+
+class ConteoResponse(BaseModel):
+    total: int
+    excede_limite: bool
+    limite_del_plan: int
 
 
 class InterpretarReporteRequest(BaseModel):

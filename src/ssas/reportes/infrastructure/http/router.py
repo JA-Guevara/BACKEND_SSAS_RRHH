@@ -30,6 +30,7 @@ from ssas.reportes.infrastructure.http.ai_provider import (
 )
 from ssas.reportes.infrastructure.http.schemas import (
     ActualizarReporte,
+    ConteoResponse,
     CrearReporte,
     EnviarReporteRequest,
     InterpretarReporteRequest,
@@ -59,6 +60,7 @@ SOURCES = {
 }
 FROM_SQL = {code: source.from_sql for code, source in CATALOGO.items()}
 TENANT_COLUMN = {code: source.columna_tenant for code, source in CATALOGO.items()}
+LIMITE_FILAS = 5000
 FIELD_ALIASES = {
     "vacantes": {"fecha": "fecha_publicacion", "nombre": "titulo", "cargo": "titulo", "ciudad": "ubicacion"},
     "usuarios": {"nombre": "nombres", "apellido": "apellidos", "usuario": "username", "fecha": "ultimo_acceso"},
@@ -92,9 +94,7 @@ def _report_field(source: str, field: str) -> str:
     return FIELD_ALIASES[source].get(code, code)
 
 
-async def _rows(session: AsyncSession, empresa_id: str, config: ReporteConfig) -> list[dict]:
-    columns = _validate(config)
-    selected = ", ".join(f"{columns[name]} AS {name}" for name in config.columnas)
+def _where(config: ReporteConfig, columns: dict[str, str], empresa_id: str) -> tuple[str, dict]:
     clauses = [f"{TENANT_COLUMN[config.fuente]} = :empresa_id"]
     params: dict = {"empresa_id": empresa_id}
     for index, item in enumerate(config.filtros):
@@ -113,12 +113,36 @@ async def _rows(session: AsyncSession, empresa_id: str, config: ReporteConfig) -
             params[f"{key}a"], params[f"{key}b"] = item.valor
         else:
             raise HTTPException(422, "Valor de filtro inválido")
+    return " AND ".join(clauses), params
+
+
+async def _rows_truncado(
+    session: AsyncSession, empresa_id: str, config: ReporteConfig
+) -> tuple[list[dict], bool]:
+    columns = _validate(config)
+    selected = ", ".join(f"{columns[name]} AS {name}" for name in config.columnas)
+    where, params = _where(config, columns, empresa_id)
     order = ", ".join(f"{columns[o.campo]} {o.direccion.upper()}" for o in config.orden)
-    sql = f"SELECT {selected} FROM {FROM_SQL[config.fuente]} WHERE {' AND '.join(clauses)}"
+    sql = f"SELECT {selected} FROM {FROM_SQL[config.fuente]} WHERE {where}"
     if order: sql += f" ORDER BY {order}"
-    sql += " LIMIT 5000"
+    sql += f" LIMIT {LIMITE_FILAS + 1}"
     result = await session.execute(text(sql), params)
-    return [dict(row) for row in result.mappings().all()]
+    rows = [dict(row) for row in result.mappings().all()]
+    truncado = len(rows) > LIMITE_FILAS
+    return rows[:LIMITE_FILAS], truncado
+
+
+async def _rows(session: AsyncSession, empresa_id: str, config: ReporteConfig) -> list[dict]:
+    rows, _ = await _rows_truncado(session, empresa_id, config)
+    return rows
+
+
+async def _contar(session: AsyncSession, empresa_id: str, config: ReporteConfig) -> int:
+    columns = _validate(config)
+    where, params = _where(config, columns, empresa_id)
+    sql = f"SELECT count(*) AS total FROM {FROM_SQL[config.fuente]} WHERE {where}"
+    total = await session.scalar(text(sql), params)
+    return int(total or 0)
 
 
 def _serialize(model: ReporteDefinicionModel) -> ReporteResponse:
@@ -245,9 +269,16 @@ async def actualizar(report_id: str, body: ActualizarReporte, empresa_id: str | 
 
 @router.post("/vista-previa", response_model=VistaPrevia)
 async def vista_previa(body: ReporteConfig, empresa_id: str | None = None, page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100), user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
-    """Ejecuta una consulta limitada y devuelve una vista previa paginada."""
-    rows = await _rows(session, _empresa(user, empresa_id), body); start = (page - 1) * per_page
-    return VistaPrevia(columnas=body.columnas, items=rows[start:start + per_page], total=len(rows), page=page, per_page=per_page)
+    """Ejecuta una consulta limitada y devuelve una vista previa paginada, avisando si truncó."""
+    rows, truncado = await _rows_truncado(session, _empresa(user, empresa_id), body); start = (page - 1) * per_page
+    return VistaPrevia(columnas=body.columnas, items=rows[start:start + per_page], total=len(rows), page=page, per_page=per_page, truncado=truncado, total_exacto=not truncado)
+
+
+@router.post("/conteo", response_model=ConteoResponse)
+async def conteo(body: ReporteConfig, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:ejecutar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
+    """Cuenta las filas que devolvería el reporte antes de exportarlo."""
+    total = await _contar(session, _empresa(user, empresa_id), body)
+    return ConteoResponse(total=total, excede_limite=total > LIMITE_FILAS, limite_del_plan=LIMITE_FILAS)
 
 
 @router.post("/agregado", response_model=RespuestaAgregada)

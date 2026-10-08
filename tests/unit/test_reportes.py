@@ -10,12 +10,15 @@ from ssas.postulantes.infrastructure.persistence.models.postulante import Postul
 from ssas.reportes.domain.catalogo import CATALOGO, Campo, TipoCampo
 from ssas.reportes.infrastructure.http.router import (
     FROM_SQL,
+    LIMITE_FILAS,
     SOURCES,
     TENANT_COLUMN,
     _campo_visible,
     _catalogo_visible,
+    _contar,
     _document,
     _rows,
+    _rows_truncado,
     _validate,
 )
 from ssas.reportes.infrastructure.http.schemas import ReporteConfig
@@ -172,3 +175,38 @@ def test_campo_con_permiso_oculto_sin_autorizacion() -> None:
     assert _campo_visible(campo, set(), False) is False
     assert _campo_visible(campo, {"nomina:ver"}, False) is True
     assert _campo_visible(campo, set(), True) is True
+
+
+@pytest.mark.asyncio
+async def test_truncado_se_informa_cuando_hay_mas_filas_que_el_limite() -> None:
+    session = MagicMock()
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = [
+        {"nombres": f"p{i}"} for i in range(LIMITE_FILAS + 1)
+    ]
+    session.execute = AsyncMock(return_value=result)
+    config = ReporteConfig(fuente="usuarios", columnas=["nombres"])
+
+    rows, truncado = await _rows_truncado(session, "empresa-a", config)
+
+    assert truncado is True
+    assert len(rows) == LIMITE_FILAS
+    assert f"LIMIT {LIMITE_FILAS + 1}" in str(session.execute.await_args.args[0])
+
+
+@pytest.mark.asyncio
+async def test_conteo_cuenta_con_los_mismos_filtros() -> None:
+    session = MagicMock()
+    session.scalar = AsyncMock(return_value=12_345)
+    config = ReporteConfig(
+        fuente="postulaciones",
+        columnas=["postulante"],
+        filtros=[{"campo": "estado", "operador": "igual", "valor": "ACTIVA"}],
+    )
+
+    total = await _contar(session, "empresa-a", config)
+
+    assert total == 12_345
+    sql = str(session.scalar.await_args.args[0])
+    assert "count(*) AS total" in sql
+    assert "v.empresa_id = :empresa_id" in sql
