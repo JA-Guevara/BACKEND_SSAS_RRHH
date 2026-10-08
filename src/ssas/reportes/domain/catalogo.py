@@ -210,6 +210,241 @@ CATALOGO: dict[str, Fuente] = {
                 TipoCampo.FECHA,
                 agregable=True,
             ),
+            "en_banco_talento": _f(
+                "en_banco_talento",
+                "En banco de talentos",
+                "p.en_banco_talento",
+                TipoCampo.BOOLEANO,
+            ),
+        },
+    ),
+    "entrevistas": Fuente(
+        codigo="entrevistas",
+        etiqueta="Entrevistas",
+        descripcion="Entrevistas agendadas dentro del proceso de selección",
+        from_sql=(
+            "entrevista en JOIN postulacion po ON po.id=en.postulacion_id "
+            "JOIN vacante v ON v.id=po.vacante_id "
+            "JOIN postulante p ON p.id=po.postulante_id AND p.empresa_id=v.empresa_id"
+        ),
+        columna_tenant="v.empresa_id",
+        permiso="entrevistas:ver",
+        campos={
+            "vacante": _f("vacante", "Vacante", "v.titulo", TipoCampo.TEXTO),
+            "postulante": _f(
+                "postulante", "Postulante", "concat(p.nombres, ' ', p.apellidos)", TipoCampo.TEXTO
+            ),
+            "tipo": _f(
+                "tipo",
+                "Tipo",
+                "en.tipo",
+                TipoCampo.ENUM,
+                valores=("TECNICA", "PSICOTECNICA", "MEDICA", "OTRO"),
+            ),
+            "modalidad": _f(
+                "modalidad",
+                "Modalidad",
+                "en.modalidad",
+                TipoCampo.ENUM,
+                valores=("VIRTUAL", "PRESENCIAL", "TELEFONICA"),
+            ),
+            "estado": _f(
+                "estado",
+                "Estado",
+                "en.estado",
+                TipoCampo.ENUM,
+                valores=("PROGRAMADA", "CONFIRMADA", "REALIZADA", "CANCELADA"),
+            ),
+            "fecha_hora": _f(
+                "fecha_hora", "Fecha y hora", "en.fecha_hora", TipoCampo.FECHA, agregable=True
+            ),
+            "duracion_min": _f(
+                "duracion_min",
+                "Duración (min)",
+                "en.duracion_min",
+                TipoCampo.NUMERO,
+                agregable=True,
+            ),
+            "puntaje": _f(
+                "puntaje",
+                "Puntaje",
+                "en.puntaje",
+                TipoCampo.NUMERO,
+                sensibilidad=Sensibilidad.INTERNO,
+                agregable=True,
+            ),
+            "recomendacion": _f(
+                "recomendacion", "Recomendación", "en.recomendacion", TipoCampo.TEXTO
+            ),
+            "observaciones": _f(
+                "observaciones",
+                "Observaciones",
+                "en.observaciones",
+                TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.INTERNO,
+            ),
+        },
+    ),
+    "evaluaciones": Fuente(
+        codigo="evaluaciones",
+        etiqueta="Evaluaciones",
+        descripcion="Evaluaciones técnicas y psicotécnicas por postulación",
+        from_sql=(
+            "evaluacion ev JOIN postulacion po ON po.id=ev.postulacion_id "
+            "JOIN vacante v ON v.id=po.vacante_id"
+        ),
+        columna_tenant="v.empresa_id",
+        permiso="evaluaciones:ver",
+        campos={
+            "vacante": _f("vacante", "Vacante", "v.titulo", TipoCampo.TEXTO),
+            "tipo": _f(
+                "tipo",
+                "Tipo",
+                "ev.tipo",
+                TipoCampo.ENUM,
+                valores=("TECNICA", "PSICOTECNICA", "MEDICA", "OTRO"),
+            ),
+            "nombre": _f("nombre", "Nombre", "ev.nombre", TipoCampo.TEXTO),
+            "puntaje": _f("puntaje", "Puntaje", "ev.puntaje", TipoCampo.NUMERO, agregable=True),
+            "puntaje_maximo": _f(
+                "puntaje_maximo", "Puntaje máximo", "ev.puntaje_maximo", TipoCampo.NUMERO
+            ),
+            "aprobado": _f("aprobado", "Aprobado", "ev.aprobado", TipoCampo.BOOLEANO),
+            "observaciones": _f(
+                "observaciones",
+                "Observaciones",
+                "ev.observaciones",
+                TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.INTERNO,
+            ),
+            "fecha": _f("fecha", "Fecha", "ev.fecha", TipoCampo.FECHA, agregable=True),
+        },
+    ),
+    "analisis_cv": Fuente(
+        codigo="analisis_cv",
+        etiqueta="Análisis de CV",
+        descripcion="Resultados del análisis de afinidad de currículums",
+        from_sql=(
+            "analisis_cv ac JOIN postulacion po ON po.id=ac.postulacion_id "
+            "JOIN vacante v ON v.id=po.vacante_id"
+        ),
+        columna_tenant="v.empresa_id",
+        permiso="postulaciones:ver",
+        campos={
+            "vacante": _f("vacante", "Vacante", "v.titulo", TipoCampo.TEXTO),
+            "puntaje_afinidad": _f(
+                "puntaje_afinidad",
+                "Puntaje de afinidad",
+                "ac.puntaje_afinidad",
+                TipoCampo.NUMERO,
+                agregable=True,
+            ),
+            "anios_experiencia_detectados": _f(
+                "anios_experiencia_detectados",
+                "Años detectados",
+                "ac.anios_experiencia_detectados",
+                TipoCampo.NUMERO,
+                agregable=True,
+            ),
+            "modelo_usado": _f("modelo_usado", "Modelo usado", "ac.modelo_usado", TipoCampo.TEXTO),
+            "resumen_ia": _f(
+                "resumen_ia",
+                "Resumen",
+                "ac.resumen_ia",
+                TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.INTERNO,
+            ),
+            "tiempo_proceso_ms": _f(
+                "tiempo_proceso_ms", "Tiempo de proceso (ms)", "ac.tiempo_proceso_ms", TipoCampo.NUMERO
+            ),
+            "fecha_analisis": _f(
+                "fecha_analisis", "Fecha de análisis", "ac.fecha_analisis", TipoCampo.FECHA, agregable=True
+            ),
+        },
+    ),
+    "empleados": Fuente(
+        codigo="empleados",
+        etiqueta="Empleados",
+        descripcion="Nómina de empleados con datos laborales y personales",
+        from_sql="empleado e",
+        columna_tenant="e.empresa_id",
+        permiso="empleados:ver",
+        campos={
+            "codigo": _f("codigo", "Código", "e.codigo", TipoCampo.TEXTO),
+            "nombres": _f("nombres", "Nombres", "e.nombres", TipoCampo.TEXTO),
+            "apellido_paterno": _f(
+                "apellido_paterno", "Apellido paterno", "e.apellido_paterno", TipoCampo.TEXTO
+            ),
+            "apellido_materno": _f(
+                "apellido_materno", "Apellido materno", "e.apellido_materno", TipoCampo.TEXTO
+            ),
+            "ci": _f(
+                "ci", "CI", "e.ci", TipoCampo.TEXTO, sensibilidad=Sensibilidad.PERSONAL
+            ),
+            "telefono": _f(
+                "telefono", "Teléfono", "e.telefono", TipoCampo.TEXTO, sensibilidad=Sensibilidad.PERSONAL
+            ),
+            "email_personal": _f(
+                "email_personal",
+                "Correo personal",
+                "e.email_personal",
+                TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.PERSONAL,
+            ),
+            "direccion": _f(
+                "direccion", "Dirección", "e.direccion", TipoCampo.TEXTO, sensibilidad=Sensibilidad.PERSONAL
+            ),
+            "nua_cua": _f(
+                "nua_cua", "NUA/CUA", "e.nua_cua", TipoCampo.TEXTO, sensibilidad=Sensibilidad.CONFIDENCIAL
+            ),
+            "afp": _f("afp", "AFP", "e.afp", TipoCampo.TEXTO),
+            "banco": _f("banco", "Banco", "e.banco", TipoCampo.TEXTO),
+            "numero_cuenta": _f(
+                "numero_cuenta",
+                "Número de cuenta",
+                "e.numero_cuenta",
+                TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.CONFIDENCIAL,
+            ),
+            "tipo_cuenta": _f("tipo_cuenta", "Tipo de cuenta", "e.tipo_cuenta", TipoCampo.TEXTO),
+            "fecha_ingreso": _f(
+                "fecha_ingreso", "Fecha de ingreso", "e.fecha_ingreso", TipoCampo.FECHA, agregable=True
+            ),
+            "fecha_salida": _f("fecha_salida", "Fecha de salida", "e.fecha_salida", TipoCampo.FECHA),
+            "estado": _f(
+                "estado", "Estado", "e.estado", TipoCampo.ENUM, valores=("ACTIVO", "INACTIVO")
+            ),
+        },
+    ),
+    "bitacora": Fuente(
+        codigo="bitacora",
+        etiqueta="Bitácora",
+        descripcion="Eventos auditados de la empresa",
+        from_sql="bitacora b",
+        columna_tenant="b.empresa_id",
+        permiso="bitacora:ver",
+        campos={
+            "actor": _f("actor", "Actor", "b.actor_etiqueta", TipoCampo.TEXTO),
+            "modulo": _f("modulo", "Módulo", "b.modulo", TipoCampo.TEXTO),
+            "accion": _f("accion", "Acción", "b.accion", TipoCampo.TEXTO),
+            "nivel": _f(
+                "nivel",
+                "Nivel",
+                "b.nivel",
+                TipoCampo.ENUM,
+                valores=("INFO", "WARNING", "ERROR", "CRITICAL"),
+            ),
+            "tabla_afectada": _f(
+                "tabla_afectada", "Tabla afectada", "b.tabla_afectada", TipoCampo.TEXTO
+            ),
+            "ip_origen": _f(
+                "ip_origen",
+                "IP de origen",
+                "CAST(b.ip_origen AS TEXT)",
+                TipoCampo.TEXTO,
+                sensibilidad=Sensibilidad.PERSONAL,
+            ),
+            "fecha": _f("fecha", "Fecha", "b.fecha", TipoCampo.FECHA, agregable=True),
         },
     ),
 }
