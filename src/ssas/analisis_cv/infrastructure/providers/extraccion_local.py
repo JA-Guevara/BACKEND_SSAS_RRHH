@@ -18,7 +18,9 @@ SINONIMOS: dict[str, tuple[str, ...]] = {
 
 
 class ExtraccionLocalProvider:
-    nombre: str = "extraccion-local-v1"
+    @property
+    def nombre(self) -> str:
+        return "extraccion-local-v1"
 
     def __init__(self, config: Settings) -> None:
         self.config = config
