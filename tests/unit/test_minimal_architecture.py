@@ -52,6 +52,7 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "postulante_habilidad",
         "conocimiento_articulo",
         "conocimiento_fragmento",
+        "widget_panel",
     }
 
 
