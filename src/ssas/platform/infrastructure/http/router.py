@@ -1,6 +1,7 @@
-﻿import logging
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,13 +30,20 @@ from ssas.platform.infrastructure.http.schemas import (
     EmpresaUpdateRequest,
     ProvisionEmpresaRequest,
     ProvisionEmpresaResponse,
+    ResumenPlataformaResponse,
 )
 from ssas.platform.infrastructure.persistence.repositories.platform_repository import (
     PlatformRepository,
 )
+from ssas.platform.infrastructure.storage.logo_storage import (
+    delete_logo_file,
+    get_logo_path,
+    process_and_save_logo,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/empresas", tags=[TAG_COMPANIES], responses=AUTHENTICATED_RESPONSES)
+plataforma_router = APIRouter(prefix="/plataforma", tags=[TAG_COMPANIES], responses=AUTHENTICATED_RESPONSES)
 email_service = AuthEmailService(SMTPEmailSender(), settings.app_frontend_url)
 
 
@@ -391,3 +399,126 @@ async def restore_empresa(
         new={"activo": False, "eliminado_at": None},
     )
     return empresa_payload(restored)
+
+
+@router.post(
+    "/{empresa_id}/logo",
+    response_model=EmpresaResponse,
+    summary="Subir logotipo de la empresa",
+    description=(
+        "Sube el logotipo de la empresa (PNG, JPG, WebP o SVG, máx 1 MB). "
+        "La imagen se valida/sanea, redimensiona conservando transparencia y se almacena en el volumen persistente. "
+        "Requiere `empresa:editar` o `platform:empresas:editar`."
+    ),
+    responses={
+        400: {"description": "El archivo no es una imagen válida o excede el límite de tamaño."},
+        404: {"description": "Empresa no encontrada."},
+    },
+)
+async def subir_logo(
+    empresa_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    current: CurrentUser = Depends(
+        require_empresa_permission("empresa:editar", "platform:empresas:editar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    repository = _repo(session)
+    existing = await repository.get_empresa(empresa_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    content = await file.read()
+    try:
+        url = process_and_save_logo(empresa_id, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    empresa = await repository.update_empresa(empresa_id, {"logo_url": url})
+    await _audit(
+        session,
+        request,
+        current if getattr(current, "es_plataforma", False) else None,
+        module="EMPRESAS",
+        action="UPDATE",
+        description="Logotipo de la empresa actualizado",
+        table="empresa",
+        record_id=empresa_id,
+        new={"logo_url": url},
+    )
+    return empresa_payload(empresa)
+
+
+@router.delete(
+    "/{empresa_id}/logo",
+    response_model=EmpresaResponse,
+    summary="Eliminar logotipo de la empresa",
+    description=(
+        "Elimina el logotipo de la empresa y restablece la visualización a las iniciales calculadas. "
+        "Requiere `empresa:editar` o `platform:empresas:editar`."
+    ),
+    responses={404: {"description": "Empresa no encontrada."}},
+)
+async def eliminar_logo(
+    empresa_id: str,
+    request: Request,
+    current: CurrentUser = Depends(
+        require_empresa_permission("empresa:editar", "platform:empresas:editar")
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    repository = _repo(session)
+    existing = await repository.get_empresa(empresa_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    delete_logo_file(empresa_id)
+    empresa = await repository.update_empresa(empresa_id, {"logo_url": None})
+    await _audit(
+        session,
+        request,
+        current if getattr(current, "es_plataforma", False) else None,
+        module="EMPRESAS",
+        action="UPDATE",
+        description="Logotipo de la empresa eliminado",
+        table="empresa",
+        record_id=empresa_id,
+        new={"logo_url": None},
+    )
+    return empresa_payload(empresa)
+
+
+@router.get(
+    "/{empresa_id}/logo",
+    summary="Obtener logotipo de la empresa",
+    description="Retorna el archivo binario del logotipo de la empresa o 404 si no existe.",
+    responses={
+        200: {"description": "Archivo del logotipo retornado."},
+        404: {"description": "La empresa no tiene logotipo registrado."},
+    },
+)
+async def obtener_logo(empresa_id: str):
+    res = get_logo_path(empresa_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="La empresa no tiene logotipo registrado.")
+    path, mime = res
+    return FileResponse(path, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@plataforma_router.get(
+    "/resumen",
+    response_model=ResumenPlataformaResponse,
+    summary="Resumen ejecutivo de la plataforma",
+    description=(
+        "Métricas agregadas globales y eventos recientes de la plataforma. "
+        "Operación exclusiva de plataforma; requiere `platform:empresas:ver`."
+    ),
+)
+async def resumen_plataforma(
+    _: CurrentPlatformAdmin = Depends(require_platform_permission("platform:empresas:ver")),
+    session: AsyncSession = Depends(get_session),
+):
+    data = await _repo(session).get_resumen_plataforma()
+    return ResumenPlataformaResponse(**data)
+

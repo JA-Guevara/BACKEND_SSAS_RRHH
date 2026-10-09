@@ -20,7 +20,12 @@ from ssas.modulos.infrastructure.http.router import (
 from ssas.parametros_legales.infrastructure.http.router import (
     router as parametros_legales_router,
 )
-from ssas.platform.infrastructure.http.router import router as platform_router
+from ssas.platform.infrastructure.http.router import (
+    plataforma_router,
+)
+from ssas.platform.infrastructure.http.router import (
+    router as platform_router,
+)
 from ssas.postulaciones.infrastructure.http.entrevista_publica_router import (
     router as entrevista_publica_router,
 )
@@ -61,6 +66,7 @@ api_router.include_router(dashboard_router)
 api_router.include_router(modulos_router)
 api_router.include_router(modulos_empresa_router)
 api_router.include_router(platform_router)
+api_router.include_router(plataforma_router)
 api_router.include_router(parametros_legales_router)
 api_router.include_router(postulaciones_router)
 api_router.include_router(entrevista_publica_router)

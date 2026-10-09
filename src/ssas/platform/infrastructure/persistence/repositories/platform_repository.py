@@ -1,8 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ssas.analisis_cv.infrastructure.persistence.models.analisis_cv import AnalisisCvModel
 from ssas.auth.infrastructure.persistence.models.email_verification_token import (
     EmailVerificationTokenModel,
 )
@@ -11,10 +12,12 @@ from ssas.auth.infrastructure.persistence.models.refresh_token import RefreshTok
 from ssas.auth.infrastructure.persistence.models.user import UserModel
 from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
 from ssas.bitacora.domain.entities.audit_log import AuditLog
+from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
 )
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
+from ssas.respaldos.infrastructure.persistence.models.respaldo import RespaldoModel
 
 
 class PlatformRepository:
@@ -165,3 +168,71 @@ class PlatformRepository:
             source_ip=ip_origen,
             user_agent=user_agent,
         )
+
+    async def get_resumen_plataforma(self) -> dict:
+        now = datetime.now(UTC)
+        hace_24h = now - timedelta(hours=24)
+        inicio_mes = datetime(now.year, now.month, 1, tzinfo=UTC)
+
+        q_activas = select(func.count(EmpresaModel.id)).where(
+            EmpresaModel.activo.is_(True), EmpresaModel.eliminado_at.is_(None)
+        )
+        q_suspendidas = select(func.count(EmpresaModel.id)).where(
+            EmpresaModel.activo.is_(False), EmpresaModel.eliminado_at.is_(None)
+        )
+        empresas_activas = (await self.session.execute(q_activas)).scalar_one()
+        empresas_suspendidas = (await self.session.execute(q_suspendidas)).scalar_one()
+
+        q_usuarios = select(func.count(UserModel.id)).where(UserModel.eliminado_at.is_(None))
+        usuarios_totales = (await self.session.execute(q_usuarios)).scalar_one()
+
+        q_storage = select(func.coalesce(func.sum(RespaldoModel.tamano_bytes), 0))
+        almacenamiento_bytes = (await self.session.execute(q_storage)).scalar_one()
+
+        q_respaldos_24h = select(func.count(RespaldoModel.id)).where(
+            RespaldoModel.fecha_creacion >= hace_24h
+        )
+        respaldos_ultimas_24h = (await self.session.execute(q_respaldos_24h)).scalar_one()
+
+        q_errores = select(func.count(AuditLogModel.id)).where(
+            AuditLogModel.nivel.in_(["ERROR", "CRITICAL"]),
+            AuditLogModel.created_at >= hace_24h,
+        )
+        errores_ultimas_24h = (await self.session.execute(q_errores)).scalar_one()
+
+        q_cv = select(func.count(AnalisisCvModel.id)).where(
+            AnalisisCvModel.fecha_analisis >= inicio_mes
+        )
+        analisis_cv_del_mes = (await self.session.execute(q_cv)).scalar_one()
+
+        q_eventos = (
+            select(AuditLogModel)
+            .order_by(AuditLogModel.created_at.desc())
+            .limit(20)
+        )
+        eventos_raw = (await self.session.execute(q_eventos)).scalars().all()
+        eventos_recientes = [
+            {
+                "id": str(e.id),
+                "created_at": e.created_at,
+                "modulo": e.modulo,
+                "accion": e.accion,
+                "nivel": e.nivel,
+                "descripcion": e.descripcion,
+                "empresa_id": str(e.empresa_id) if e.empresa_id else None,
+                "actor_etiqueta": e.actor_etiqueta,
+            }
+            for e in eventos_raw
+        ]
+
+        return {
+            "empresas_activas": empresas_activas,
+            "empresas_suspendidas": empresas_suspendidas,
+            "usuarios_totales": usuarios_totales,
+            "almacenamiento_bytes": almacenamiento_bytes,
+            "respaldos_ultimas_24h": respaldos_ultimas_24h,
+            "errores_ultimas_24h": errores_ultimas_24h,
+            "analisis_cv_del_mes": analisis_cv_del_mes,
+            "eventos_recientes": eventos_recientes,
+        }
+

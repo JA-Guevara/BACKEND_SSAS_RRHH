@@ -91,3 +91,26 @@ class ProvisionEmpresaResponse(BaseModel):
     administrador_id: str
     administrador_email: EmailStr
     verification_email_sent: bool
+
+
+class EventoPlataforma(BaseModel):
+    id: str
+    created_at: datetime
+    modulo: str
+    accion: str
+    nivel: str
+    descripcion: str
+    empresa_id: str | None = None
+    actor_etiqueta: str | None = None
+
+
+class ResumenPlataformaResponse(BaseModel):
+    empresas_activas: int
+    empresas_suspendidas: int
+    usuarios_totales: int
+    almacenamiento_bytes: int
+    respaldos_ultimas_24h: int
+    errores_ultimas_24h: int
+    analisis_cv_del_mes: int
+    eventos_recientes: list[EventoPlataforma]
+
