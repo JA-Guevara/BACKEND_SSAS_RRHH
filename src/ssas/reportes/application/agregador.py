@@ -6,6 +6,7 @@ filtro de inquilino va primero y la granularidad viaja como parámetro.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
@@ -13,6 +14,8 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from ssas.reportes.domain.catalogo import CATALOGO, Campo, Fuente, TipoCampo
 from ssas.reportes.infrastructure.http.schemas_agregado import (
@@ -160,6 +163,41 @@ def construir_sql(consulta: ConsultaAgregada, empresa_id: str) -> tuple[str, dic
     return sql, params, limite
 
 
+def _crear_consulta_periodo_anterior(consulta: ConsultaAgregada) -> ConsultaAgregada | None:
+    fecha_min = None
+    fecha_max = None
+    min_idx = None
+    max_idx = None
+    for i, f in enumerate(consulta.filtros):
+        if isinstance(f.valor, str):
+            try:
+                raw = f.valor[:-1] + "+00:00" if f.valor.endswith("Z") else f.valor
+                d = datetime.fromisoformat(raw)
+                if f.operador in ("mayor_igual", "mayor"):
+                    fecha_min = d
+                    min_idx = i
+                elif f.operador in ("menor_igual", "menor"):
+                    fecha_max = d
+                    max_idx = i
+            except (ValueError, TypeError):
+                continue
+
+    if fecha_min and fecha_max and fecha_max > fecha_min:
+        duracion = fecha_max - fecha_min
+        prev_min = (fecha_min - duracion).isoformat()
+        prev_max = fecha_min.isoformat()
+        nuevos_filtros = []
+        for i, f in enumerate(consulta.filtros):
+            if i == min_idx:
+                nuevos_filtros.append(f.model_copy(update={"valor": prev_min}))
+            elif i == max_idx:
+                nuevos_filtros.append(f.model_copy(update={"valor": prev_max}))
+            else:
+                nuevos_filtros.append(f)
+        return consulta.model_copy(update={"filtros": nuevos_filtros, "comparar_con": None})
+    return None
+
+
 async def ejecutar(
     session: AsyncSession, consulta: ConsultaAgregada, empresa_id: str
 ) -> RespuestaAgregada:
@@ -177,6 +215,42 @@ async def ejecutar(
         valores = {etiqueta: row[f"m{index}"] for index, etiqueta in enumerate(_etiquetas(consulta))}
         series.append(SerieAgregada(claves=claves, valores=valores))
 
+    delta_principal: float | None = None
+    deltas: dict[str, float | None] = {}
+
+    if consulta.comparar_con == "periodo_anterior":
+        c_ant = _crear_consulta_periodo_anterior(consulta)
+        if c_ant:
+            try:
+                resp_ant = await ejecutar(session, c_ant, empresa_id)
+                if resp_ant.series and series:
+                    for etq in _etiquetas(consulta):
+                        v_act = series[0].valores.get(etq)
+                        v_prev = resp_ant.series[0].valores.get(etq)
+                        if v_act is not None and v_prev is not None:
+                            if float(v_prev) != 0:
+                                d_calc = round(((float(v_act) - float(v_prev)) / float(v_prev)) * 100, 1)
+                            else:
+                                d_calc = 100.0 if float(v_act) > 0 else 0.0
+                            deltas[etq] = d_calc
+                    etiquetas_list = _etiquetas(consulta)
+                    if etiquetas_list and etiquetas_list[0] in deltas:
+                        delta_principal = deltas[etiquetas_list[0]]
+            except (HTTPException, ValueError, KeyError) as exc:
+                logger.debug("No se pudo calcular periodo anterior: %s", exc)
+
+        if delta_principal is None and len(series) >= 2:
+            etqs = _etiquetas(consulta)
+            if etqs:
+                v1 = series[-1].valores.get(etqs[0])
+                v0 = series[-2].valores.get(etqs[0])
+                if v1 is not None and v0 is not None:
+                    if float(v0) != 0:
+                        delta_principal = round(((float(v1) - float(v0)) / float(v0)) * 100, 1)
+                    else:
+                        delta_principal = 100.0 if float(v1) > 0 else 0.0
+                    deltas[etqs[0]] = delta_principal
+
     return RespuestaAgregada(
         series=series,
         medidas=_etiquetas(consulta),
@@ -184,6 +258,8 @@ async def ejecutar(
         truncado=truncado,
         generado_en=datetime.now(UTC),
         milisegundos=int((perf_counter() - inicio) * 1000),
+        delta=delta_principal,
+        deltas=deltas if deltas else None,
     )
 
 

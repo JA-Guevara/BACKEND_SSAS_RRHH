@@ -36,6 +36,7 @@ class ConsultaAgregada(BaseModel):
     filtros: list[FiltroReporte] = Field(default_factory=list, max_length=10)
     orden: list[OrdenReporte] = Field(default_factory=list, max_length=2)
     limite: int = Field(default=50, ge=1, le=500)
+    comparar_con: Literal["periodo_anterior"] | None = None
 
 
 class SerieAgregada(BaseModel):
@@ -52,6 +53,8 @@ class RespuestaAgregada(BaseModel):
     truncado: bool
     generado_en: datetime
     milisegundos: int
+    delta: float | None = None
+    deltas: dict[str, float | None] | None = None
 
 
 class CrearWidgetPanel(BaseModel):
