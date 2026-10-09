@@ -82,3 +82,10 @@ class WidgetPanelResponse(BaseModel):
     ancho: int
     activo: bool
     fecha_registro: datetime
+
+
+class PanelResponse(BaseModel):
+    widgets: list[WidgetPanelResponse]
+    origen: Literal["guardadas", "predeterminadas"]
+    omitidas_por_permiso: list[str]
+    fuentes_disponibles: list[str]

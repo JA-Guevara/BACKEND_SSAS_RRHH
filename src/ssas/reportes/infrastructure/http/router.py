@@ -73,6 +73,7 @@ from ssas.reportes.infrastructure.http.schemas_agregado import (
     ConsultaAgregada,
     CrearWidgetPanel,
     Medida,
+    PanelResponse,
     RespuestaAgregada,
     WidgetPanelResponse,
 )
@@ -726,7 +727,10 @@ async def exportar(
     )
 
 
-def _widgets_por_defecto(permisos: set[str], es_plataforma: bool) -> list[WidgetPanelResponse]:
+def _widgets_por_defecto(
+    permisos: set[str], es_plataforma: bool
+) -> tuple[list[WidgetPanelResponse], list[str]]:
+    """Devuelve (visibles, títulos omitidos por falta de permiso)."""
     ahora = datetime.now(UTC)
     candidatos = [
         WidgetPanelResponse(
@@ -874,12 +878,25 @@ def _widgets_por_defecto(permisos: set[str], es_plataforma: bool) -> list[Widget
             fecha_registro=ahora,
         ),
     ]
-    visibles = []
+    visibles: list[WidgetPanelResponse] = []
+    omitidas: list[str] = []
     for item in candidatos:
         fuente_obj = CATALOGO.get(item.consulta.fuente)
         if fuente_obj and (es_plataforma or fuente_obj.permiso in permisos):
             visibles.append(item)
-    return visibles
+        elif fuente_obj:
+            omitidas.append(f"{item.titulo} — requiere «{fuente_obj.permiso}»")
+        else:
+            omitidas.append(f"{item.titulo} — fuente no disponible")
+    return visibles, omitidas
+
+
+def _fuentes_disponibles(permisos: set[str], es_plataforma: bool) -> list[str]:
+    if es_plataforma:
+        return sorted(CATALOGO)
+    return sorted(
+        code for code, fuente in CATALOGO.items() if fuente.permiso in permisos
+    )
 
 
 def _serialize_widget(item: WidgetPanelModel) -> WidgetPanelResponse:
@@ -897,15 +914,16 @@ def _serialize_widget(item: WidgetPanelModel) -> WidgetPanelResponse:
     )
 
 
-@router.get("/panel", response_model=list[WidgetPanelResponse])
+@router.get("/panel", response_model=PanelResponse)
 async def obtener_panel(
     empresa_id: str | None = None,
     user: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar")),
     session: AsyncSession = Depends(get_session),
 ):
-    """Lista las tarjetas fijadas en el panel del usuario o devuelve las tarjetas predeterminadas."""
+    """Lista las tarjetas fijadas en el panel o las predeterminadas, indicando qué se omitió por permisos."""
     target = _empresa(user, empresa_id)
     permisos = await _permisos(session, user)
+    fuentes = _fuentes_disponibles(permisos, user.es_plataforma)
     stmt = (
         select(WidgetPanelModel)
         .where(
@@ -919,12 +937,28 @@ async def obtener_panel(
     guardados = result.scalars().all()
     if guardados:
         items = []
+        omitidas: list[str] = []
         for item in guardados:
             fuente_obj = CATALOGO.get(item.consulta.get("fuente"))
             if fuente_obj and (user.es_plataforma or fuente_obj.permiso in permisos):
                 items.append(_serialize_widget(item))
-        return items
-    return _widgets_por_defecto(permisos, user.es_plataforma)
+            elif fuente_obj:
+                omitidas.append(f"{item.titulo} — requiere «{fuente_obj.permiso}»")
+            else:
+                omitidas.append(f"{item.titulo} — fuente no disponible")
+        return PanelResponse(
+            widgets=items,
+            origen="guardadas",
+            omitidas_por_permiso=omitidas,
+            fuentes_disponibles=fuentes,
+        )
+    visibles, omitidas = _widgets_por_defecto(permisos, user.es_plataforma)
+    return PanelResponse(
+        widgets=visibles,
+        origen="predeterminadas",
+        omitidas_por_permiso=omitidas,
+        fuentes_disponibles=fuentes,
+    )
 
 
 @router.post("/panel", response_model=WidgetPanelResponse, status_code=201)

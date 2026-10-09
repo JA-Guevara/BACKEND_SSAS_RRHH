@@ -662,13 +662,35 @@ async def test_panel_devuelve_widgets_por_defecto_si_no_hay_guardados(monkeypatc
     session.execute = AsyncMock(return_value=result)
     user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
 
-    widgets = await router_module.obtener_panel(None, user, session)
+    respuesta = await router_module.obtener_panel(None, user, session)
 
-    assert len(widgets) >= 6
-    titulos = [w.titulo for w in widgets]
+    assert respuesta.origen == "predeterminadas"
+    assert len(respuesta.widgets) >= 6
+    titulos = [w.titulo for w in respuesta.widgets]
     assert "Postulaciones" in titulos
     assert "Embudo de selección" in titulos
     assert "Postulaciones por semana" in titulos
+    assert respuesta.omitidas_por_permiso == []
+    assert "postulaciones" in respuesta.fuentes_disponibles
+
+
+@pytest.mark.asyncio
+async def test_panel_sin_permisos_explica_lo_omitido(monkeypatch) -> None:
+    """Un admin con solo reportes:ver nunca ve el panel mudo: explica qué falta."""
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value={"reportes:ver"}))
+    session = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    user = SimpleNamespace(id="u1", empresa_id="emp1", es_plataforma=False)
+
+    respuesta = await router_module.obtener_panel(None, user, session)
+
+    # Con un solo permiso sin ficha propia, el panel explica qué falta.
+    assert respuesta.widgets == []
+    assert any(s.startswith("Postulaciones — requiere «postulaciones:ver»") for s in respuesta.omitidas_por_permiso)
+    assert any(s.startswith("Vacantes activas — requiere «vacantes:ver»") for s in respuesta.omitidas_por_permiso)
+    assert respuesta.fuentes_disponibles == []
 
 
 @pytest.mark.asyncio
