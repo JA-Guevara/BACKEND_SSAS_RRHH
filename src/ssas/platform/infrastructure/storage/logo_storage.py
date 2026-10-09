@@ -29,6 +29,13 @@ def get_logo_path(empresa_id: str) -> tuple[Path, str] | None:
     return None
 
 
+def obtener_logo_bytes(empresa_id: str) -> tuple[bytes, str] | None:
+    res = get_logo_path(empresa_id)
+    if res:
+        return res[0].read_bytes(), res[1]
+    return None
+
+
 def delete_logo_file(empresa_id: str) -> None:
     directory = get_logos_dir()
     for ext in ["png", "svg", "jpg", "webp"]:

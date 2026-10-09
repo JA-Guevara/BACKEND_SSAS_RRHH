@@ -1,4 +1,5 @@
 import csv
+import logging
 import smtplib
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -8,6 +9,8 @@ from io import BytesIO, StringIO
 
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+
+logger = logging.getLogger(__name__)
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from pydantic import ValidationError
@@ -30,6 +33,7 @@ from ssas.core.api.tenancy import resolver_empresa as _empresa
 from ssas.core.security.dependencies import CurrentUser, require_scoped_permission
 from ssas.empresas.infrastructure.persistence.models.empresa import EmpresaModel
 from ssas.infrastructure.database.session import get_session
+from ssas.platform.infrastructure.storage.logo_storage import obtener_logo_bytes
 from ssas.reportes.application.agregador import (
     aplicar_statement_timeout,
 )
@@ -531,6 +535,7 @@ def _pdf(
     rows: list[dict],
     empresa: str | None,
     generado_en: datetime | None,
+    logo_bytes: bytes | None = None,
 ) -> bytes:
     output = BytesIO()
     doc = SimpleDocTemplate(
@@ -546,6 +551,15 @@ def _pdf(
     fuente_obj = CATALOGO.get(config.fuente)
     titulo_fuente = fuente_obj.etiqueta if fuente_obj else config.fuente.capitalize()
     elements = []
+
+    if logo_bytes:
+        try:
+            from reportlab.platypus import Image as RLImage
+
+            elements.append(RLImage(BytesIO(logo_bytes), width=75, height=35))
+            elements.append(Spacer(1, 4))
+        except (OSError, ValueError, RuntimeError) as exc:
+            logger.debug("No se pudo insertar el logotipo en el PDF de reporte: %s", exc)
 
     title_style = ParagraphStyle(
         "PdfTitle",
@@ -645,13 +659,14 @@ def _document(
     *,
     empresa: str | None = None,
     generado_en: datetime | None = None,
+    logo_bytes: bytes | None = None,
 ) -> tuple[bytes, str]:
     if formato == "csv":
         return _csv(config, rows), "text/csv; charset=utf-8"
     if formato == "xlsx":
         return _xlsx(config, rows, empresa, generado_en), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     if formato == "pdf":
-        return _pdf(config, rows, empresa, generado_en), "application/pdf"
+        return _pdf(config, rows, empresa, generado_en, logo_bytes=logo_bytes), "application/pdf"
     if formato == "html":
         head = "".join(f"<th>{escape(c)}</th>" for c in config.columnas)
         body = "".join("<tr>" + "".join(f"<td>{escape(str(row.get(c, '')))}</td>" for c in config.columnas) + "</tr>" for row in rows)
@@ -681,9 +696,11 @@ async def exportar(
     verificar_filas(cuota, await _contar(session, target, body))
     verificar_exportaciones_dia(cuota, await exportaciones_de_hoy(session, target))
     empresa = await _nombre_empresa(session, target)
+    logo_info = obtener_logo_bytes(target)
+    logo_bytes = logo_info[0] if logo_info and not logo_info[1].startswith("image/svg") else None
     try:
         rows = await _rows(session, target, body, cuota.filas_exportacion)
-        content, media = _document(body, rows, formato, empresa=empresa)
+        content, media = _document(body, rows, formato, empresa=empresa, logo_bytes=logo_bytes)
     except Exception as exc:
         session.add(
             ReporteEjecucionModel(
@@ -1076,6 +1093,207 @@ async def eliminar_tarjeta(
     return Response(status_code=204)
 
 
+@router.post(
+    "/panel/exportar-pdf",
+    summary="Exportar panel completo a PDF",
+    description="Genera un informe ejecutivo consolidado en formato PDF con los KPIs y series del panel para la empresa activa.",
+)
+async def exportar_panel_pdf(
+    empresa_id: str | None = None,
+    user: CurrentUser = Depends(require_scoped_permission("reportes:ver", "platform:reportes:gestionar")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Genera un PDF con el resumen ejecutivo de todas las tarjetas e indicadores del panel."""
+    target = _empresa(user, empresa_id)
+    empresa_nombre = await _nombre_empresa(session, target)
+    cuota = await cuota_de_empresa(session, target)
+    panel_res = await obtener_panel(empresa_id=target, user=user, session=session)
+
+    logo_info = obtener_logo_bytes(target)
+    logo_bytes = logo_info[0] if logo_info and not logo_info[1].startswith("image/svg") else None
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "PanelTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=16,
+        leading=20,
+        textColor=colors.HexColor("#0f172a"),
+    )
+    section_style = ParagraphStyle(
+        "PanelSection",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        leading=15,
+        textColor=colors.HexColor("#1f8259"),
+    )
+    meta_style = ParagraphStyle(
+        "PanelMeta",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8.5,
+        leading=12,
+        textColor=colors.HexColor("#475569"),
+    )
+    cell_header = ParagraphStyle(
+        "PanelCellH",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=8.5,
+        textColor=colors.white,
+    )
+    cell_text = ParagraphStyle(
+        "PanelCellT",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        textColor=colors.HexColor("#1e293b"),
+    )
+
+    elements = []
+    if logo_bytes:
+        try:
+            from reportlab.platypus import Image as RLImage
+
+            elements.append(RLImage(BytesIO(logo_bytes), width=75, height=35))
+            elements.append(Spacer(1, 6))
+        except (OSError, ValueError, RuntimeError) as exc:
+            logger.debug("No se pudo insertar el logotipo en el PDF del panel: %s", exc)
+
+    elements.append(Paragraph("Informe Ejecutivo · Panel de Indicadores", title_style))
+    elements.append(Spacer(1, 4))
+    fecha_str = datetime.now(UTC).strftime("%d/%m/%Y %H:%M UTC")
+    elements.append(
+        Paragraph(
+            f"Organización: {empresa_nombre or 'SSAS RRHH'} · Generado: {fecha_str}",
+            meta_style,
+        )
+    )
+    elements.append(Spacer(1, 14))
+
+    # 1. KPIs
+    kpis = [w for w in panel_res.widgets if w.tipo == "kpi"]
+    if kpis:
+        elements.append(Paragraph("Indicadores Clave de Desempeño (KPIs)", section_style))
+        elements.append(Spacer(1, 6))
+        kpi_table_data = [
+            [
+                Paragraph("Indicador", cell_header),
+                Paragraph("Valor", cell_header),
+                Paragraph("Fuente", cell_header),
+            ]
+        ]
+        for k in kpis:
+            try:
+                res_agregado = await ejecutar_agregado(session, target, k.consulta, cuota)
+                val = "—"
+                if res_agregado.series:
+                    v = next(iter(res_agregado.series[0].valores.values()), None)
+                    val = str(v) if v is not None else "0"
+            except (OSError, ValueError, KeyError) as exc:
+                logger.debug("Error procesando métricas del KPI %s: %s", k.titulo, exc)
+                val = "—"
+            kpi_table_data.append(
+                [
+                    Paragraph(escape(k.titulo), cell_text),
+                    Paragraph(escape(val), cell_text),
+                    Paragraph(escape(k.consulta.fuente), cell_text),
+                ]
+            )
+        t_kpi = Table(kpi_table_data, colWidths=[200, 150, 170])
+        t_kpi.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f8259")),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.HexColor("#ffffff"), colors.HexColor("#f8fafc")],
+                    ),
+                ]
+            )
+        )
+        elements.append(t_kpi)
+        elements.append(Spacer(1, 14))
+
+    # 2. Gráficos y distribuciones
+    graficos = [w for w in panel_res.widgets if w.tipo != "kpi"]
+    if graficos:
+        elements.append(Paragraph("Distribuciones y Series de Datos", section_style))
+        elements.append(Spacer(1, 6))
+        for g in graficos:
+            elements.append(
+                Paragraph(
+                    escape(g.titulo),
+                    ParagraphStyle(
+                        "SubH",
+                        parent=styles["Normal"],
+                        fontName="Helvetica-Bold",
+                        fontSize=9.5,
+                        textColor=colors.HexColor("#334155"),
+                    ),
+                )
+            )
+            elements.append(Spacer(1, 3))
+            try:
+                res_g = await ejecutar_agregado(session, target, g.consulta, cuota)
+                if res_g.series:
+                    headers = [Paragraph("Categoría / Período", cell_header)] + [
+                        Paragraph(escape(m), cell_header) for m in res_g.medidas
+                    ]
+                    g_data = [headers]
+                    for s in res_g.series[:8]:
+                        claves_str = " · ".join(str(v) for v in s.claves.values()) or "Total"
+                        fila = [Paragraph(escape(claves_str), cell_text)]
+                        for m in res_g.medidas:
+                            val_m = s.valores.get(m)
+                            fila.append(Paragraph(str(val_m) if val_m is not None else "—", cell_text))
+                        g_data.append(fila)
+                    t_g = Table(g_data)
+                    t_g.setStyle(
+                        TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
+                                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+                            ]
+                        )
+                    )
+                    elements.append(t_g)
+                else:
+                    elements.append(Paragraph("Sin datos registrados para este indicador.", meta_style))
+            except (OSError, ValueError, KeyError) as exc:
+                logger.debug("Error procesando gráfico %s: %s", g.titulo, exc)
+                elements.append(Paragraph("No se pudieron cargar los datos.", meta_style))
+            elements.append(Spacer(1, 8))
+
+    doc.build(elements, canvasmaker=NumberedCanvas)
+    return Response(
+        content=output.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="panel_ejecutivo.pdf"'},
+    )
+
+
 @router.patch("/{report_id}", response_model=ReporteResponse)
 async def actualizar(report_id: str, body: ActualizarReporte, empresa_id: str | None = None, user: CurrentUser = Depends(require_scoped_permission("reportes:editar", "platform:reportes:gestionar")), session: AsyncSession = Depends(get_session)):
     """Modifica o desactiva una definición perteneciente al alcance autorizado."""
@@ -1111,8 +1329,11 @@ async def enviar(body: EnviarReporteRequest, request: Request, empresa_id: str |
     verificar_filas(cuota, await _contar(session, target, config))
     verificar_exportaciones_dia(cuota, await exportaciones_de_hoy(session, target))
     empresa = await _nombre_empresa(session, target)
+    logo_info = obtener_logo_bytes(target)
+    logo_bytes = logo_info[0] if logo_info and not logo_info[1].startswith("image/svg") else None
     try:
-        rows = await _rows(session, target, config, cuota.filas_exportacion); content, media = _document(config, rows, body.formato, empresa=empresa)
+        rows = await _rows(session, target, config, cuota.filas_exportacion)
+        content, media = _document(config, rows, body.formato, empresa=empresa, logo_bytes=logo_bytes)
         message = EmailMessage(); message["Subject"] = "Reporte SSAH RRHH"; message["From"] = settings.smtp_from_email; message["To"] = ", ".join(body.destinatarios); message.set_content("Se adjunta el reporte solicitado.")
         main, sub = media.split("/", 1); message.add_attachment(content, maintype=main, subtype=sub, filename=f"reporte.{body.formato}")
         await anyio.to_thread.run_sync(_enviar_correo, message)
