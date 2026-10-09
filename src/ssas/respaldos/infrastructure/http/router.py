@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import os
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -40,6 +41,8 @@ from ssas.respaldos.infrastructure.services.jobs import (
     restore_backup_job,
     storage,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/respaldos", tags=[TAG_RESPALDOS])
 
@@ -300,8 +303,8 @@ async def process_overdue_scheduled_backups(
                 if user.es_plataforma:
                     autorizado = True
                     actor_id = user.id
-            except Exception:
-                pass
+            except (HTTPException, ValueError, TypeError, KeyError, AttributeError):
+                logger.debug("Token inválido en la ejecución programada de respaldos")
 
     if not autorizado:
         raise HTTPException(status_code=401, detail="No autorizado para procesar respaldos programados")

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional, Type
+
 from pydantic import BaseModel, Field
 
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 class Herramienta:
     codigo: str
     descripcion: str          # Lo que lee el modelo o evaluador para decidir si aplica
-    permiso: Optional[str]    # Permiso exigido (None para consultas públicas o de usuario base)
+    permiso: str | None    # Permiso exigido (None para consultas públicas o de usuario base)
     escribe: bool             # True => exige confirmación del usuario antes de ejecutar
     esquema: type[BaseModel]  # Pydantic valida los argumentos
     endpoint: str             # A qué ruta interna se traduce
@@ -15,27 +15,27 @@ class Herramienta:
 
 # Esquemas de argumentos para herramientas de lectura
 class ContarPostulacionesArgs(BaseModel):
-    vacante_id: Optional[str] = Field(None, description="Identificador de la vacante para filtrar")
-    estado: Optional[str] = Field(None, description="Estado de la postulación, ej. PENDIENTE, EN_REVISION")
+    vacante_id: str | None = Field(None, description="Identificador de la vacante para filtrar")
+    estado: str | None = Field(None, description="Estado de la postulación, ej. PENDIENTE, EN_REVISION")
 
 
 class BuscarCandidatoArgs(BaseModel):
     query: str = Field(..., description="Nombre, apellido o correo del candidato")
-    vacante_id: Optional[str] = Field(None, description="Vacante en la que postula")
+    vacante_id: str | None = Field(None, description="Vacante en la que postula")
 
 
 class VerAgendaArgs(BaseModel):
-    fecha_inicio: Optional[str] = Field(None, description="Fecha de inicio (YYYY-MM-DD)")
-    fecha_fin: Optional[str] = Field(None, description="Fecha de fin (YYYY-MM-DD)")
+    fecha_inicio: str | None = Field(None, description="Fecha de inicio (YYYY-MM-DD)")
+    fecha_fin: str | None = Field(None, description="Fecha de fin (YYYY-MM-DD)")
 
 
 class EstadoVacanteArgs(BaseModel):
-    vacante_id: Optional[str] = Field(None, description="ID de vacante opcional")
+    vacante_id: str | None = Field(None, description="ID de vacante opcional")
 
 
 class ExplicarPantallaArgs(BaseModel):
     concepto: str = Field(..., description="Concepto o duda sobre el sistema o la pantalla")
-    pantalla: Optional[str] = Field(None, description="Nombre de la pantalla actual")
+    pantalla: str | None = Field(None, description="Nombre de la pantalla actual")
 
 
 # Esquemas de argumentos para herramientas de escritura (SIEMPRE con confirmación)
@@ -43,15 +43,15 @@ class ProgramarEntrevistaArgs(BaseModel):
     postulacion_id: str = Field(..., description="Identificador único de la postulación")
     fecha_hora: str = Field(..., description="Fecha y hora de la entrevista (ISO 8601)")
     modalidad: str = Field(default="VIRTUAL", description="PRESENCIAL o VIRTUAL")
-    enlace: Optional[str] = Field(None, description="Enlace para reunión virtual si aplica")
-    entrevistador_id: Optional[str] = Field(None, description="ID del entrevistador")
-    notas: Optional[str] = Field(None, description="Notas o instrucciones adicionales")
+    enlace: str | None = Field(None, description="Enlace para reunión virtual si aplica")
+    entrevistador_id: str | None = Field(None, description="ID del entrevistador")
+    notas: str | None = Field(None, description="Notas o instrucciones adicionales")
 
 
 class MoverEtapaArgs(BaseModel):
     postulacion_id: str = Field(..., description="Identificador único de la postulación")
     etapa_destino: str = Field(..., description="Nueva etapa (ej. EVALUACION, ENTREVISTA, OFERTA, RECHAZADO)")
-    motivo: Optional[str] = Field(None, description="Motivo del cambio de etapa")
+    motivo: str | None = Field(None, description="Motivo del cambio de etapa")
 
 
 class AnalizarCVArgs(BaseModel):
@@ -61,7 +61,7 @@ class AnalizarCVArgs(BaseModel):
 
 class MarcarBancoTalentoArgs(BaseModel):
     candidato_id: str = Field(..., description="Identificador del candidato o postulante")
-    etiquetas: Optional[list[str]] = Field(default=None, description="Etiquetas de talento o especialidad")
+    etiquetas: list[str] | None = Field(default=None, description="Etiquetas de talento o especialidad")
 
 
 class GenerarReporteArgs(BaseModel):
@@ -156,7 +156,7 @@ CATALOGO_HERRAMIENTAS: dict[str, Herramienta] = {
 }
 
 
-def obtener_herramienta(codigo: str) -> Optional[Herramienta]:
+def obtener_herramienta(codigo: str) -> Herramienta | None:
     return CATALOGO_HERRAMIENTAS.get(codigo)
 
 

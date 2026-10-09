@@ -52,6 +52,7 @@ def test_storage_requires_server_credentials() -> None:
 
 def test_calcular_proxima_ejecucion_diaria() -> None:
     from datetime import UTC, datetime
+
     from ssas.respaldos.infrastructure.services.jobs import calcular_proxima_ejecucion
 
     base = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
@@ -64,6 +65,7 @@ def test_calcular_proxima_ejecucion_diaria() -> None:
 
 def test_calcular_proxima_ejecucion_semanal() -> None:
     from datetime import UTC, datetime
+
     from ssas.respaldos.infrastructure.services.jobs import calcular_proxima_ejecucion
 
     # 2026-10-08 es Jueves (weekday = 3)

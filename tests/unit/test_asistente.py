@@ -1,11 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from pydantic import ValidationError
 
 from ssas.ayuda.domain.herramientas import (
     CATALOGO_HERRAMIENTAS,
-    Herramienta,
-    ProgramarEntrevistaArgs,
     listar_herramientas_para_usuario,
     obtener_herramienta,
 )
@@ -108,28 +106,32 @@ async def test_ejecutar_accion_registra_en_bitacora_con_origen_asistente():
     request.client.host = "127.0.0.1"
     request.headers.get.return_value = "TestAgent"
 
-    with patch("ssas.ayuda.infrastructure.http.asistente_router._has_perm", return_value=True):
-        with patch("ssas.ayuda.infrastructure.http.asistente_router.SqlAlchemyAuditLogRepository") as mock_repo_cls:
-            mock_repo = MagicMock()
-            mock_repo.add = AsyncMock()
-            mock_repo_cls.return_value = mock_repo
+    with (
+        patch("ssas.ayuda.infrastructure.http.asistente_router._has_perm", return_value=True),
+        patch(
+            "ssas.ayuda.infrastructure.http.asistente_router.SqlAlchemyAuditLogRepository"
+        ) as mock_repo_cls,
+    ):
+        mock_repo = MagicMock()
+        mock_repo.add = AsyncMock()
+        mock_repo_cls.return_value = mock_repo
 
-            res = await ejecutar_accion_asistente(
-                body=EjecutarAccionInput(
-                    herramienta="programar_entrevista",
-                    argumentos={
-                        "postulacion_id": "postulacion-actual",
-                        "fecha_hora": "2026-10-15T14:00:00Z",
-                        "modalidad": "VIRTUAL",
-                    },
-                ),
-                request=request,
-                user=user,
-                session=session,
-            )
+        res = await ejecutar_accion_asistente(
+            body=EjecutarAccionInput(
+                herramienta="programar_entrevista",
+                argumentos={
+                    "postulacion_id": "postulacion-actual",
+                    "fecha_hora": "2026-10-15T14:00:00Z",
+                    "modalidad": "VIRTUAL",
+                },
+            ),
+            request=request,
+            user=user,
+            session=session,
+        )
 
-            assert res.exito is True
-            assert mock_repo.add.called
-            audit_call_arg = mock_repo.add.call_args[0][0]
-            assert audit_call_arg.module == "ASISTENTE"
-            assert audit_call_arg.new_data["origen"] == "ASISTENTE"
+        assert res.exito is True
+        assert mock_repo.add.called
+        audit_call_arg = mock_repo.add.call_args[0][0]
+        assert audit_call_arg.module == "ASISTENTE"
+        assert audit_call_arg.new_data["origen"] == "ASISTENTE"

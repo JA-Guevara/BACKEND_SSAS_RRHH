@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import shutil
 import tarfile
 import tempfile
@@ -20,6 +21,8 @@ from ssas.respaldos.infrastructure.persistence.models.respaldo import (
 )
 from ssas.respaldos.infrastructure.services.postgres_tools import create_dump, restore_dump
 from ssas.respaldos.infrastructure.services.storage import SupabaseBackupStorage
+
+logger = logging.getLogger(__name__)
 
 
 def storage() -> SupabaseBackupStorage:
@@ -96,8 +99,8 @@ async def aplicar_retencion(session, programacion_id: str, retencion_dias: int) 
         if b.ruta_storage:
             try:
                 await asyncio.to_thread(storage().delete, b.ruta_storage)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("No se pudo purgar el archivo %s: %s", b.ruta_storage, exc)
         await session.delete(b)
         count += 1
     return count

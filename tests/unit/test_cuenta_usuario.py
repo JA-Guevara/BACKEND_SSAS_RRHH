@@ -1,9 +1,12 @@
 import io
+
 import pytest
 from PIL import Image
 
 from ssas.usuarios.domain.entities.usuario import Usuario
-from ssas.usuarios.infrastructure.http.schemas import ActividadResponse, SesionResponse, UsuarioResponse
+from ssas.usuarios.infrastructure.http.schemas import (
+    UsuarioResponse,
+)
 from ssas.usuarios.infrastructure.storage.avatar_storage import (
     MAX_AVATAR_BYTES,
     delete_avatar_file,

@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
@@ -14,6 +15,8 @@ from ssas.auth.infrastructure.persistence.repositories.auth_token_repository imp
 from ssas.auth.infrastructure.security.password_hasher import Argon2PasswordHasher
 from ssas.bitacora.application.events.user_events import UserEvents
 from ssas.bitacora.application.use_cases.register_audit_event import RegisterAuditEvent
+from ssas.bitacora.infrastructure.crypto import AuditEncryptionError
+from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository import (
     SqlAlchemyAuditLogRepository,
 )
@@ -52,7 +55,6 @@ from ssas.usuarios.domain.exceptions import (
     UsuarioNotFoundError,
     UsuarioWithoutRoleError,
 )
-from ssas.bitacora.infrastructure.persistence.models.audit_log import AuditLogModel
 from ssas.usuarios.infrastructure.http.schemas import (
     ActividadResponse,
     ActualizarMiPerfilRequest,
@@ -73,6 +75,8 @@ from ssas.usuarios.infrastructure.storage.avatar_storage import (
     get_avatar_path,
     process_and_save_avatar,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/usuarios", tags=[TAG_USERS], responses=AUTHENTICATED_RESPONSES)
 password_hasher = Argon2PasswordHasher()
@@ -438,7 +442,8 @@ async def obtener_mi_actividad(
             detail = SqlAlchemyAuditLogRepository._to_detail(model)
             descripcion = detail.description
             ip = detail.source_ip
-        except Exception:
+        except (AuditEncryptionError, AttributeError, KeyError, TypeError, ValueError):
+            logger.debug("Actividad %s sin detalle descifrable; se usa la descripción cruda", model.id)
             descripcion = model.description or "Registro de actividad"
             ip = str(model.ip_origen) if model.ip_origen else None
         actividades.append(

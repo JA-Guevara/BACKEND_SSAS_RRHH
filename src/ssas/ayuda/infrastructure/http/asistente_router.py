@@ -1,18 +1,17 @@
 """Endpoints del Asistente Copiloto de RRHH: preguntas, selección de herramientas y ejecución con confirmación."""
 
-from datetime import datetime, timezone
-import re
-from typing import Any, Optional
-from uuid import UUID
+import logging
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
 from ssas.ayuda.domain.herramientas import (
-    CATALOGO_HERRAMIENTAS,
-    Herramienta,
     obtener_herramienta,
 )
 from ssas.ayuda.infrastructure.http.chatbot_router import _respond
@@ -23,9 +22,8 @@ from ssas.bitacora.infrastructure.persistence.repositories.audit_log_repository 
 )
 from ssas.core.api.request_metadata import get_client_ip
 from ssas.core.security.dependencies import CurrentUser, get_current_user
-from ssas.infrastructure.database.session import get_session
 from ssas.entrevistas.infrastructure.persistence.models.entrevista import EntrevistaModel
-from ssas.postulaciones.infrastructure.persistence.models.etapa_reclutamiento import EtapaReclutamientoModel
+from ssas.infrastructure.database.session import get_session
 from ssas.postulaciones.infrastructure.persistence.models.postulacion import PostulacionModel
 from ssas.postulantes.infrastructure.persistence.models.postulante import PostulanteModel
 from ssas.roles.application.use_cases.check_permission import CheckPermission
@@ -41,12 +39,12 @@ router = APIRouter(prefix="/asistente", tags=["Chatbot"])
 class ContextoAsistenteInput(BaseModel):
     ruta: str = ""
     pantalla: str = ""
-    registro: Optional[dict[str, Any]] = None
+    registro: dict[str, Any] | None = None
 
 
 class MensajeAsistenteInput(BaseModel):
     mensaje: str = Field(min_length=1, max_length=1000)
-    contexto: Optional[ContextoAsistenteInput] = None
+    contexto: ContextoAsistenteInput | None = None
 
 
 class AccionPropuesta(BaseModel):
@@ -60,7 +58,7 @@ class AccionPropuesta(BaseModel):
 class MensajeAsistenteResponse(BaseModel):
     tipo: str  # "texto" | "accion"
     contenido: str
-    accion: Optional[AccionPropuesta] = None
+    accion: AccionPropuesta | None = None
     fuentes: list[dict[str, Any]] = []
 
 
@@ -72,10 +70,10 @@ class EjecutarAccionInput(BaseModel):
 class EjecutarAccionResponse(BaseModel):
     exito: bool
     mensaje: str
-    resultado: Optional[dict[str, Any]] = None
+    resultado: dict[str, Any] | None = None
 
 
-async def _has_perm(session: AsyncSession, user: CurrentUser, perm: Optional[str]) -> bool:
+async def _has_perm(session: AsyncSession, user: CurrentUser, perm: str | None) -> bool:
     if perm is None:
         return True
     try:
@@ -89,7 +87,7 @@ async def _has_perm(session: AsyncSession, user: CurrentUser, perm: Optional[str
         return False
 
 
-def _detect_tool_intent(mensaje_lower: str, contexto: Optional[ContextoAsistenteInput]) -> Optional[str]:
+def _detect_tool_intent(mensaje_lower: str, contexto: ContextoAsistenteInput | None) -> str | None:
     # Escritura
     if any(p in mensaje_lower for p in ["programa entrevista", "programá entrevista", "programar entrevista", "agendar entrevista", "agenda entrevista"]):
         return "programar_entrevista"
@@ -252,7 +250,7 @@ async def procesar_mensaje_asistente(
                     postulacion_id = (ctx.registro.get("id") if ctx and ctx.registro and ctx.registro.get("tipo") == "postulacion" else None) or "postulacion-actual"
                     args = {
                         "postulacion_id": postulacion_id,
-                        "fecha_hora": datetime.now(timezone.utc).isoformat(),
+                        "fecha_hora": datetime.now(UTC).isoformat(),
                         "modalidad": "VIRTUAL",
                         "enlace": "https://meet.google.com/ssas-rrhh-entrevista",
                         "entrevistador_id": user.id,
@@ -337,14 +335,14 @@ async def procesar_mensaje_asistente(
                 fuentes=resp.get("fuentes", []),
             )
         except Exception:
-            pass
+            logger.warning("Falló la respuesta contextual del asistente", exc_info=True)
 
     return MensajeAsistenteResponse(
         tipo="texto",
         contenido=(
-            f"Entendido. Como asistente de RRHH puedo ayudarte a consultar vacantes, postulaciones, "
-            f"agenda de entrevistas o preparar acciones como agendar entrevistas y mover etapas de candidatos. "
-            f"¿En qué puedo orientarte hoy?"
+            "Entendido. Como asistente de RRHH puedo ayudarte a consultar vacantes, postulaciones, "
+            "agenda de entrevistas o preparar acciones como agendar entrevistas y mover etapas de candidatos. "
+            "¿En qué puedo orientarte hoy?"
         ),
         fuentes=[],
     )
@@ -376,7 +374,7 @@ async def ejecutar_accion_asistente(
 
     # 2. Validar argumentos según esquema Pydantic de la herramienta
     try:
-        validados = herramienta.esquema(**body.argumentos)
+        herramienta.esquema(**body.argumentos)
     except Exception as exc:
         raise HTTPException(422, f"Argumentos inválidos para {body.herramienta}: {exc}") from exc
 
@@ -421,7 +419,7 @@ async def ejecutar_accion_asistente(
         record_id=None,
         source_ip=get_client_ip(request) or "127.0.0.1",
         user_agent=request.headers.get("user-agent") or "SSAS-Copiloto",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     await audit_repo.add(audit_entry)
     await session.commit()
