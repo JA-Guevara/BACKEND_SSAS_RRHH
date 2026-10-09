@@ -655,7 +655,7 @@ async def test_exportar_rechaza_formato_html(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_panel_devuelve_widgets_por_defecto_si_no_hay_guardados(monkeypatch) -> None:
-    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value={"postulaciones:ver", "vacantes:ver", "analisis_cv:ver"}))
+    monkeypatch.setattr(router_module, "_permisos", AsyncMock(return_value={"reportes:ver", "postulaciones:ver", "vacantes:ver", "analisis_cv:ver"}))
     session = MagicMock()
     result = MagicMock()
     result.scalars.return_value.all.return_value = []
@@ -686,11 +686,11 @@ async def test_panel_sin_permisos_explica_lo_omitido(monkeypatch) -> None:
 
     respuesta = await router_module.obtener_panel(None, user, session)
 
-    # Con un solo permiso sin ficha propia, el panel explica qué falta.
-    assert respuesta.widgets == []
+    # La tarjeta universal (solo reportes:ver) siempre está; el resto se explica.
+    assert [w.titulo for w in respuesta.widgets] == ["Ejecuciones de reportes hoy"]
     assert any(s.startswith("Postulaciones — requiere «postulaciones:ver»") for s in respuesta.omitidas_por_permiso)
     assert any(s.startswith("Vacantes activas — requiere «vacantes:ver»") for s in respuesta.omitidas_por_permiso)
-    assert respuesta.fuentes_disponibles == []
+    assert respuesta.fuentes_disponibles == ["reportes"]
 
 
 @pytest.mark.asyncio

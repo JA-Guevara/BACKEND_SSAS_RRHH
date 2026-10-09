@@ -465,6 +465,43 @@ CATALOGO: dict[str, Fuente] = {
             "fecha": _f("fecha", "Fecha", "b.fecha", TipoCampo.FECHA, agregable=True),
         },
     ),
+    # Fuente universal: solo exige reportes:ver, el mismo permiso que la vista
+    # del panel. Sirve para que ningún panel arranque vacío.
+    "reportes": Fuente(
+        codigo="reportes",
+        etiqueta="Ejecuciones de reportes",
+        descripcion="Exportaciones, envíos e interpretaciones registradas",
+        from_sql="reporte_ejecucion r",
+        columna_tenant="r.empresa_id",
+        permiso="reportes:ver",
+        campos={
+            "formato": _f(
+                "formato",
+                "Formato",
+                "r.formato",
+                TipoCampo.ENUM,
+                valores=("xlsx", "csv", "pdf", "html", "ia"),
+            ),
+            "estado": _f(
+                "estado",
+                "Estado",
+                "r.estado",
+                TipoCampo.ENUM,
+                valores=("COMPLETADO", "ERROR"),
+            ),
+            "cantidad_registros": _f(
+                "cantidad_registros",
+                "Registros",
+                "r.cantidad_registros",
+                TipoCampo.NUMERO,
+                agregable=True,
+            ),
+            "fecha_inicio": _f(
+                "fecha_inicio", "Fecha", "r.fecha_inicio", TipoCampo.FECHA, agregable=True
+            ),
+            "error": _f("error", "Error", "r.error", TipoCampo.TEXTO),
+        },
+    ),
 }
 
 

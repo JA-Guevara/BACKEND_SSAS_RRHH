@@ -733,6 +733,30 @@ def _widgets_por_defecto(
     """Devuelve (visibles, títulos omitidos por falta de permiso)."""
     ahora = datetime.now(UTC)
     candidatos = [
+        # Tarjeta universal: solo exige reportes:ver, el permiso que ya valida
+        # este endpoint. El panel nunca arranca vacío.
+        WidgetPanelResponse(
+            id="default-kpi-ejecuciones",
+            empresa_id="",
+            usuario_id="",
+            titulo="Ejecuciones de reportes hoy",
+            tipo="kpi",
+            consulta=ConsultaAgregada(
+                fuente="reportes",
+                medidas=[Medida(agregacion=Agregacion.CONTEO, etiqueta="Ejecuciones")],
+                filtros=[
+                    FiltroReporte(
+                        campo="fecha_inicio",
+                        operador="mayor_igual",
+                        valor=ahora.date().isoformat(),
+                    )
+                ],
+            ),
+            posicion=0,
+            ancho=1,
+            activo=True,
+            fecha_registro=ahora,
+        ),
         WidgetPanelResponse(
             id="default-kpi-postulaciones",
             empresa_id="",
