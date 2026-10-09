@@ -48,3 +48,26 @@ def test_create_dump_uses_private_custom_format(monkeypatch, tmp_path: Path) -> 
 def test_storage_requires_server_credentials() -> None:
     with pytest.raises(BackupStorageError, match="SUPABASE_URL"):
         SupabaseBackupStorage(None, None, "respaldos")
+
+
+def test_calcular_proxima_ejecucion_diaria() -> None:
+    from datetime import UTC, datetime
+    from ssas.respaldos.infrastructure.services.jobs import calcular_proxima_ejecucion
+
+    base = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+    proxima = calcular_proxima_ejecucion("DIARIA", "14:00", base_time=base)
+    assert proxima == datetime(2026, 10, 8, 14, 0, tzinfo=UTC)
+
+    proxima_manana = calcular_proxima_ejecucion("DIARIA", "08:00", base_time=base)
+    assert proxima_manana == datetime(2026, 10, 9, 8, 0, tzinfo=UTC)
+
+
+def test_calcular_proxima_ejecucion_semanal() -> None:
+    from datetime import UTC, datetime
+    from ssas.respaldos.infrastructure.services.jobs import calcular_proxima_ejecucion
+
+    # 2026-10-08 es Jueves (weekday = 3)
+    base = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+    # Lunes siguiente (weekday = 0): 2026-10-12
+    proxima = calcular_proxima_ejecucion("SEMANAL", "03:00", dia_semana=0, base_time=base)
+    assert proxima == datetime(2026, 10, 12, 3, 0, tzinfo=UTC)

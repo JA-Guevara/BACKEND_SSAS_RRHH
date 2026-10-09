@@ -31,3 +31,34 @@ class RespaldoModel(Base):
         UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="RESTRICT")
     )
     mensaje_error: Mapped[str | None] = mapped_column(Text)
+    programacion_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("respaldo_programacion.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class RespaldoProgramacionModel(Base):
+    __tablename__ = "respaldo_programacion"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    empresa_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("empresa.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    frecuencia: Mapped[str] = mapped_column(String(20), nullable=False)  # DIARIA | SEMANAL | MENSUAL
+    hora: Mapped[str] = mapped_column(String(8), nullable=False)  # HH:MM:SS
+    dia_semana: Mapped[int | None] = mapped_column(nullable=True)  # 0-6
+    dia_mes: Mapped[int | None] = mapped_column(nullable=True)  # 1-28
+    retencion_dias: Mapped[int] = mapped_column(default=30, nullable=False)
+    activo: Mapped[bool] = mapped_column(default=True, nullable=False)
+    ultima_ejecucion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    proxima_ejecucion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    creado_por_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False
+    )
+    fecha_creacion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

@@ -53,6 +53,7 @@ def test_schema_contains_only_current_scope_tables() -> None:
         "conocimiento_articulo",
         "conocimiento_fragmento",
         "widget_panel",
+        "respaldo_programacion",
     }
 
 
